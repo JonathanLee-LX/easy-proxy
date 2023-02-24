@@ -16,6 +16,8 @@ const log = _debug('log')
 let ruleMap = {
 };
 
+const proxyRecordArr = []
+
 /**
  * @param {string} path
  */
@@ -95,6 +97,10 @@ const proxyServer = http.createServer((req, res) => {
                 res.write(readFileSync(ENV_FILE))
                 res.end()
             }
+        } else if (req.url.startsWith('/api/logs')) {
+            res.setHeader('Content-Type', 'application/json')
+            res.write(JSON.stringify(proxyRecordArr))
+            res.end()
         } else {
             res.writeHead(404)
             res.end()
@@ -112,6 +118,16 @@ const proxyServer = http.createServer((req, res) => {
     }
 })
 
+const localWSServer = new WebSocketServer({
+    server: proxyServer
+})
+
+localWSServer.addListener('connection', (client, req) => {
+    // client.send(JSON.stringify(proxyRecordArr), err => {
+    //     if(err) console.error(err)
+    // })
+})
+
 
 getFreePort().then(port => {
     proxyServer.listen(port, () => proxyDebug('proxy-server start on ' + chalk.green(`${'http://127.0.0.1:' + port}`)))
@@ -126,7 +142,7 @@ proxyServer.on('connect', async (req, socket, header) => {
         'Proxy-Agent: Node.js-Proxy\r\n' +
         '\r\n');
     socket.on('end', () => {
-        proxyDebug('end')
+        // proxyDebug('end')
     })
 
     socket.on('error', (err) => {
@@ -150,8 +166,6 @@ proxyServer.on('connect', async (req, socket, header) => {
 
                     const request = target.startsWith('https') ? https.request : http.request;
 
-                    proxyDebug(chalk.green(source) + ' --> ' + chalk.cyan(target))
-
                     const proxyReq = request(target, {
                         method: req.method,
                         rejectUnauthorized: false,
@@ -159,6 +173,21 @@ proxyServer.on('connect', async (req, socket, header) => {
                     }, (proxyRes) => {
                         // run beforeSendResponse hook
                         // plugins.forEach(plugin => plugin.beforeSendResponse(res))
+                        let data
+
+                        proxyRes.on('data', chunk => data += chunk)
+
+                        proxyRes.on('end', () => {
+                            const logData = {
+                                method: req.method,
+                                source,
+                                target,
+                                time: new Date().toLocaleTimeString()
+                            }
+                            localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
+                            proxyRecordArr.push(logData)
+                            console.table(logData)
+                        })
                         res.writeHead(proxyRes.statusCode, proxyRes.statusMessage, proxyRes.headers)
                         proxyRes.pipe(res)
                     })
@@ -247,18 +276,16 @@ proxyServer.on('connect', async (req, socket, header) => {
             socket.pipe(connection)
             connection.pipe(socket)
         })
-        proxyDebug('create connection...')
     }
 
 })
 
 proxyServer.on('upgrade', (req, socket, header) => {
-    proxyDebug(req, socket)
+    // proxyDebug(req, socket)
 })
 
 process.on('uncaughtException', function (err) {
     console.error(err.stack);
-    proxyDebug("Node NOT Exiting...");
 });
 
 function logRuleMap() {

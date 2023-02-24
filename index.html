@@ -7,12 +7,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>welcome to use easy proxy</title>
     <style>
-        html, body {
+        :root {
+            --border-primary: #c4c4c4;
+            --bg-primary: #f5f5f5;
+        }
+
+
+        html,
+        body {
             width: 100%;
             height: 100%;
             padding: 0;
             margin: 0;
         }
+
         #App {
             background-color: lightgray;
             display: flex;
@@ -21,13 +29,19 @@
             min-height: 100vh;
         }
 
+        .card {
+            background-color: #fff;
+            padding: 10px 20px;
+            box-shadow: 1px 5px 20px;
+            border-radius: 8px;
+            min-width: 1300px;
+            height: 1100px;
+            overflow-y: scroll;
+        }
+
         .editor-container {
             display: flex;
             flex-direction: column;
-            box-shadow: 1px 5px 20px;
-            background-color: #fff;
-            padding: 10px 20px;
-            border-radius: 8px;
         }
 
         .editor-container textarea {
@@ -63,30 +77,97 @@
         .rule-item {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             gap: 10px;
             margin-bottom: 8px;
         }
 
-        .rule-item > input {
-            font-size: 1.1rem;
-            line-height: 1.5;
+        .rule-item>input {
             border-radius: 5px;
         }
 
-        .rule-item > input[type=text] {
-            min-width: 300px;
+        .rule-item>input[type=text] {
+            flex: 1;
+            font-size: 1.3rem;
+            line-height: 1.5;
+        }
+
+        .rule-item>input[type=checkbox] {
+            width: 25px;
+            height: 25px;
         }
 
         .danger-btn {
             color: red;
         }
 
-        .danger-btn:hover {
-
-        }
+        .danger-btn:hover {}
 
         .add-btn:hover {
             background-color: lightgreen;
+        }
+
+
+        table {
+            padding: 20px;
+            background-color: #fff;
+            border-spacing: 0px;
+            /* width: 1500px; */
+            max-height: 1000px;
+            overflow-y: auto;
+        }
+
+        tr {
+            transition: all ease-in .3s;
+        }
+
+        tr:hover {
+            background-color: var(--bg-primary);
+        }
+
+        th {
+            font-size: 1.5rem;
+            max-width: 350px;
+            min-width: 60px;
+            text-align: left;
+        }
+
+        td,
+        th {
+            border-bottom: 1px solid var(--border-primary);
+        }
+
+        td {
+            font-size: 1.3rem;
+            max-width: 400px;
+            min-width: 60px;
+            padding: 6px;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .tab-pane {
+            flex: 1;
+            border-bottom: 1px solid #aaa;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            font-size: 2rem;
+            justify-content: center;
+            transition: all .3s ease-in;
+        }
+
+        .tab-pane:hover {
+            cursor: pointer;
+        }
+
+        .tab-pane-normal:hover {
+            background-color: rgb(233, 232, 232);
+        }
+
+        .tab-pane-active {
+            background-color: lightgray;
         }
 
     </style>
@@ -94,27 +175,109 @@
 
 <body>
     <div id="App">
-        <div v-scope class="editor-container" v-effect="fetchData()">
-                <!-- <label for="config">proxy rule.</label> -->
-            <!-- <textarea v-model="rules" name="config" id="config" cols="100" rows="20"></textarea> -->
-            <ul class="rule-list">
-                <li v-for="(item, i) in rules" class="rule-item">
-                    <input title="enabled" type="checkbox" v-model="item.enabled">
-                    <input title="rule" type="text" v-model="item.rule">
-                    <input title="target" type="text" v-model="item.target">
-                    <button @click="onDelete(i)" class="danger-btn">删除</button>
-                </li>
-            </ul>
-            <div style="display: flex; gap: 10px;">
-                <button style="flex: 1" class="submit-btn" type="button" @click="onSubmit">保存</button>
-                <button class="add-btn" style="flex: 1" type="button" @click="onAdd">添加</button>
+        <div v-scope class="card" style="display: flex; flex-direction: column;">
+            <div style="display: flex; height: 100px;">
+                <div @click="onTabChange(tab.key)" v-for="tab in store.tabs" class="tab-pane" :class="store.activeTab === tab.key ? 'tab-pane-active' : 'tab-pane-normal'">{{ tab.title }}</div>
+            </div>
+
+            <div style="flex: 1;overflow-y: scroll;">
+                <div v-if="store.activeTab === 'config'" v-scope class="editor-container" v-effect="fetchData()">
+                    <ul class="rule-list">
+                        <li v-for="(item, i) in rules" class="rule-item">
+                            <input title="enabled" type="checkbox" v-model="item.enabled">
+                            <input title="rule" type="text" v-model="item.rule">
+                            <input title="target" type="text" v-model="item.target">
+                            <button @click="onDelete(i)" class="danger-btn">删除</button>
+                        </li>
+                    </ul>
+                    <div style="display: flex; gap: 10px;position: sticky; bottom: 0;background-color: #fff;">
+                        <button style="flex: 1" class="submit-btn" type="button" @click="onSubmit">保存</button>
+                        <button class="add-btn" style="flex: 1" type="button" @click="onAdd">添加</button>
+                    </div>
+                </div>
+                <div v-else-if="store.activeTab === 'log'" v-scope="RecordList({recordList: store.recordList})"></div>
             </div>
         </div>
+
     </div>
+
+    <template id="record-list">
+        <input style="width: 400px; height: 30px; margin-top: 10px;border-radius: 5px;" type="text" placeholder="请输入过滤内容" v-model="store.filterValue">
+        <table>
+            <tr style="position: sticky;top: 0px;background-color: #fff;">
+                <th>#</th>
+                <th>方法</th>
+                <th>源地址</th>
+                <th>目标地址</th>
+                <th>时间</th>
+            </tr>
+            <tr v-for="(item, i) in recordList.filter(item => store.filterValue ? item.source.includes(store.filterValue) : true)">
+                <td>
+                    {{ i }}
+                </td>
+                <td style="color: #037903;">
+                    <strong>
+                        {{ item.method }}
+                    </strong>
+                </td>
+                <td>
+                    <a :href="item.source" target="_blank">
+                        {{ item.source }}
+                    </a>
+                </td>
+                <td>
+                    <a :href="item.target" target="_blank">
+                        {{ item.target }}
+                    </a>
+                </td>
+                <td>
+                    {{ item.time }}
+                </td>
+            </tr>
+        </table>
+    </template>
+
     <script type="module">
-        import { createApp } from 'https://unpkg.com/petite-vue?module'
+        import { createApp, reactive } from 'https://unpkg.com/petite-vue?module'
+
+        const store = reactive({
+            recordList: [],
+            tabs: [
+                {
+                    title: '规则配置',
+                    key: 'config'
+                },
+                {
+                    title: '日志',
+                    key: 'log'
+                }
+            ],
+            activeTab: 'config',
+            filterValue: ''
+        })
+
+        fetch('/api/logs').then(res => res.json()).then((json) => store.recordList.push(...json))
+
+        const protocol = location.protocol === "https" ? "wss://" : 'ws://';
+
+        const ws = new WebSocket(protocol + location.host + location.pathname)
+
+        ws.addEventListener('close', () => console.log('close'))
+        ws.addEventListener('message', (ev) => {
+            const data = JSON.parse(ev.data)
+            store.recordList.push(data)
+        })
+
+        function RecordList(props) {
+            return {
+                $template: '#record-list',
+                recordList: props.recordList,
+            }
+        }
 
         const app = createApp({
+            RecordList,
+            store,
             onAdd() {
                 this.rules.push({
                     enabled: true,
@@ -124,6 +287,9 @@
             },
             onDelete(index) {
                 this.rules.splice(index, 1)
+            },
+            onTabChange(key) {
+                store.activeTab = key
             },
             onSubmit() {
                 fetch('/api/rules', {
@@ -145,7 +311,7 @@
                     console.log(app)
                     this.rules = text.split('\n').filter(line => !!line).map(line => {
                         let enabled = true
-                        if(line.startsWith('//')) {
+                        if (line.startsWith('//')) {
                             // disabled
                             enabled = false
 
