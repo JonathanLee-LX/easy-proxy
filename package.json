@@ -1,0 +1,32 @@
+{
+  "name": "easy-proxy",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "mocha tests",
+    "prepublish": "npm run test"
+  },
+  "bin": {
+    "ep": "bin/index"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "chokidar": "^3.5.3",
+    "debug": "^4.3.4",
+    "inquirer": "^8.2.5",
+    "node-easy-cert": "^1.3.3",
+    "portfinder": "^1.0.32",
+    "ws": "^8.12.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.13.0",
+    "@types/ws": "^8.5.4",
+    "mocha": "^10.2.0",
+    "nodemon": "^2.0.20"
+  }
+}

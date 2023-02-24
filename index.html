@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>welcome to use easy proxy</title>
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        #App {
+            background-color: lightgray;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .editor-container {
+            display: flex;
+            flex-direction: column;
+            box-shadow: 1px 5px 20px;
+            background-color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+        }
+
+        .editor-container textarea {
+            font-size: 1.1rem;
+            max-width: 800px;
+            max-height: 500px;
+            margin-bottom: 20px;
+        }
+
+        .editor-container button {
+            border: 1px solid gray;
+            padding: 8px 10px;
+            border-radius: 5px;
+            font-size: 1.2rem;
+        }
+
+        button:hover {
+            transition: background-color ease-in-out .3s;
+            cursor: pointer;
+        }
+
+        .editor-container .submit-btn:hover {
+            color: #fff;
+            background-color: mediumaquamarine;
+        }
+
+        .rule-list {
+            list-style: none;
+            padding: 20px 10px;
+            background-color: #fff;
+        }
+
+        .rule-item {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .rule-item > input {
+            font-size: 1.1rem;
+            line-height: 1.5;
+            border-radius: 5px;
+        }
+
+        .rule-item > input[type=text] {
+            min-width: 300px;
+        }
+
+        .danger-btn {
+            color: red;
+        }
+
+        .danger-btn:hover {
+
+        }
+
+        .add-btn:hover {
+            background-color: lightgreen;
+        }
+
+    </style>
+</head>
+
+<body>
+    <div id="App">
+        <div v-scope class="editor-container" v-effect="fetchData()">
+                <!-- <label for="config">proxy rule.</label> -->
+            <!-- <textarea v-model="rules" name="config" id="config" cols="100" rows="20"></textarea> -->
+            <ul class="rule-list">
+                <li v-for="(item, i) in rules" class="rule-item">
+                    <input title="enabled" type="checkbox" v-model="item.enabled">
+                    <input title="rule" type="text" v-model="item.rule">
+                    <input title="target" type="text" v-model="item.target">
+                    <button @click="onDelete(i)" class="danger-btn">删除</button>
+                </li>
+            </ul>
+            <div style="display: flex; gap: 10px;">
+                <button style="flex: 1" class="submit-btn" type="button" @click="onSubmit">保存</button>
+                <button class="add-btn" style="flex: 1" type="button" @click="onAdd">添加</button>
+            </div>
+        </div>
+    </div>
+    <script type="module">
+        import { createApp } from 'https://unpkg.com/petite-vue?module'
+
+        const app = createApp({
+            onAdd() {
+                this.rules.push({
+                    enabled: true,
+                    rule: '',
+                    target: ''
+                })
+            },
+            onDelete(index) {
+                this.rules.splice(index, 1)
+            },
+            onSubmit() {
+                fetch('/api/rules', {
+                    method: 'PUT',
+                    body: this.rules.reduce((text, rule) => {
+                        text += rule.enabled ? '' : '//'
+                        text += rule.rule + ' ' + rule.target
+                        text += '\n'
+                        return text
+                    }, '')
+                }).then(res => res.json()).then(json => {
+                    console.log('save success!!')
+                    console.log(json)
+                }).catch(err => console.error('save failed ', err))
+            },
+            rules: [],
+            fetchData() {
+                fetch('api/rules').then(res => res.text()).then(text => {
+                    console.log(app)
+                    this.rules = text.split('\n').filter(line => !!line).map(line => {
+                        let enabled = true
+                        if(line.startsWith('//')) {
+                            // disabled
+                            enabled = false
+
+                            // 1. remove //
+                            // 2. remove whitespace
+                            line = line.slice(2).trim()
+                        }
+
+                        const [rule, target] = line.split(' ')
+
+                        return ({
+                            rule,
+                            target,
+                            enabled
+                        })
+                    })
+                })
+            },
+        }).mount('#App')
+    </script>
+</body>
+
+</html>
