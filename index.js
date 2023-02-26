@@ -39,7 +39,7 @@ function ensureConfigFile(path) {
         if(error) console.error(error)
         mkdirSync(path, { recursive: true })
         log('create envs directory.')
-        ensureConfigFile()
+        ensureConfigFile(path)
     }
 
 }
