@@ -16,6 +16,7 @@ const log = _debug('log')
 let ruleMap = {
 };
 
+const MAX_RECORD_SIZE = process.env.MAX_RECORD_SIZE ? parseInt(process.env.MAX_RECORD_SIZE) : 10000
 const proxyRecordArr = []
 
 /**
@@ -186,6 +187,9 @@ proxyServer.on('connect', async (req, socket, header) => {
                             }
                             localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
                             proxyRecordArr.push(logData)
+                            if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+                                proxyRecordArr.shift()
+                            }
                             console.table(logData)
                         })
                         res.writeHead(proxyRes.statusCode, proxyRes.statusMessage, proxyRes.headers)
