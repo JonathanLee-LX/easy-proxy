@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, Wand2 } from 'lucide-react'
+import { highlightJson } from '@/lib/json-highlight'
 import type { RecordDetail, ProxyRecord } from '@/types'
 
 interface DetailPanelProps {
@@ -50,17 +51,19 @@ function BodyView({ body }: { body: string }) {
   if (!body) {
     return <p className="text-sm text-muted-foreground py-2">无内容</p>
   }
-  // Try to format as JSON
+  // Try to format & highlight as JSON
+  let isJson = false
   let formatted = body
   try {
     const obj = JSON.parse(body)
     formatted = JSON.stringify(obj, null, 2)
+    isJson = true
   } catch {
     // keep as-is
   }
   return (
     <pre className="font-mono text-xs whitespace-pre-wrap break-all p-2 bg-muted/50 rounded-md max-h-[400px] overflow-auto">
-      {formatted}
+      {isJson ? highlightJson(formatted) : formatted}
     </pre>
   )
 }

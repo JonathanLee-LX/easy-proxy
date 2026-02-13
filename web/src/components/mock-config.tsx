@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
 import { Plus, Trash2, Pencil } from 'lucide-react'
+import { JsonTextarea } from '@/components/json-textarea'
 import type { MockRule } from '@/types'
 
 interface MockConfigProps {
@@ -291,11 +292,10 @@ export function MockConfig({
                   格式化 JSON
                 </Button>
               </div>
-              <textarea
+              <JsonTextarea
                 value={editForm.body}
-                onChange={(e) => updateField('body', e.target.value)}
+                onChange={(v) => updateField('body', v)}
                 placeholder='{"code": 0, "data": {...}}'
-                className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm font-mono min-h-[240px] resize-y focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
             </div>
             {/* 启用 */}
