@@ -144,7 +144,7 @@ async function ensureRootCA() {
         })
     })
 
-    if (!isTrusted) {
+    if (!isTrusted && !process.env.EP_HEADLESS && !process.env.EP_MCP) {
         await trustRootCA()
     }
 }

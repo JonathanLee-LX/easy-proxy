@@ -174,9 +174,12 @@ localWSServer.addListener('connection', (client, req) => {
 
 /**
  * 使用代理启动全新的浏览器实例（独立用户数据目录，不复用已运行的浏览器）
+ * @param {string} url - 初始打开的 URL
+ * @param {string} proxyServer - 代理地址，如 127.0.0.1:8989
+ * @param {number} [remoteDebuggingPort] - 可选，开启远程调试端口供 chrome-devtools 连接
  * @returns {boolean} 是否成功启动
  */
-function openBrowserWithProxy(url, proxyServer) {
+function openBrowserWithProxy(url, proxyServer, remoteDebuggingPort) {
     const platform = os.platform()
     const userDataDir = path.join(epDir, 'chrome-proxy')
     if (!fs.existsSync(userDataDir)) {
@@ -187,7 +190,10 @@ function openBrowserWithProxy(url, proxyServer) {
         : platform === 'win32'
             ? ['chrome', 'msedge', 'chromium']
             : ['google-chrome', 'chromium', 'chromium-browser']
-    const proxyArgs = `--user-data-dir="${userDataDir}" --proxy-server=${proxyServer}`
+    let proxyArgs = `--user-data-dir="${userDataDir}" --proxy-server=${proxyServer} --window-size=1920,1080`
+    if (remoteDebuggingPort) {
+        proxyArgs += ` --remote-debugging-port=${remoteDebuggingPort}`
+    }
     for (const app of browsers) {
         try {
             if (platform === 'darwin') {
@@ -224,11 +230,20 @@ function openBrowserWithProxy(url, proxyServer) {
     await ensureRootCA()
     const port = await getFreePort()
     proxyServer.listen(port, () => {
-        proxyDebug('proxy-server start on ' + chalk.green(`http://127.0.0.1:${port}`))
+        const proxyUrl = `http://127.0.0.1:${port}`
+        proxyDebug('proxy-server start on ' + chalk.green(proxyUrl))
+        if (process.env.EP_MCP) {
+            const mcpFile = path.join(epDir, 'mcp-proxy-url.json')
+            const mcpData = { proxyUrl }
+            if (process.env.EP_OPEN_CHROMEDEVTOOLS) {
+                mcpData.remoteDebuggingPort = 9222
+            }
+            fs.writeFileSync(mcpFile, JSON.stringify(mcpData), 'utf8')
+        }
         if (AUTO_OPEN) {
-            const proxyUrl = `http://127.0.0.1:${port}`
             const proxyServer = `127.0.0.1:${port}`
-            if (openBrowserWithProxy(proxyUrl, proxyServer)) {
+            const remotePort = process.env.EP_OPEN_CHROMEDEVTOOLS ? 9222 : undefined
+            if (openBrowserWithProxy(proxyUrl, proxyServer, remotePort)) {
                 console.log(chalk.green('已启动浏览器（代理:'), proxyServer + chalk.green(')'))
             } else {
                 console.log(chalk.yellow('浏览器并未启动，请手动打开'), chalk.cyan(proxyUrl), chalk.yellow('并设置代理'), proxyServer)

@@ -7,7 +7,8 @@
     "start": "node index.js",
     "test": "mocha tests",
     "prepublish": "npm run test",
-    "start:open": "node index.js --open"
+    "start:open": "node index.js --open",
+    "mcp": "node mcp-server.js"
   },
   "bin": {
     "ep": "bin/index"
@@ -16,13 +17,16 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "chalk": "^4.1.2",
     "chokidar": "^3.5.3",
     "debug": "^4.3.4",
     "inquirer": "^8.2.5",
     "node-easy-cert": "^1.3.3",
     "portfinder": "^1.0.32",
-    "ws": "^8.12.1"
+    "puppeteer-core": "^24.0.0",
+    "ws": "^8.12.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^18.13.0",

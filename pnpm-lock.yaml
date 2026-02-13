@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.26.0
+        version: 1.26.0(zod@4.3.6)
       chalk:
         specifier: ^4.1.2
         version: 4.1.2
@@ -26,9 +29,15 @@ importers:
       portfinder:
         specifier: ^1.0.32
         version: 1.0.38
+      puppeteer-core:
+        specifier: ^24.0.0
+        version: 24.37.2
       ws:
         specifier: ^8.12.1
         version: 8.19.0
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: ^18.13.0
@@ -45,6 +54,12 @@ importers:
 
 packages:
 
+  '@hono/node-server@1.19.9':
+    resolution: {integrity: sha1-jzcRmxrPKD/T9gNfPRNW/bl6Caw=, tarball: https://registry.npm.wps.cn/@hono/node-server/download/@hono/node-server-1.19.9.tgz}
+    engines: {node: '>=18.14.1'}
+    peerDependencies:
+      hono: ^4
+
   '@inquirer/external-editor@1.0.3':
     resolution: {integrity: sha1-wjmIKR7mdikP2rP9MG5kAQptE7g=, tarball: https://registry.npm.wps.cn/@inquirer/external-editor/download/@inquirer/external-editor-1.0.3.tgz}
     engines: {node: '>=18'}
@@ -54,11 +69,51 @@ packages:
       '@types/node':
         optional: true
 
+  '@modelcontextprotocol/sdk@1.26.0':
+    resolution: {integrity: sha1-WzXXMGISXxJsxwsL6Dy6tTvN3nQ=, tarball: https://registry.npm.wps.cn/@modelcontextprotocol/sdk/download/@modelcontextprotocol/sdk-1.26.0.tgz}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@cfworker/json-schema': ^4.1.1
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@cfworker/json-schema':
+        optional: true
+
+  '@puppeteer/browsers@2.12.0':
+    resolution: {integrity: sha1-2mGCcAgrtt+osFZWI++oDVv5EbE=, tarball: https://registry.npm.wps.cn/@puppeteer/browsers/download/@puppeteer/browsers-2.12.0.tgz}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  '@tootallnate/quickjs-emscripten@0.23.0':
+    resolution: {integrity: sha1-207P1JmpdlqyQALDtpbQLm0yoSw=, tarball: https://registry.npm.wps.cn/@tootallnate/quickjs-emscripten/download/@tootallnate/quickjs-emscripten-0.23.0.tgz}
+
   '@types/node@18.19.130':
     resolution: {integrity: sha1-2kxjJHk6ed77emLLo5R+xa3QDVk=, tarball: https://registry.npm.wps.cn/@types/node/download/@types/node-18.19.130.tgz}
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha1-SEZOS/Ld/RfbE9hFRn9gcP/qSqk=, tarball: https://registry.npm.wps.cn/@types/ws/download/@types/ws-8.18.1.tgz}
+
+  '@types/yauzl@2.10.3':
+    resolution: {integrity: sha1-6bKAi08QlQSgPNqVglmHb2EBeZk=, tarball: https://registry.npm.wps.cn/@types/yauzl/download/@types/yauzl-2.10.3.tgz}
+
+  accepts@2.0.0:
+    resolution: {integrity: sha1-u89LpQdUZ/PyEx6rPP/HPC9deJU=, tarball: https://registry.npm.wps.cn/accepts/download/accepts-2.0.0.tgz}
+    engines: {node: '>= 0.6'}
+
+  agent-base@7.1.4:
+    resolution: {integrity: sha1-48121MVI7oldPD/Y3B9sW5Ay56g=, tarball: https://registry.npm.wps.cn/agent-base/download/agent-base-7.1.4.tgz}
+    engines: {node: '>= 14'}
+
+  ajv-formats@3.0.1:
+    resolution: {integrity: sha1-PV3HYryhdnnDwup+kK1rdTIwlXg=, tarball: https://registry.npm.wps.cn/ajv-formats/download/ajv-formats-3.0.1.tgz}
+    peerDependencies:
+      ajv: ^8.0.0
+    peerDependenciesMeta:
+      ajv:
+        optional: true
+
+  ajv@8.17.1:
+    resolution: {integrity: sha1-N9mlx3ava8ktf0+VEOukwKYNEaY=, tarball: https://registry.npm.wps.cn/ajv/download/ajv-8.17.1.tgz}
 
   ansi-colors@4.1.3:
     resolution: {integrity: sha1-N2ETQOsiQ+cMxgTK011jJw1IeBs=, tarball: https://registry.npm.wps.cn/ansi-colors/download/ansi-colors-4.1.3.tgz}
@@ -87,17 +142,71 @@ packages:
   argparse@2.0.1:
     resolution: {integrity: sha1-JG9Q88p4oyQPbJl+ipvR6sSeSzg=, tarball: https://registry.npm.wps.cn/argparse/download/argparse-2.0.1.tgz}
 
+  ast-types@0.13.4:
+    resolution: {integrity: sha1-7g13s0MmOWXsw/ti2hbnIisrZ4I=, tarball: https://registry.npm.wps.cn/ast-types/download/ast-types-0.13.4.tgz}
+    engines: {node: '>=4'}
+
   async-task-mgr@1.1.0:
     resolution: {integrity: sha1-qC0RrvYxrlZ7XXax6DqZmko0qvY=, tarball: https://registry.npm.wps.cn/async-task-mgr/download/async-task-mgr-1.1.0.tgz}
 
   async@3.2.6:
     resolution: {integrity: sha1-Gwco4Ukp1RuFtEm38G4nwRReOM4=, tarball: https://registry.npm.wps.cn/async/download/async-3.2.6.tgz}
 
+  b4a@1.7.3:
+    resolution: {integrity: sha1-JM98zaKPVGW2auwrrGnjKAm/ES8=, tarball: https://registry.npm.wps.cn/b4a/download/b4a-1.7.3.tgz}
+    peerDependencies:
+      react-native-b4a: '*'
+    peerDependenciesMeta:
+      react-native-b4a:
+        optional: true
+
   balanced-match@1.0.2:
     resolution: {integrity: sha1-6D46fj8wCzTLnYf2FfoMvzV2kO4=, tarball: https://registry.npm.wps.cn/balanced-match/download/balanced-match-1.0.2.tgz}
 
+  bare-events@2.8.2:
+    resolution: {integrity: sha1-ez4QvY4fyA2vOLtRaSFnj1ZquJ8=, tarball: https://registry.npm.wps.cn/bare-events/download/bare-events-2.8.2.tgz}
+    peerDependencies:
+      bare-abort-controller: '*'
+    peerDependenciesMeta:
+      bare-abort-controller:
+        optional: true
+
+  bare-fs@4.5.4:
+    resolution: {integrity: sha1-FdbCPq3vvbpIIZxQGhQP/BZ0ac8=, tarball: https://registry.npm.wps.cn/bare-fs/download/bare-fs-4.5.4.tgz}
+    engines: {bare: '>=1.16.0'}
+    peerDependencies:
+      bare-buffer: '*'
+    peerDependenciesMeta:
+      bare-buffer:
+        optional: true
+
+  bare-os@3.6.2:
+    resolution: {integrity: sha1-s8T1rV4yLA/Q88KfyX0ZAJ4nluU=, tarball: https://registry.npm.wps.cn/bare-os/download/bare-os-3.6.2.tgz}
+    engines: {bare: '>=1.14.0'}
+
+  bare-path@3.0.0:
+    resolution: {integrity: sha1-tZ0YEwulKmr5J22z6WouPT6lIXg=, tarball: https://registry.npm.wps.cn/bare-path/download/bare-path-3.0.0.tgz}
+
+  bare-stream@2.7.0:
+    resolution: {integrity: sha1-W5590KNU0G6C1kYMQmcoU2w114k=, tarball: https://registry.npm.wps.cn/bare-stream/download/bare-stream-2.7.0.tgz}
+    peerDependencies:
+      bare-buffer: '*'
+      bare-events: '*'
+    peerDependenciesMeta:
+      bare-buffer:
+        optional: true
+      bare-events:
+        optional: true
+
+  bare-url@2.3.2:
+    resolution: {integrity: sha1-Su84LvpmKyGApv5MoHpxs5vffKM=, tarball: https://registry.npm.wps.cn/bare-url/download/bare-url-2.3.2.tgz}
+
   base64-js@1.5.1:
     resolution: {integrity: sha1-GxtEAWClv3rUC2UPCVljSBkDkwo=, tarball: https://registry.npm.wps.cn/base64-js/download/base64-js-1.5.1.tgz}
+
+  basic-ftp@5.0.5:
+    resolution: {integrity: sha1-FKR09f/+zKH09AbxwmsY+AAiWsA=, tarball: https://registry.npm.wps.cn/basic-ftp/download/basic-ftp-5.0.5.tgz}
+    engines: {node: '>=10.0.0'}
 
   binary-extensions@2.3.0:
     resolution: {integrity: sha1-9uFKl4WNMnJSIAJC1Mz+UixEVSI=, tarball: https://registry.npm.wps.cn/binary-extensions/download/binary-extensions-2.3.0.tgz}
@@ -108,6 +217,10 @@ packages:
 
   bluebird@3.7.2:
     resolution: {integrity: sha1-nyKcFb4nJFT/qXOs4NvueaGww28=, tarball: https://registry.npm.wps.cn/bluebird/download/bluebird-3.7.2.tgz}
+
+  body-parser@2.2.2:
+    resolution: {integrity: sha1-GjLNuWa+r2jeUKnfvltY+Dy4iQw=, tarball: https://registry.npm.wps.cn/body-parser/download/body-parser-2.2.2.tgz}
+    engines: {node: '>=18'}
 
   brace-expansion@1.1.12:
     resolution: {integrity: sha1-q5tFRGblqMw6GHvqrVgEEqnFuEM=, tarball: https://registry.npm.wps.cn/brace-expansion/download/brace-expansion-1.1.12.tgz}
@@ -122,8 +235,23 @@ packages:
   browser-stdout@1.3.1:
     resolution: {integrity: sha1-uqVZ7hTO1zRSIputcyZGfGH6vWA=, tarball: https://registry.npm.wps.cn/browser-stdout/download/browser-stdout-1.3.1.tgz}
 
+  buffer-crc32@0.2.13:
+    resolution: {integrity: sha1-DTM+PwDqxQqhRUq9MO+MKl2ackI=, tarball: https://registry.npm.wps.cn/buffer-crc32/download/buffer-crc32-0.2.13.tgz}
+
   buffer@5.7.1:
     resolution: {integrity: sha1-umLnwTEzBTWCGXFghRqPZI6Z7tA=, tarball: https://registry.npm.wps.cn/buffer/download/buffer-5.7.1.tgz}
+
+  bytes@3.1.2:
+    resolution: {integrity: sha1-iwvuuYYFrfGxKPpDhkA8AJ4CIaU=, tarball: https://registry.npm.wps.cn/bytes/download/bytes-3.1.2.tgz}
+    engines: {node: '>= 0.8'}
+
+  call-bind-apply-helpers@1.0.2:
+    resolution: {integrity: sha1-S1QowiK+mF15w9gmV0edvgtZstY=, tarball: https://registry.npm.wps.cn/call-bind-apply-helpers/download/call-bind-apply-helpers-1.0.2.tgz}
+    engines: {node: '>= 0.4'}
+
+  call-bound@1.0.4:
+    resolution: {integrity: sha1-I43pNdKippKSjFOMfM+pEGf9Bio=, tarball: https://registry.npm.wps.cn/call-bound/download/call-bound-1.0.4.tgz}
+    engines: {node: '>= 0.4'}
 
   camelcase@6.3.0:
     resolution: {integrity: sha1-VoW5XrIJrJwMF3Rnd4ychN9Yupo=, tarball: https://registry.npm.wps.cn/camelcase/download/camelcase-6.3.0.tgz}
@@ -144,6 +272,11 @@ packages:
     resolution: {integrity: sha1-GXxsxmnvKo3F57TZfuTgksPrDVs=, tarball: https://registry.npm.wps.cn/chokidar/download/chokidar-3.6.0.tgz}
     engines: {node: '>= 8.10.0'}
 
+  chromium-bidi@13.1.1:
+    resolution: {integrity: sha1-5MHvYwexnLALBIoD0039YHRuMco=, tarball: https://registry.npm.wps.cn/chromium-bidi/download/chromium-bidi-13.1.1.tgz}
+    peerDependencies:
+      devtools-protocol: '*'
+
   cli-cursor@3.1.0:
     resolution: {integrity: sha1-JkMFp65JDR0Dvwybp8kl0XU68wc=, tarball: https://registry.npm.wps.cn/cli-cursor/download/cli-cursor-3.1.0.tgz}
     engines: {node: '>=8'}
@@ -158,6 +291,10 @@ packages:
 
   cliui@7.0.4:
     resolution: {integrity: sha1-oCZe5lVHb8gHrqnfPfjfd4OAi08=, tarball: https://registry.npm.wps.cn/cliui/download/cliui-7.0.4.tgz}
+
+  cliui@8.0.1:
+    resolution: {integrity: sha1-DASwddsCy/5g3I5s8vVIaxo2CKo=, tarball: https://registry.npm.wps.cn/cliui/download/cliui-8.0.1.tgz}
+    engines: {node: '>=12'}
 
   clone@1.0.4:
     resolution: {integrity: sha1-2jCcwmPfFZlMaIypAheco8fNfH4=, tarball: https://registry.npm.wps.cn/clone/download/clone-1.0.4.tgz}
@@ -185,6 +322,34 @@ packages:
   concat-map@0.0.1:
     resolution: {integrity: sha1-2Klr13/Wjfd5OnMDajug1UBdR3s=, tarball: https://registry.npm.wps.cn/concat-map/download/concat-map-0.0.1.tgz}
 
+  content-disposition@1.0.1:
+    resolution: {integrity: sha1-qLe76ykEvv37Z4flwMCGlZ9gX5s=, tarball: https://registry.npm.wps.cn/content-disposition/download/content-disposition-1.0.1.tgz}
+    engines: {node: '>=18'}
+
+  content-type@1.0.5:
+    resolution: {integrity: sha1-i3cxYmVtHRCGeEyPI6VM5tc9eRg=, tarball: https://registry.npm.wps.cn/content-type/download/content-type-1.0.5.tgz}
+    engines: {node: '>= 0.6'}
+
+  cookie-signature@1.2.2:
+    resolution: {integrity: sha1-V8f8PMKTrKuf7FTXPhVpDr5KF5M=, tarball: https://registry.npm.wps.cn/cookie-signature/download/cookie-signature-1.2.2.tgz}
+    engines: {node: '>=6.6.0'}
+
+  cookie@0.7.2:
+    resolution: {integrity: sha1-VWNpxHKiupEPKXmJG1JrNDYjftc=, tarball: https://registry.npm.wps.cn/cookie/download/cookie-0.7.2.tgz}
+    engines: {node: '>= 0.6'}
+
+  cors@2.8.6:
+    resolution: {integrity: sha1-/13Wm9leVHUDgg0pq6T4+vjf7JY=, tarball: https://registry.npm.wps.cn/cors/download/cors-2.8.6.tgz}
+    engines: {node: '>= 0.10'}
+
+  cross-spawn@7.0.6:
+    resolution: {integrity: sha1-ilj+ePANzXDDcEUXWd+/rwPo7p8=, tarball: https://registry.npm.wps.cn/cross-spawn/download/cross-spawn-7.0.6.tgz}
+    engines: {node: '>= 8'}
+
+  data-uri-to-buffer@6.0.2:
+    resolution: {integrity: sha1-ili7ZzhLJho47xi+oYEMsBut0os=, tarball: https://registry.npm.wps.cn/data-uri-to-buffer/download/data-uri-to-buffer-6.0.2.tgz}
+    engines: {node: '>= 14'}
+
   debug@3.2.7:
     resolution: {integrity: sha1-clgLfpFF+zm2Z2+cXl+xALk0F5o=, tarball: https://registry.npm.wps.cn/debug/download/debug-3.2.7.tgz}
     peerDependencies:
@@ -209,16 +374,56 @@ packages:
   defaults@1.0.4:
     resolution: {integrity: sha1-sLAgYsHiqmL/XZUo8PmLqpCXjXo=, tarball: https://registry.npm.wps.cn/defaults/download/defaults-1.0.4.tgz}
 
+  degenerator@5.0.1:
+    resolution: {integrity: sha1-lAO/KXxtrZoezkCbN9snlU+R8vU=, tarball: https://registry.npm.wps.cn/degenerator/download/degenerator-5.0.1.tgz}
+    engines: {node: '>= 14'}
+
+  depd@2.0.0:
+    resolution: {integrity: sha1-tpYWPMdXVg0JzyLMj60Vcbeedt8=, tarball: https://registry.npm.wps.cn/depd/download/depd-2.0.0.tgz}
+    engines: {node: '>= 0.8'}
+
+  devtools-protocol@0.0.1566079:
+    resolution: {integrity: sha1-KASe7QJaJc866pZPbGvVF3lsRKw=, tarball: https://registry.npm.wps.cn/devtools-protocol/download/devtools-protocol-0.0.1566079.tgz}
+
   diff@5.2.2:
     resolution: {integrity: sha1-CkdCeXKB0Jz6aZt56jLSdyNiO60=, tarball: https://registry.npm.wps.cn/diff/download/diff-5.2.2.tgz}
     engines: {node: '>=0.3.1'}
 
+  dunder-proto@1.0.1:
+    resolution: {integrity: sha1-165mfh3INIL4tw/Q9u78UNow9Yo=, tarball: https://registry.npm.wps.cn/dunder-proto/download/dunder-proto-1.0.1.tgz}
+    engines: {node: '>= 0.4'}
+
+  ee-first@1.1.1:
+    resolution: {integrity: sha1-WQxhFWsK4vTwJVcyoViyZrxWsh0=, tarball: https://registry.npm.wps.cn/ee-first/download/ee-first-1.1.1.tgz}
+
   emoji-regex@8.0.0:
     resolution: {integrity: sha1-6Bj9ac5cz8tARZT4QpY79TFkzDc=, tarball: https://registry.npm.wps.cn/emoji-regex/download/emoji-regex-8.0.0.tgz}
+
+  encodeurl@2.0.0:
+    resolution: {integrity: sha1-e46omAd9fkCdOsRUdOo46vCFelg=, tarball: https://registry.npm.wps.cn/encodeurl/download/encodeurl-2.0.0.tgz}
+    engines: {node: '>= 0.8'}
+
+  end-of-stream@1.4.5:
+    resolution: {integrity: sha1-c0TXEd6kDgt0q8LtSXeHQ8ztsIw=, tarball: https://registry.npm.wps.cn/end-of-stream/download/end-of-stream-1.4.5.tgz}
+
+  es-define-property@1.0.1:
+    resolution: {integrity: sha1-mD6y+aZyTpMD9hrd8BHHLgngsPo=, tarball: https://registry.npm.wps.cn/es-define-property/download/es-define-property-1.0.1.tgz}
+    engines: {node: '>= 0.4'}
+
+  es-errors@1.3.0:
+    resolution: {integrity: sha1-BfdaJdq5jk+x3NXhRywFRtUFfI8=, tarball: https://registry.npm.wps.cn/es-errors/download/es-errors-1.3.0.tgz}
+    engines: {node: '>= 0.4'}
+
+  es-object-atoms@1.1.1:
+    resolution: {integrity: sha1-HE8sSDcydZfOadLKGQp/3RcjOME=, tarball: https://registry.npm.wps.cn/es-object-atoms/download/es-object-atoms-1.1.1.tgz}
+    engines: {node: '>= 0.4'}
 
   escalade@3.2.0:
     resolution: {integrity: sha1-ARo/aYVroYnf+n3I/M6Z0qh5A+U=, tarball: https://registry.npm.wps.cn/escalade/download/escalade-3.2.0.tgz}
     engines: {node: '>=6'}
+
+  escape-html@1.0.3:
+    resolution: {integrity: sha1-Aljq5NPQwJdN4cFpGI7wBR0dGYg=, tarball: https://registry.npm.wps.cn/escape-html/download/escape-html-1.0.3.tgz}
 
   escape-string-regexp@1.0.5:
     resolution: {integrity: sha1-G2HAViGQqN/2rjuyzwIAyhMLhtQ=, tarball: https://registry.npm.wps.cn/escape-string-regexp/download/escape-string-regexp-1.0.5.tgz}
@@ -228,6 +433,66 @@ packages:
     resolution: {integrity: sha1-FLqDpdNz49MR5a/KKc9b+tllvzQ=, tarball: https://registry.npm.wps.cn/escape-string-regexp/download/escape-string-regexp-4.0.0.tgz}
     engines: {node: '>=10'}
 
+  escodegen@2.1.0:
+    resolution: {integrity: sha1-upO7t6Q5htKdYEH5n1Ji2nc+Lhc=, tarball: https://registry.npm.wps.cn/escodegen/download/escodegen-2.1.0.tgz}
+    engines: {node: '>=6.0'}
+    hasBin: true
+
+  esprima@4.0.1:
+    resolution: {integrity: sha1-E7BM2z5sXRnfkatph6hpVhmwqnE=, tarball: https://registry.npm.wps.cn/esprima/download/esprima-4.0.1.tgz}
+    engines: {node: '>=4'}
+    hasBin: true
+
+  estraverse@5.3.0:
+    resolution: {integrity: sha1-LupSkHAvJquP5TcDcP+GyWXSESM=, tarball: https://registry.npm.wps.cn/estraverse/download/estraverse-5.3.0.tgz}
+    engines: {node: '>=4.0'}
+
+  esutils@2.0.3:
+    resolution: {integrity: sha1-dNLrTeC42hKTcRkQ1Qd1ubcQ72Q=, tarball: https://registry.npm.wps.cn/esutils/download/esutils-2.0.3.tgz}
+    engines: {node: '>=0.10.0'}
+
+  etag@1.8.1:
+    resolution: {integrity: sha1-Qa4u62XvpiJorr/qg6x9eSmbCIc=, tarball: https://registry.npm.wps.cn/etag/download/etag-1.8.1.tgz}
+    engines: {node: '>= 0.6'}
+
+  events-universal@1.0.1:
+    resolution: {integrity: sha1-tWqE/WEbZhDgotDwn4D9+THi3+Y=, tarball: https://registry.npm.wps.cn/events-universal/download/events-universal-1.0.1.tgz}
+
+  eventsource-parser@3.0.6:
+    resolution: {integrity: sha1-KS4WXjTKy8k2w8knGe8ybUrrTpA=, tarball: https://registry.npm.wps.cn/eventsource-parser/download/eventsource-parser-3.0.6.tgz}
+    engines: {node: '>=18.0.0'}
+
+  eventsource@3.0.7:
+    resolution: {integrity: sha1-EVdiLi9Td7tq7yEUNycougwVaYk=, tarball: https://registry.npm.wps.cn/eventsource/download/eventsource-3.0.7.tgz}
+    engines: {node: '>=18.0.0'}
+
+  express-rate-limit@8.2.1:
+    resolution: {integrity: sha1-7HX9/igOzd12K42oeExhuuR9f38=, tarball: https://registry.npm.wps.cn/express-rate-limit/download/express-rate-limit-8.2.1.tgz}
+    engines: {node: '>= 16'}
+    peerDependencies:
+      express: '>= 4.11'
+
+  express@5.2.1:
+    resolution: {integrity: sha1-jyHRW20yf5K0eU7PjLCKcvlWrAQ=, tarball: https://registry.npm.wps.cn/express/download/express-5.2.1.tgz}
+    engines: {node: '>= 18'}
+
+  extract-zip@2.0.1:
+    resolution: {integrity: sha1-Zj3KVv5G34kNXxMe9KBtIruLoTo=, tarball: https://registry.npm.wps.cn/extract-zip/download/extract-zip-2.0.1.tgz}
+    engines: {node: '>= 10.17.0'}
+    hasBin: true
+
+  fast-deep-equal@3.1.3:
+    resolution: {integrity: sha1-On1WtVnWy8PrUSMlJE5hmmXGxSU=, tarball: https://registry.npm.wps.cn/fast-deep-equal/download/fast-deep-equal-3.1.3.tgz}
+
+  fast-fifo@1.3.2:
+    resolution: {integrity: sha1-KG4x3pbrltOKl4mYFXQLoqTzZAw=, tarball: https://registry.npm.wps.cn/fast-fifo/download/fast-fifo-1.3.2.tgz}
+
+  fast-uri@3.1.0:
+    resolution: {integrity: sha1-Zu7P9sdkwN+bdi5iyn7c+1O07fo=, tarball: https://registry.npm.wps.cn/fast-uri/download/fast-uri-3.1.0.tgz}
+
+  fd-slicer@1.1.0:
+    resolution: {integrity: sha1-JcfInLH5B3+IkbvmHY85Dq4lbx4=, tarball: https://registry.npm.wps.cn/fd-slicer/download/fd-slicer-1.1.0.tgz}
+
   figures@3.2.0:
     resolution: {integrity: sha1-YlwYvSk8YE3EqN2y/r8MiDQXRq8=, tarball: https://registry.npm.wps.cn/figures/download/figures-3.2.0.tgz}
     engines: {node: '>=8'}
@@ -235,6 +500,10 @@ packages:
   fill-range@7.1.1:
     resolution: {integrity: sha1-RCZdPKwH4+p9wkdRY4BkN1SgUpI=, tarball: https://registry.npm.wps.cn/fill-range/download/fill-range-7.1.1.tgz}
     engines: {node: '>=8'}
+
+  finalhandler@2.1.1:
+    resolution: {integrity: sha1-osUXplWYUrzbBtH4vX9Rto+tgJk=, tarball: https://registry.npm.wps.cn/finalhandler/download/finalhandler-2.1.1.tgz}
+    engines: {node: '>= 18.0.0'}
 
   find-up@5.0.0:
     resolution: {integrity: sha1-TJKBnstwg1YeT0okCoa+UZj1Nvw=, tarball: https://registry.npm.wps.cn/find-up/download/find-up-5.0.0.tgz}
@@ -244,6 +513,14 @@ packages:
     resolution: {integrity: sha1-jKb+MyBp/6nTJMMnGYxZglnOskE=, tarball: https://registry.npm.wps.cn/flat/download/flat-5.0.2.tgz}
     hasBin: true
 
+  forwarded@0.2.0:
+    resolution: {integrity: sha1-ImmTZCiq1MFcfr6XeahL8LKoGBE=, tarball: https://registry.npm.wps.cn/forwarded/download/forwarded-0.2.0.tgz}
+    engines: {node: '>= 0.6'}
+
+  fresh@2.0.0:
+    resolution: {integrity: sha1-jdffahs6Gzpc8YbAWl3SZ2ImNaQ=, tarball: https://registry.npm.wps.cn/fresh/download/fresh-2.0.0.tgz}
+    engines: {node: '>= 0.8'}
+
   fs.realpath@1.0.0:
     resolution: {integrity: sha1-FQStJSMVjKpA20onh8sBQRmU6k8=, tarball: https://registry.npm.wps.cn/fs.realpath/download/fs.realpath-1.0.0.tgz}
 
@@ -252,9 +529,28 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
+  function-bind@1.1.2:
+    resolution: {integrity: sha1-LALYZNl/PqbIgwxGTL0Rq26rehw=, tarball: https://registry.npm.wps.cn/function-bind/download/function-bind-1.1.2.tgz}
+
   get-caller-file@2.0.5:
     resolution: {integrity: sha1-T5RBKoLbMvNuOwuXQfipf+sDH34=, tarball: https://registry.npm.wps.cn/get-caller-file/download/get-caller-file-2.0.5.tgz}
     engines: {node: 6.* || 8.* || >= 10.*}
+
+  get-intrinsic@1.3.0:
+    resolution: {integrity: sha1-dD8OO2lkqTpUke0b/6rgVNf5jQE=, tarball: https://registry.npm.wps.cn/get-intrinsic/download/get-intrinsic-1.3.0.tgz}
+    engines: {node: '>= 0.4'}
+
+  get-proto@1.0.1:
+    resolution: {integrity: sha1-FQs/J0OGnvPoUewMSdFbHRTQDuE=, tarball: https://registry.npm.wps.cn/get-proto/download/get-proto-1.0.1.tgz}
+    engines: {node: '>= 0.4'}
+
+  get-stream@5.2.0:
+    resolution: {integrity: sha1-SWaheV7lrOZecGxLe+txJX1uItM=, tarball: https://registry.npm.wps.cn/get-stream/download/get-stream-5.2.0.tgz}
+    engines: {node: '>=8'}
+
+  get-uri@6.0.5:
+    resolution: {integrity: sha1-cUiSqkqHHbZxq8U5Xl6UR7wwahY=, tarball: https://registry.npm.wps.cn/get-uri/download/get-uri-6.0.5.tgz}
+    engines: {node: '>= 14'}
 
   glob-parent@5.1.2:
     resolution: {integrity: sha1-hpgyxYA0/mikCTwX3BXoNA2EAcQ=, tarball: https://registry.npm.wps.cn/glob-parent/download/glob-parent-5.1.2.tgz}
@@ -265,6 +561,10 @@ packages:
     engines: {node: '>=12'}
     deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
+  gopd@1.2.0:
+    resolution: {integrity: sha1-ifVrghe9vIgCvSmd9tfxCB1+UaE=, tarball: https://registry.npm.wps.cn/gopd/download/gopd-1.2.0.tgz}
+    engines: {node: '>= 0.4'}
+
   has-flag@3.0.0:
     resolution: {integrity: sha1-tdRU3CGZriJWmfNGfloH87lVuv0=, tarball: https://registry.npm.wps.cn/has-flag/download/has-flag-3.0.0.tgz}
     engines: {node: '>=4'}
@@ -273,9 +573,33 @@ packages:
     resolution: {integrity: sha1-lEdx/ZyByBJlxNaUGGDaBrtZR5s=, tarball: https://registry.npm.wps.cn/has-flag/download/has-flag-4.0.0.tgz}
     engines: {node: '>=8'}
 
+  has-symbols@1.1.0:
+    resolution: {integrity: sha1-/JxqeDoISVHQuXH+EBjegTcHozg=, tarball: https://registry.npm.wps.cn/has-symbols/download/has-symbols-1.1.0.tgz}
+    engines: {node: '>= 0.4'}
+
+  hasown@2.0.2:
+    resolution: {integrity: sha1-AD6vkb563DcuhOxZ3DclLO24AAM=, tarball: https://registry.npm.wps.cn/hasown/download/hasown-2.0.2.tgz}
+    engines: {node: '>= 0.4'}
+
   he@1.2.0:
     resolution: {integrity: sha1-hK5l+n6vsWX922FWauFLrwVmTw8=, tarball: https://registry.npm.wps.cn/he/download/he-1.2.0.tgz}
     hasBin: true
+
+  hono@4.11.9:
+    resolution: {integrity: sha1-Tg3sUwmo8FIWx3fL2TExpBzyjrk=, tarball: https://registry.npm.wps.cn/hono/download/hono-4.11.9.tgz}
+    engines: {node: '>=16.9.0'}
+
+  http-errors@2.0.1:
+    resolution: {integrity: sha1-NtL2W8kJyHkAGN02+02T2myq4Gs=, tarball: https://registry.npm.wps.cn/http-errors/download/http-errors-2.0.1.tgz}
+    engines: {node: '>= 0.8'}
+
+  http-proxy-agent@7.0.2:
+    resolution: {integrity: sha1-mosfJGhmwChQlIZYX2K48sGMJw4=, tarball: https://registry.npm.wps.cn/http-proxy-agent/download/http-proxy-agent-7.0.2.tgz}
+    engines: {node: '>= 14'}
+
+  https-proxy-agent@7.0.6:
+    resolution: {integrity: sha1-2o3+rH2hMLBcK6S1nJts1mYRprk=, tarball: https://registry.npm.wps.cn/https-proxy-agent/download/https-proxy-agent-7.0.6.tgz}
+    engines: {node: '>= 14'}
 
   iconv-lite@0.7.2:
     resolution: {integrity: sha1-0L3qw/ErSDW3NZwq2JxCKk0cxy4=, tarball: https://registry.npm.wps.cn/iconv-lite/download/iconv-lite-0.7.2.tgz}
@@ -297,6 +621,14 @@ packages:
   inquirer@8.2.7:
     resolution: {integrity: sha1-Yva5Mam3+HNdxC25JzFtj7b3Heg=, tarball: https://registry.npm.wps.cn/inquirer/download/inquirer-8.2.7.tgz}
     engines: {node: '>=12.0.0'}
+
+  ip-address@10.0.1:
+    resolution: {integrity: sha1-qBgLeDzneId315YobWG85CdoGO0=, tarball: https://registry.npm.wps.cn/ip-address/download/ip-address-10.0.1.tgz}
+    engines: {node: '>= 12'}
+
+  ipaddr.js@1.9.1:
+    resolution: {integrity: sha1-v/OFQ+64mEglB5/zoqjmy9RngbM=, tarball: https://registry.npm.wps.cn/ipaddr.js/download/ipaddr.js-1.9.1.tgz}
+    engines: {node: '>= 0.10'}
 
   is-binary-path@2.1.0:
     resolution: {integrity: sha1-6h9/O4DwZCNug0cPhsCcJU+0Wwk=, tarball: https://registry.npm.wps.cn/is-binary-path/download/is-binary-path-2.1.0.tgz}
@@ -326,13 +658,28 @@ packages:
     resolution: {integrity: sha1-ReQuN/zPH0Dajl927iFRWEDAkoc=, tarball: https://registry.npm.wps.cn/is-plain-obj/download/is-plain-obj-2.1.0.tgz}
     engines: {node: '>=8'}
 
+  is-promise@4.0.0:
+    resolution: {integrity: sha1-Qv+fhCBsGZHSbev1IN1cAQQt0vM=, tarball: https://registry.npm.wps.cn/is-promise/download/is-promise-4.0.0.tgz}
+
   is-unicode-supported@0.1.0:
     resolution: {integrity: sha1-PybHaoCVk7Ur+i7LVxDtJ3m1Iqc=, tarball: https://registry.npm.wps.cn/is-unicode-supported/download/is-unicode-supported-0.1.0.tgz}
     engines: {node: '>=10'}
 
+  isexe@2.0.0:
+    resolution: {integrity: sha1-6PvzdNxVb/iUehDcsFctYz8s+hA=, tarball: https://registry.npm.wps.cn/isexe/download/isexe-2.0.0.tgz}
+
+  jose@6.1.3:
+    resolution: {integrity: sha1-hFPXvoive7fWSgSB1qNaAUW6PqU=, tarball: https://registry.npm.wps.cn/jose/download/jose-6.1.3.tgz}
+
   js-yaml@4.1.1:
     resolution: {integrity: sha1-hUwpJGdwW2mUduGi3swMijRYgGs=, tarball: https://registry.npm.wps.cn/js-yaml/download/js-yaml-4.1.1.tgz}
     hasBin: true
+
+  json-schema-traverse@1.0.0:
+    resolution: {integrity: sha1-rnvLNlard6c7pcSb9lTzjmtoYOI=, tarball: https://registry.npm.wps.cn/json-schema-traverse/download/json-schema-traverse-1.0.0.tgz}
+
+  json-schema-typed@8.0.2:
+    resolution: {integrity: sha1-6Y7nsYmf9KGEU00fFnwojGa77/Q=, tarball: https://registry.npm.wps.cn/json-schema-typed/download/json-schema-typed-8.0.2.tgz}
 
   locate-path@6.0.0:
     resolution: {integrity: sha1-VTIeswn+u8WcSAHZMackUqaB0oY=, tarball: https://registry.npm.wps.cn/locate-path/download/locate-path-6.0.0.tgz}
@@ -345,6 +692,30 @@ packages:
     resolution: {integrity: sha1-P727lbRoOsn8eFER55LlWNSr1QM=, tarball: https://registry.npm.wps.cn/log-symbols/download/log-symbols-4.1.0.tgz}
     engines: {node: '>=10'}
 
+  lru-cache@7.18.3:
+    resolution: {integrity: sha1-95OJbg/Q6VSlnf3YLwdzgI32qok=, tarball: https://registry.npm.wps.cn/lru-cache/download/lru-cache-7.18.3.tgz}
+    engines: {node: '>=12'}
+
+  math-intrinsics@1.1.0:
+    resolution: {integrity: sha1-oN10voHiqlwvJ+Zc4oNgXuTit/k=, tarball: https://registry.npm.wps.cn/math-intrinsics/download/math-intrinsics-1.1.0.tgz}
+    engines: {node: '>= 0.4'}
+
+  media-typer@1.1.0:
+    resolution: {integrity: sha1-ardLjy0zIPIGSyqHo455Mf86VWE=, tarball: https://registry.npm.wps.cn/media-typer/download/media-typer-1.1.0.tgz}
+    engines: {node: '>= 0.8'}
+
+  merge-descriptors@2.0.0:
+    resolution: {integrity: sha1-6pIvZgY1oiSe5WXgRJ+VHmtgOAg=, tarball: https://registry.npm.wps.cn/merge-descriptors/download/merge-descriptors-2.0.0.tgz}
+    engines: {node: '>=18'}
+
+  mime-db@1.54.0:
+    resolution: {integrity: sha1-zds+5PnGRTDf9kAjZmHULLajFPU=, tarball: https://registry.npm.wps.cn/mime-db/download/mime-db-1.54.0.tgz}
+    engines: {node: '>= 0.6'}
+
+  mime-types@3.0.2:
+    resolution: {integrity: sha1-OQAtQYJXXVrwNv+hGBAPJSSy4qs=, tarball: https://registry.npm.wps.cn/mime-types/download/mime-types-3.0.2.tgz}
+    engines: {node: '>=18'}
+
   mimic-fn@2.1.0:
     resolution: {integrity: sha1-ftLCzMyvhNP/y3pptXcR/CCDQBs=, tarball: https://registry.npm.wps.cn/mimic-fn/download/mimic-fn-2.1.0.tgz}
     engines: {node: '>=6'}
@@ -356,6 +727,9 @@ packages:
     resolution: {integrity: sha1-HPy4z1Ui6mmVLNKvla4JR38SKpY=, tarball: https://registry.npm.wps.cn/minimatch/download/minimatch-5.1.6.tgz}
     engines: {node: '>=10'}
 
+  mitt@3.0.1:
+    resolution: {integrity: sha1-6jbPDMMEA2Aa4HTI93twks2rNtE=, tarball: https://registry.npm.wps.cn/mitt/download/mitt-3.0.1.tgz}
+
   mocha@10.8.2:
     resolution: {integrity: sha1-jYNC0BbtQRsSpCnrcxuCX5Ya+5Y=, tarball: https://registry.npm.wps.cn/mocha/download/mocha-10.8.2.tgz}
     engines: {node: '>= 14.0.0'}
@@ -366,6 +740,14 @@ packages:
 
   mute-stream@0.0.8:
     resolution: {integrity: sha1-FjDEKyJR/4HiooPelqVJfqkuXg0=, tarball: https://registry.npm.wps.cn/mute-stream/download/mute-stream-0.0.8.tgz}
+
+  negotiator@1.0.0:
+    resolution: {integrity: sha1-tskbtHFy1p+Tz9fDV7u1KQGbX2o=, tarball: https://registry.npm.wps.cn/negotiator/download/negotiator-1.0.0.tgz}
+    engines: {node: '>= 0.6'}
+
+  netmask@2.0.2:
+    resolution: {integrity: sha1-iwGgdkQGXVNjg4NYI7xSAE66xec=, tarball: https://registry.npm.wps.cn/netmask/download/netmask-2.0.2.tgz}
+    engines: {node: '>= 0.4.0'}
 
   node-easy-cert@1.3.3:
     resolution: {integrity: sha1-LwJ5tdiP0QQwNFbIZn49KE8X88o=, tarball: https://registry.npm.wps.cn/node-easy-cert/download/node-easy-cert-1.3.3.tgz}
@@ -384,6 +766,18 @@ packages:
   normalize-path@3.0.0:
     resolution: {integrity: sha1-Dc1p/yOhybEf0JeDFmRKA4ghamU=, tarball: https://registry.npm.wps.cn/normalize-path/download/normalize-path-3.0.0.tgz}
     engines: {node: '>=0.10.0'}
+
+  object-assign@4.1.1:
+    resolution: {integrity: sha1-IQmtx5ZYh8/AXLvUQsrIv7s2CGM=, tarball: https://registry.npm.wps.cn/object-assign/download/object-assign-4.1.1.tgz}
+    engines: {node: '>=0.10.0'}
+
+  object-inspect@1.13.4:
+    resolution: {integrity: sha1-g3UmXiG8IND6WCwi4bE0hdbgAhM=, tarball: https://registry.npm.wps.cn/object-inspect/download/object-inspect-1.13.4.tgz}
+    engines: {node: '>= 0.4'}
+
+  on-finished@2.4.1:
+    resolution: {integrity: sha1-WMjEQRblSEWtV/FKsQsDUzGErD8=, tarball: https://registry.npm.wps.cn/on-finished/download/on-finished-2.4.1.tgz}
+    engines: {node: '>= 0.8'}
 
   once@1.4.0:
     resolution: {integrity: sha1-WDsap3WWHUsROsF9nFC6753Xa9E=, tarball: https://registry.npm.wps.cn/once/download/once-1.4.0.tgz}
@@ -404,23 +798,83 @@ packages:
     resolution: {integrity: sha1-g8gxXGeFAF470CGDlBHJ4RDm2DQ=, tarball: https://registry.npm.wps.cn/p-locate/download/p-locate-5.0.0.tgz}
     engines: {node: '>=10'}
 
+  pac-proxy-agent@7.2.0:
+    resolution: {integrity: sha1-nPrzP/Jdo29hR6IIRCMOySwG5d8=, tarball: https://registry.npm.wps.cn/pac-proxy-agent/download/pac-proxy-agent-7.2.0.tgz}
+    engines: {node: '>= 14'}
+
+  pac-resolver@7.0.1:
+    resolution: {integrity: sha1-VGdVWOo2i2TSEP2ckqZAtfO4q7Y=, tarball: https://registry.npm.wps.cn/pac-resolver/download/pac-resolver-7.0.1.tgz}
+    engines: {node: '>= 14'}
+
+  parseurl@1.3.3:
+    resolution: {integrity: sha1-naGee+6NEt/wUT7Vt2lXeTvC6NQ=, tarball: https://registry.npm.wps.cn/parseurl/download/parseurl-1.3.3.tgz}
+    engines: {node: '>= 0.8'}
+
   path-exists@4.0.0:
     resolution: {integrity: sha1-UTvb4tO5XXdi6METfvoZXGxhtbM=, tarball: https://registry.npm.wps.cn/path-exists/download/path-exists-4.0.0.tgz}
     engines: {node: '>=8'}
+
+  path-key@3.1.1:
+    resolution: {integrity: sha1-WB9q3mWMu6ZaDTOA3ndTKVBU83U=, tarball: https://registry.npm.wps.cn/path-key/download/path-key-3.1.1.tgz}
+    engines: {node: '>=8'}
+
+  path-to-regexp@8.3.0:
+    resolution: {integrity: sha1-qoGKaYH5kyEAOgiYfTzsnDR0zR8=, tarball: https://registry.npm.wps.cn/path-to-regexp/download/path-to-regexp-8.3.0.tgz}
+
+  pend@1.2.0:
+    resolution: {integrity: sha1-elfrVQpng/kRUzH89GY9XI4AelA=, tarball: https://registry.npm.wps.cn/pend/download/pend-1.2.0.tgz}
 
   picomatch@2.3.1:
     resolution: {integrity: sha1-O6ODNzNkbZ0+SZWUbBNlpn+wekI=, tarball: https://registry.npm.wps.cn/picomatch/download/picomatch-2.3.1.tgz}
     engines: {node: '>=8.6'}
 
+  pkce-challenge@5.0.1:
+    resolution: {integrity: sha1-O0RGhlsXsXRems4gFqMfSN32Iw0=, tarball: https://registry.npm.wps.cn/pkce-challenge/download/pkce-challenge-5.0.1.tgz}
+    engines: {node: '>=16.20.0'}
+
   portfinder@1.0.38:
     resolution: {integrity: sha1-5Ps6LYiLINKXfaBQ5Iq14fV6GF4=, tarball: https://registry.npm.wps.cn/portfinder/download/portfinder-1.0.38.tgz}
     engines: {node: '>= 10.12'}
 
+  progress@2.0.3:
+    resolution: {integrity: sha1-foz42PW48jnBvGi+tOt4Vn1XLvg=, tarball: https://registry.npm.wps.cn/progress/download/progress-2.0.3.tgz}
+    engines: {node: '>=0.4.0'}
+
+  proxy-addr@2.0.7:
+    resolution: {integrity: sha1-8Z/mnOqzEe65S0LnDowgcPm6ECU=, tarball: https://registry.npm.wps.cn/proxy-addr/download/proxy-addr-2.0.7.tgz}
+    engines: {node: '>= 0.10'}
+
+  proxy-agent@6.5.0:
+    resolution: {integrity: sha1-nkmsuo5O4jSqy1Ofie2cI9AvIy0=, tarball: https://registry.npm.wps.cn/proxy-agent/download/proxy-agent-6.5.0.tgz}
+    engines: {node: '>= 14'}
+
+  proxy-from-env@1.1.0:
+    resolution: {integrity: sha1-4QLxbKNVQkhldV0sno6k8k1Yw+I=, tarball: https://registry.npm.wps.cn/proxy-from-env/download/proxy-from-env-1.1.0.tgz}
+
   pstree.remy@1.1.8:
     resolution: {integrity: sha1-wkIiT0pnwh9oaDm720rCgrg3PTo=, tarball: https://registry.npm.wps.cn/pstree.remy/download/pstree.remy-1.1.8.tgz}
 
+  pump@3.0.3:
+    resolution: {integrity: sha1-FR2XnxopZo3AAl7FiaRVtTKCJo0=, tarball: https://registry.npm.wps.cn/pump/download/pump-3.0.3.tgz}
+
+  puppeteer-core@24.37.2:
+    resolution: {integrity: sha1-EFXyZCa+NS4DwNUDVIrQKjYPZxE=, tarball: https://registry.npm.wps.cn/puppeteer-core/download/puppeteer-core-24.37.2.tgz}
+    engines: {node: '>=18'}
+
+  qs@6.14.2:
+    resolution: {integrity: sha1-tWNM+dmtmJjjH7o1BOhm6O+2eYw=, tarball: https://registry.npm.wps.cn/qs/download/qs-6.14.2.tgz}
+    engines: {node: '>=0.6'}
+
   randombytes@2.1.0:
     resolution: {integrity: sha1-32+ENy8CcNxlzfYpE0mrekc9Tyo=, tarball: https://registry.npm.wps.cn/randombytes/download/randombytes-2.1.0.tgz}
+
+  range-parser@1.2.1:
+    resolution: {integrity: sha1-PPNwI9GZ4cJNGlW4SADC8+ZGgDE=, tarball: https://registry.npm.wps.cn/range-parser/download/range-parser-1.2.1.tgz}
+    engines: {node: '>= 0.6'}
+
+  raw-body@3.0.2:
+    resolution: {integrity: sha1-PjraWuVWj5CV2EN2/TpJuPsAClE=, tarball: https://registry.npm.wps.cn/raw-body/download/raw-body-3.0.2.tgz}
+    engines: {node: '>= 0.10'}
 
   readable-stream@3.6.2:
     resolution: {integrity: sha1-VqmzbqllwAxak+8x6xEaDxEFaWc=, tarball: https://registry.npm.wps.cn/readable-stream/download/readable-stream-3.6.2.tgz}
@@ -434,9 +888,17 @@ packages:
     resolution: {integrity: sha1-jGStX9MNqxyXbiNE/+f3kqam30I=, tarball: https://registry.npm.wps.cn/require-directory/download/require-directory-2.1.1.tgz}
     engines: {node: '>=0.10.0'}
 
+  require-from-string@2.0.2:
+    resolution: {integrity: sha1-iaf92TgmEmcxjq/hT5wy5ZjDaQk=, tarball: https://registry.npm.wps.cn/require-from-string/download/require-from-string-2.0.2.tgz}
+    engines: {node: '>=0.10.0'}
+
   restore-cursor@3.1.0:
     resolution: {integrity: sha1-OfZ8VLOnpYzqUjbZXPADQjljH34=, tarball: https://registry.npm.wps.cn/restore-cursor/download/restore-cursor-3.1.0.tgz}
     engines: {node: '>=8'}
+
+  router@2.2.0:
+    resolution: {integrity: sha1-AZvmILcRyHZBFnzHm5kJDwCxRu8=, tarball: https://registry.npm.wps.cn/router/download/router-2.2.0.tgz}
+    engines: {node: '>= 18'}
 
   run-async@2.4.1:
     resolution: {integrity: sha1-hEDsz5nqPnC9QJ1JqriOEMGJpFU=, tarball: https://registry.npm.wps.cn/run-async/download/run-async-2.4.1.tgz}
@@ -459,8 +921,48 @@ packages:
     resolution: {integrity: sha1-XzyjV2HkfgWyBsba/yz4FPAxa44=, tarball: https://registry.npm.wps.cn/semver/download/semver-7.0.0.tgz}
     hasBin: true
 
+  semver@7.7.4:
+    resolution: {integrity: sha1-KEZONgYOmR+noR0CedLT87V6foo=, tarball: https://registry.npm.wps.cn/semver/download/semver-7.7.4.tgz}
+    engines: {node: '>=10'}
+    hasBin: true
+
+  send@1.2.1:
+    resolution: {integrity: sha1-nqt0O4dPNVD0CiaGe/KGrWDT8+0=, tarball: https://registry.npm.wps.cn/send/download/send-1.2.1.tgz}
+    engines: {node: '>= 18'}
+
   serialize-javascript@6.0.2:
     resolution: {integrity: sha1-3voeBVyDv21Z6oBdjahiJU62psI=, tarball: https://registry.npm.wps.cn/serialize-javascript/download/serialize-javascript-6.0.2.tgz}
+
+  serve-static@2.2.1:
+    resolution: {integrity: sha1-fxhqSk5fW2Y616QpT/G/N88OmKk=, tarball: https://registry.npm.wps.cn/serve-static/download/serve-static-2.2.1.tgz}
+    engines: {node: '>= 18'}
+
+  setprototypeof@1.2.0:
+    resolution: {integrity: sha1-ZsmiSnP5/CjL5msJ/tPTPcrxtCQ=, tarball: https://registry.npm.wps.cn/setprototypeof/download/setprototypeof-1.2.0.tgz}
+
+  shebang-command@2.0.0:
+    resolution: {integrity: sha1-zNCvT4g1+9wmW4JGGq8MNmY/NOo=, tarball: https://registry.npm.wps.cn/shebang-command/download/shebang-command-2.0.0.tgz}
+    engines: {node: '>=8'}
+
+  shebang-regex@3.0.0:
+    resolution: {integrity: sha1-rhbxZE2HPsrYQ7AwexQzYtTEIXI=, tarball: https://registry.npm.wps.cn/shebang-regex/download/shebang-regex-3.0.0.tgz}
+    engines: {node: '>=8'}
+
+  side-channel-list@1.0.0:
+    resolution: {integrity: sha1-EMtZhCYxFdO3oOM2WR4pCoMK+K0=, tarball: https://registry.npm.wps.cn/side-channel-list/download/side-channel-list-1.0.0.tgz}
+    engines: {node: '>= 0.4'}
+
+  side-channel-map@1.0.1:
+    resolution: {integrity: sha1-1rtrN5Asb+9RdOX1M/q0xzKib0I=, tarball: https://registry.npm.wps.cn/side-channel-map/download/side-channel-map-1.0.1.tgz}
+    engines: {node: '>= 0.4'}
+
+  side-channel-weakmap@1.0.2:
+    resolution: {integrity: sha1-Ed2hnVNo5Azp7CvcH7DsvAeQ7Oo=, tarball: https://registry.npm.wps.cn/side-channel-weakmap/download/side-channel-weakmap-1.0.2.tgz}
+    engines: {node: '>= 0.4'}
+
+  side-channel@1.1.0:
+    resolution: {integrity: sha1-w/z/nE2pMnhIczNeyXZfqU/2a8k=, tarball: https://registry.npm.wps.cn/side-channel/download/side-channel-1.1.0.tgz}
+    engines: {node: '>= 0.4'}
 
   signal-exit@3.0.7:
     resolution: {integrity: sha1-qaF2f4r4QVURTqq9c/mSc8j1mtk=, tarball: https://registry.npm.wps.cn/signal-exit/download/signal-exit-3.0.7.tgz}
@@ -468,6 +970,29 @@ packages:
   simple-update-notifier@1.1.0:
     resolution: {integrity: sha1-Z2lMEh3jVK9ZKzR826eYRj7UnII=, tarball: https://registry.npm.wps.cn/simple-update-notifier/download/simple-update-notifier-1.1.0.tgz}
     engines: {node: '>=8.10.0'}
+
+  smart-buffer@4.2.0:
+    resolution: {integrity: sha1-bh1x+k8YwF99D/IW3RakgdDo2a4=, tarball: https://registry.npm.wps.cn/smart-buffer/download/smart-buffer-4.2.0.tgz}
+    engines: {node: '>= 6.0.0', npm: '>= 3.0.0'}
+
+  socks-proxy-agent@8.0.5:
+    resolution: {integrity: sha1-uc205+mYUJ12WdaJznaXrCFkW+4=, tarball: https://registry.npm.wps.cn/socks-proxy-agent/download/socks-proxy-agent-8.0.5.tgz}
+    engines: {node: '>= 14'}
+
+  socks@2.8.7:
+    resolution: {integrity: sha1-4vsdmmA63XUFCiBn24w4GgtWaeo=, tarball: https://registry.npm.wps.cn/socks/download/socks-2.8.7.tgz}
+    engines: {node: '>= 10.0.0', npm: '>= 3.0.0'}
+
+  source-map@0.6.1:
+    resolution: {integrity: sha1-dHIq8y6WFOnCh6jQu95IteLxomM=, tarball: https://registry.npm.wps.cn/source-map/download/source-map-0.6.1.tgz}
+    engines: {node: '>=0.10.0'}
+
+  statuses@2.0.2:
+    resolution: {integrity: sha1-j3XuzvdlteHPzcCA2llAntQk44I=, tarball: https://registry.npm.wps.cn/statuses/download/statuses-2.0.2.tgz}
+    engines: {node: '>= 0.8'}
+
+  streamx@2.23.0:
+    resolution: {integrity: sha1-fQ89ANSmxd5XKK7NZCK0AI1m/Qs=, tarball: https://registry.npm.wps.cn/streamx/download/streamx-2.23.0.tgz}
 
   string-width@4.2.3:
     resolution: {integrity: sha1-JpxxF9J7Ba0uU2gwqOyJXvnG0BA=, tarball: https://registry.npm.wps.cn/string-width/download/string-width-4.2.3.tgz}
@@ -496,12 +1021,25 @@ packages:
     resolution: {integrity: sha1-zW/BfihQDP9WwbhsCn/UpUpzAFw=, tarball: https://registry.npm.wps.cn/supports-color/download/supports-color-8.1.1.tgz}
     engines: {node: '>=10'}
 
+  tar-fs@3.1.1:
+    resolution: {integrity: sha1-TxZOWftg8QPUcjYHMejGu0p/6e8=, tarball: https://registry.npm.wps.cn/tar-fs/download/tar-fs-3.1.1.tgz}
+
+  tar-stream@3.1.7:
+    resolution: {integrity: sha1-JLP7XqutoZ/nM47W0m5ffEgueSs=, tarball: https://registry.npm.wps.cn/tar-stream/download/tar-stream-3.1.7.tgz}
+
+  text-decoder@1.2.3:
+    resolution: {integrity: sha1-sZ2jZNmBsjJtX0MJnDEMyA13DGU=, tarball: https://registry.npm.wps.cn/text-decoder/download/text-decoder-1.2.3.tgz}
+
   through@2.3.8:
     resolution: {integrity: sha1-DdTJ/6q8NXlgsbckEV1+Doai4fU=, tarball: https://registry.npm.wps.cn/through/download/through-2.3.8.tgz}
 
   to-regex-range@5.0.1:
     resolution: {integrity: sha1-FkjESq58jZiKMmAY7XL1tN0DkuQ=, tarball: https://registry.npm.wps.cn/to-regex-range/download/to-regex-range-5.0.1.tgz}
     engines: {node: '>=8.0'}
+
+  toidentifier@1.0.1:
+    resolution: {integrity: sha1-O+NDIaiKgg7RvYDfqjPkefu43TU=, tarball: https://registry.npm.wps.cn/toidentifier/download/toidentifier-1.0.1.tgz}
+    engines: {node: '>=0.6'}
 
   touch@3.1.1:
     resolution: {integrity: sha1-CXoj17FhR2Q15cE0SpXA91tKVpQ=, tarball: https://registry.npm.wps.cn/touch/download/touch-3.1.1.tgz}
@@ -514,17 +1052,40 @@ packages:
     resolution: {integrity: sha1-0mCiSwGYQ24TP6JqUkptZfo7Ljc=, tarball: https://registry.npm.wps.cn/type-fest/download/type-fest-0.21.3.tgz}
     engines: {node: '>=10'}
 
+  type-is@2.0.1:
+    resolution: {integrity: sha1-ZPbPA/kvzkAVwrIkeT9r3UsGjJc=, tarball: https://registry.npm.wps.cn/type-is/download/type-is-2.0.1.tgz}
+    engines: {node: '>= 0.6'}
+
+  typed-query-selector@2.12.0:
+    resolution: {integrity: sha1-krZdvApCZV/M9K6xoIsd3c6K9fI=, tarball: https://registry.npm.wps.cn/typed-query-selector/download/typed-query-selector-2.12.0.tgz}
+
   undefsafe@2.0.5:
     resolution: {integrity: sha1-OHM7kye9zSJtuIn7cjpu/RYubiw=, tarball: https://registry.npm.wps.cn/undefsafe/download/undefsafe-2.0.5.tgz}
 
   undici-types@5.26.5:
     resolution: {integrity: sha1-vNU5iT0AtW6WT9JlekhmsiGmVhc=, tarball: https://registry.npm.wps.cn/undici-types/download/undici-types-5.26.5.tgz}
 
+  unpipe@1.0.0:
+    resolution: {integrity: sha1-sr9O6FFKrmFltIF4KdIbLvSZBOw=, tarball: https://registry.npm.wps.cn/unpipe/download/unpipe-1.0.0.tgz}
+    engines: {node: '>= 0.8'}
+
   util-deprecate@1.0.2:
     resolution: {integrity: sha1-RQ1Nyfpw3nMnYvvS1KKJgUGaDM8=, tarball: https://registry.npm.wps.cn/util-deprecate/download/util-deprecate-1.0.2.tgz}
 
+  vary@1.1.2:
+    resolution: {integrity: sha1-IpnwLG3tMNSllhsLn3RSShj2NPw=, tarball: https://registry.npm.wps.cn/vary/download/vary-1.1.2.tgz}
+    engines: {node: '>= 0.8'}
+
   wcwidth@1.0.1:
     resolution: {integrity: sha1-8LDc+RW8X/FSivrbLA4XtTLaL+g=, tarball: https://registry.npm.wps.cn/wcwidth/download/wcwidth-1.0.1.tgz}
+
+  webdriver-bidi-protocol@0.4.0:
+    resolution: {integrity: sha1-MFdHcgnMW+67oZ1QsxMExM7BAG0=, tarball: https://registry.npm.wps.cn/webdriver-bidi-protocol/download/webdriver-bidi-protocol-0.4.0.tgz}
+
+  which@2.0.2:
+    resolution: {integrity: sha1-fGqN0KY2oDJ+ELWckobu6T8/UbE=, tarball: https://registry.npm.wps.cn/which/download/which-2.0.2.tgz}
+    engines: {node: '>= 8'}
+    hasBin: true
 
   workerpool@6.5.1:
     resolution: {integrity: sha1-Bg9zs50Mr5fG22TaAEzQG0wJlUQ=, tarball: https://registry.npm.wps.cn/workerpool/download/workerpool-6.5.1.tgz}
@@ -560,6 +1121,10 @@ packages:
     resolution: {integrity: sha1-LrfcOwKJcY/ClfNidThFxBoMlO4=, tarball: https://registry.npm.wps.cn/yargs-parser/download/yargs-parser-20.2.9.tgz}
     engines: {node: '>=10'}
 
+  yargs-parser@21.1.1:
+    resolution: {integrity: sha1-kJa87r+ZDSG7MfqVFuDt4pSnfTU=, tarball: https://registry.npm.wps.cn/yargs-parser/download/yargs-parser-21.1.1.tgz}
+    engines: {node: '>=12'}
+
   yargs-unparser@2.0.0:
     resolution: {integrity: sha1-8TH5ImkRrl2a04xDL+gJNmwjJes=, tarball: https://registry.npm.wps.cn/yargs-unparser/download/yargs-unparser-2.0.0.tgz}
     engines: {node: '>=10'}
@@ -568,11 +1133,33 @@ packages:
     resolution: {integrity: sha1-HIK/D2tqZur85+8w43b0mhJHf2Y=, tarball: https://registry.npm.wps.cn/yargs/download/yargs-16.2.0.tgz}
     engines: {node: '>=10'}
 
+  yargs@17.7.2:
+    resolution: {integrity: sha1-mR3zmspnWhkrgW4eA2P5110qomk=, tarball: https://registry.npm.wps.cn/yargs/download/yargs-17.7.2.tgz}
+    engines: {node: '>=12'}
+
+  yauzl@2.10.0:
+    resolution: {integrity: sha1-x+sXyT4RLLEIb6bY5R+wZnt5pfk=, tarball: https://registry.npm.wps.cn/yauzl/download/yauzl-2.10.0.tgz}
+
   yocto-queue@0.1.0:
     resolution: {integrity: sha1-ApTrPe4FAo0x7hpfosVWpqrxChs=, tarball: https://registry.npm.wps.cn/yocto-queue/download/yocto-queue-0.1.0.tgz}
     engines: {node: '>=10'}
 
+  zod-to-json-schema@3.25.1:
+    resolution: {integrity: sha1-fySWIQGkOd2t4r8a6rPDv+x9hLo=, tarball: https://registry.npm.wps.cn/zod-to-json-schema/download/zod-to-json-schema-3.25.1.tgz}
+    peerDependencies:
+      zod: ^3.25 || ^4
+
+  zod@3.25.76:
+    resolution: {integrity: sha1-JoQcP2/SKmonYOfMtxkXl2hHHjQ=, tarball: https://registry.npm.wps.cn/zod/download/zod-3.25.76.tgz}
+
+  zod@4.3.6:
+    resolution: {integrity: sha1-icVuCqfSsFEH2JRBIicIeIWrESo=, tarball: https://registry.npm.wps.cn/zod/download/zod-4.3.6.tgz}
+
 snapshots:
+
+  '@hono/node-server@1.19.9(hono@4.11.9)':
+    dependencies:
+      hono: 4.11.9
 
   '@inquirer/external-editor@1.0.3(@types/node@18.19.130)':
     dependencies:
@@ -581,6 +1168,45 @@ snapshots:
     optionalDependencies:
       '@types/node': 18.19.130
 
+  '@modelcontextprotocol/sdk@1.26.0(zod@4.3.6)':
+    dependencies:
+      '@hono/node-server': 1.19.9(hono@4.11.9)
+      ajv: 8.17.1
+      ajv-formats: 3.0.1(ajv@8.17.1)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.6
+      express: 5.2.1
+      express-rate-limit: 8.2.1(express@5.2.1)
+      hono: 4.11.9
+      jose: 6.1.3
+      json-schema-typed: 8.0.2
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 4.3.6
+      zod-to-json-schema: 3.25.1(zod@4.3.6)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@puppeteer/browsers@2.12.0':
+    dependencies:
+      debug: 4.4.3(supports-color@8.1.1)
+      extract-zip: 2.0.1
+      progress: 2.0.3
+      proxy-agent: 6.5.0
+      semver: 7.7.4
+      tar-fs: 3.1.1
+      yargs: 17.7.2
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - react-native-b4a
+      - supports-color
+
+  '@tootallnate/quickjs-emscripten@0.23.0': {}
+
   '@types/node@18.19.130':
     dependencies:
       undici-types: 5.26.5
@@ -588,6 +1214,29 @@ snapshots:
   '@types/ws@8.18.1':
     dependencies:
       '@types/node': 18.19.130
+
+  '@types/yauzl@2.10.3':
+    dependencies:
+      '@types/node': 18.19.130
+    optional: true
+
+  accepts@2.0.0:
+    dependencies:
+      mime-types: 3.0.2
+      negotiator: 1.0.0
+
+  agent-base@7.1.4: {}
+
+  ajv-formats@3.0.1(ajv@8.17.1):
+    optionalDependencies:
+      ajv: 8.17.1
+
+  ajv@8.17.1:
+    dependencies:
+      fast-deep-equal: 3.1.3
+      fast-uri: 3.1.0
+      json-schema-traverse: 1.0.0
+      require-from-string: 2.0.2
 
   ansi-colors@4.1.3: {}
 
@@ -612,13 +1261,58 @@ snapshots:
 
   argparse@2.0.1: {}
 
+  ast-types@0.13.4:
+    dependencies:
+      tslib: 2.8.1
+
   async-task-mgr@1.1.0: {}
 
   async@3.2.6: {}
 
+  b4a@1.7.3: {}
+
   balanced-match@1.0.2: {}
 
+  bare-events@2.8.2: {}
+
+  bare-fs@4.5.4:
+    dependencies:
+      bare-events: 2.8.2
+      bare-path: 3.0.0
+      bare-stream: 2.7.0(bare-events@2.8.2)
+      bare-url: 2.3.2
+      fast-fifo: 1.3.2
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - react-native-b4a
+    optional: true
+
+  bare-os@3.6.2:
+    optional: true
+
+  bare-path@3.0.0:
+    dependencies:
+      bare-os: 3.6.2
+    optional: true
+
+  bare-stream@2.7.0(bare-events@2.8.2):
+    dependencies:
+      streamx: 2.23.0
+    optionalDependencies:
+      bare-events: 2.8.2
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - react-native-b4a
+    optional: true
+
+  bare-url@2.3.2:
+    dependencies:
+      bare-path: 3.0.0
+    optional: true
+
   base64-js@1.5.1: {}
+
+  basic-ftp@5.0.5: {}
 
   binary-extensions@2.3.0: {}
 
@@ -629,6 +1323,20 @@ snapshots:
       readable-stream: 3.6.2
 
   bluebird@3.7.2: {}
+
+  body-parser@2.2.2:
+    dependencies:
+      bytes: 3.1.2
+      content-type: 1.0.5
+      debug: 4.4.3(supports-color@8.1.1)
+      http-errors: 2.0.1
+      iconv-lite: 0.7.2
+      on-finished: 2.4.1
+      qs: 6.14.2
+      raw-body: 3.0.2
+      type-is: 2.0.1
+    transitivePeerDependencies:
+      - supports-color
 
   brace-expansion@1.1.12:
     dependencies:
@@ -645,10 +1353,24 @@ snapshots:
 
   browser-stdout@1.3.1: {}
 
+  buffer-crc32@0.2.13: {}
+
   buffer@5.7.1:
     dependencies:
       base64-js: 1.5.1
       ieee754: 1.2.1
+
+  bytes@3.1.2: {}
+
+  call-bind-apply-helpers@1.0.2:
+    dependencies:
+      es-errors: 1.3.0
+      function-bind: 1.1.2
+
+  call-bound@1.0.4:
+    dependencies:
+      call-bind-apply-helpers: 1.0.2
+      get-intrinsic: 1.3.0
 
   camelcase@6.3.0: {}
 
@@ -677,6 +1399,12 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
+  chromium-bidi@13.1.1(devtools-protocol@0.0.1566079):
+    dependencies:
+      devtools-protocol: 0.0.1566079
+      mitt: 3.0.1
+      zod: 3.25.76
+
   cli-cursor@3.1.0:
     dependencies:
       restore-cursor: 3.1.0
@@ -686,6 +1414,12 @@ snapshots:
   cli-width@3.0.0: {}
 
   cliui@7.0.4:
+    dependencies:
+      string-width: 4.2.3
+      strip-ansi: 6.0.1
+      wrap-ansi: 7.0.0
+
+  cliui@8.0.1:
     dependencies:
       string-width: 4.2.3
       strip-ansi: 6.0.1
@@ -711,6 +1445,27 @@ snapshots:
 
   concat-map@0.0.1: {}
 
+  content-disposition@1.0.1: {}
+
+  content-type@1.0.5: {}
+
+  cookie-signature@1.2.2: {}
+
+  cookie@0.7.2: {}
+
+  cors@2.8.6:
+    dependencies:
+      object-assign: 4.1.1
+      vary: 1.1.2
+
+  cross-spawn@7.0.6:
+    dependencies:
+      path-key: 3.1.1
+      shebang-command: 2.0.0
+      which: 2.0.2
+
+  data-uri-to-buffer@6.0.2: {}
+
   debug@3.2.7(supports-color@5.5.0):
     dependencies:
       ms: 2.1.3
@@ -729,15 +1484,135 @@ snapshots:
     dependencies:
       clone: 1.0.4
 
+  degenerator@5.0.1:
+    dependencies:
+      ast-types: 0.13.4
+      escodegen: 2.1.0
+      esprima: 4.0.1
+
+  depd@2.0.0: {}
+
+  devtools-protocol@0.0.1566079: {}
+
   diff@5.2.2: {}
+
+  dunder-proto@1.0.1:
+    dependencies:
+      call-bind-apply-helpers: 1.0.2
+      es-errors: 1.3.0
+      gopd: 1.2.0
+
+  ee-first@1.1.1: {}
 
   emoji-regex@8.0.0: {}
 
+  encodeurl@2.0.0: {}
+
+  end-of-stream@1.4.5:
+    dependencies:
+      once: 1.4.0
+
+  es-define-property@1.0.1: {}
+
+  es-errors@1.3.0: {}
+
+  es-object-atoms@1.1.1:
+    dependencies:
+      es-errors: 1.3.0
+
   escalade@3.2.0: {}
+
+  escape-html@1.0.3: {}
 
   escape-string-regexp@1.0.5: {}
 
   escape-string-regexp@4.0.0: {}
+
+  escodegen@2.1.0:
+    dependencies:
+      esprima: 4.0.1
+      estraverse: 5.3.0
+      esutils: 2.0.3
+    optionalDependencies:
+      source-map: 0.6.1
+
+  esprima@4.0.1: {}
+
+  estraverse@5.3.0: {}
+
+  esutils@2.0.3: {}
+
+  etag@1.8.1: {}
+
+  events-universal@1.0.1:
+    dependencies:
+      bare-events: 2.8.2
+    transitivePeerDependencies:
+      - bare-abort-controller
+
+  eventsource-parser@3.0.6: {}
+
+  eventsource@3.0.7:
+    dependencies:
+      eventsource-parser: 3.0.6
+
+  express-rate-limit@8.2.1(express@5.2.1):
+    dependencies:
+      express: 5.2.1
+      ip-address: 10.0.1
+
+  express@5.2.1:
+    dependencies:
+      accepts: 2.0.0
+      body-parser: 2.2.2
+      content-disposition: 1.0.1
+      content-type: 1.0.5
+      cookie: 0.7.2
+      cookie-signature: 1.2.2
+      debug: 4.4.3(supports-color@8.1.1)
+      depd: 2.0.0
+      encodeurl: 2.0.0
+      escape-html: 1.0.3
+      etag: 1.8.1
+      finalhandler: 2.1.1
+      fresh: 2.0.0
+      http-errors: 2.0.1
+      merge-descriptors: 2.0.0
+      mime-types: 3.0.2
+      on-finished: 2.4.1
+      once: 1.4.0
+      parseurl: 1.3.3
+      proxy-addr: 2.0.7
+      qs: 6.14.2
+      range-parser: 1.2.1
+      router: 2.2.0
+      send: 1.2.1
+      serve-static: 2.2.1
+      statuses: 2.0.2
+      type-is: 2.0.1
+      vary: 1.1.2
+    transitivePeerDependencies:
+      - supports-color
+
+  extract-zip@2.0.1:
+    dependencies:
+      debug: 4.4.3(supports-color@8.1.1)
+      get-stream: 5.2.0
+      yauzl: 2.10.0
+    optionalDependencies:
+      '@types/yauzl': 2.10.3
+    transitivePeerDependencies:
+      - supports-color
+
+  fast-deep-equal@3.1.3: {}
+
+  fast-fifo@1.3.2: {}
+
+  fast-uri@3.1.0: {}
+
+  fd-slicer@1.1.0:
+    dependencies:
+      pend: 1.2.0
 
   figures@3.2.0:
     dependencies:
@@ -747,6 +1622,17 @@ snapshots:
     dependencies:
       to-regex-range: 5.0.1
 
+  finalhandler@2.1.1:
+    dependencies:
+      debug: 4.4.3(supports-color@8.1.1)
+      encodeurl: 2.0.0
+      escape-html: 1.0.3
+      on-finished: 2.4.1
+      parseurl: 1.3.3
+      statuses: 2.0.2
+    transitivePeerDependencies:
+      - supports-color
+
   find-up@5.0.0:
     dependencies:
       locate-path: 6.0.0
@@ -754,12 +1640,48 @@ snapshots:
 
   flat@5.0.2: {}
 
+  forwarded@0.2.0: {}
+
+  fresh@2.0.0: {}
+
   fs.realpath@1.0.0: {}
 
   fsevents@2.3.3:
     optional: true
 
+  function-bind@1.1.2: {}
+
   get-caller-file@2.0.5: {}
+
+  get-intrinsic@1.3.0:
+    dependencies:
+      call-bind-apply-helpers: 1.0.2
+      es-define-property: 1.0.1
+      es-errors: 1.3.0
+      es-object-atoms: 1.1.1
+      function-bind: 1.1.2
+      get-proto: 1.0.1
+      gopd: 1.2.0
+      has-symbols: 1.1.0
+      hasown: 2.0.2
+      math-intrinsics: 1.1.0
+
+  get-proto@1.0.1:
+    dependencies:
+      dunder-proto: 1.0.1
+      es-object-atoms: 1.1.1
+
+  get-stream@5.2.0:
+    dependencies:
+      pump: 3.0.3
+
+  get-uri@6.0.5:
+    dependencies:
+      basic-ftp: 5.0.5
+      data-uri-to-buffer: 6.0.2
+      debug: 4.4.3(supports-color@8.1.1)
+    transitivePeerDependencies:
+      - supports-color
 
   glob-parent@5.1.2:
     dependencies:
@@ -773,11 +1695,43 @@ snapshots:
       minimatch: 5.1.6
       once: 1.4.0
 
+  gopd@1.2.0: {}
+
   has-flag@3.0.0: {}
 
   has-flag@4.0.0: {}
 
+  has-symbols@1.1.0: {}
+
+  hasown@2.0.2:
+    dependencies:
+      function-bind: 1.1.2
+
   he@1.2.0: {}
+
+  hono@4.11.9: {}
+
+  http-errors@2.0.1:
+    dependencies:
+      depd: 2.0.0
+      inherits: 2.0.4
+      setprototypeof: 1.2.0
+      statuses: 2.0.2
+      toidentifier: 1.0.1
+
+  http-proxy-agent@7.0.2:
+    dependencies:
+      agent-base: 7.1.4
+      debug: 4.4.3(supports-color@8.1.1)
+    transitivePeerDependencies:
+      - supports-color
+
+  https-proxy-agent@7.0.6:
+    dependencies:
+      agent-base: 7.1.4
+      debug: 4.4.3(supports-color@8.1.1)
+    transitivePeerDependencies:
+      - supports-color
 
   iconv-lite@0.7.2:
     dependencies:
@@ -814,6 +1768,10 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
+  ip-address@10.0.1: {}
+
+  ipaddr.js@1.9.1: {}
+
   is-binary-path@2.1.0:
     dependencies:
       binary-extensions: 2.3.0
@@ -832,11 +1790,21 @@ snapshots:
 
   is-plain-obj@2.1.0: {}
 
+  is-promise@4.0.0: {}
+
   is-unicode-supported@0.1.0: {}
+
+  isexe@2.0.0: {}
+
+  jose@6.1.3: {}
 
   js-yaml@4.1.1:
     dependencies:
       argparse: 2.0.1
+
+  json-schema-traverse@1.0.0: {}
+
+  json-schema-typed@8.0.2: {}
 
   locate-path@6.0.0:
     dependencies:
@@ -849,6 +1817,20 @@ snapshots:
       chalk: 4.1.2
       is-unicode-supported: 0.1.0
 
+  lru-cache@7.18.3: {}
+
+  math-intrinsics@1.1.0: {}
+
+  media-typer@1.1.0: {}
+
+  merge-descriptors@2.0.0: {}
+
+  mime-db@1.54.0: {}
+
+  mime-types@3.0.2:
+    dependencies:
+      mime-db: 1.54.0
+
   mimic-fn@2.1.0: {}
 
   minimatch@3.1.2:
@@ -858,6 +1840,8 @@ snapshots:
   minimatch@5.1.6:
     dependencies:
       brace-expansion: 2.0.2
+
+  mitt@3.0.1: {}
 
   mocha@10.8.2:
     dependencies:
@@ -885,6 +1869,10 @@ snapshots:
   ms@2.1.3: {}
 
   mute-stream@0.0.8: {}
+
+  negotiator@1.0.0: {}
+
+  netmask@2.0.2: {}
 
   node-easy-cert@1.3.3:
     dependencies:
@@ -916,6 +1904,14 @@ snapshots:
 
   normalize-path@3.0.0: {}
 
+  object-assign@4.1.1: {}
+
+  object-inspect@1.13.4: {}
+
+  on-finished@2.4.1:
+    dependencies:
+      ee-first: 1.1.1
+
   once@1.4.0:
     dependencies:
       wrappy: 1.0.2
@@ -944,9 +1940,37 @@ snapshots:
     dependencies:
       p-limit: 3.1.0
 
+  pac-proxy-agent@7.2.0:
+    dependencies:
+      '@tootallnate/quickjs-emscripten': 0.23.0
+      agent-base: 7.1.4
+      debug: 4.4.3(supports-color@8.1.1)
+      get-uri: 6.0.5
+      http-proxy-agent: 7.0.2
+      https-proxy-agent: 7.0.6
+      pac-resolver: 7.0.1
+      socks-proxy-agent: 8.0.5
+    transitivePeerDependencies:
+      - supports-color
+
+  pac-resolver@7.0.1:
+    dependencies:
+      degenerator: 5.0.1
+      netmask: 2.0.2
+
+  parseurl@1.3.3: {}
+
   path-exists@4.0.0: {}
 
+  path-key@3.1.1: {}
+
+  path-to-regexp@8.3.0: {}
+
+  pend@1.2.0: {}
+
   picomatch@2.3.1: {}
+
+  pkce-challenge@5.0.1: {}
 
   portfinder@1.0.38:
     dependencies:
@@ -955,11 +1979,68 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  progress@2.0.3: {}
+
+  proxy-addr@2.0.7:
+    dependencies:
+      forwarded: 0.2.0
+      ipaddr.js: 1.9.1
+
+  proxy-agent@6.5.0:
+    dependencies:
+      agent-base: 7.1.4
+      debug: 4.4.3(supports-color@8.1.1)
+      http-proxy-agent: 7.0.2
+      https-proxy-agent: 7.0.6
+      lru-cache: 7.18.3
+      pac-proxy-agent: 7.2.0
+      proxy-from-env: 1.1.0
+      socks-proxy-agent: 8.0.5
+    transitivePeerDependencies:
+      - supports-color
+
+  proxy-from-env@1.1.0: {}
+
   pstree.remy@1.1.8: {}
+
+  pump@3.0.3:
+    dependencies:
+      end-of-stream: 1.4.5
+      once: 1.4.0
+
+  puppeteer-core@24.37.2:
+    dependencies:
+      '@puppeteer/browsers': 2.12.0
+      chromium-bidi: 13.1.1(devtools-protocol@0.0.1566079)
+      debug: 4.4.3(supports-color@8.1.1)
+      devtools-protocol: 0.0.1566079
+      typed-query-selector: 2.12.0
+      webdriver-bidi-protocol: 0.4.0
+      ws: 8.19.0
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - bufferutil
+      - react-native-b4a
+      - supports-color
+      - utf-8-validate
+
+  qs@6.14.2:
+    dependencies:
+      side-channel: 1.1.0
 
   randombytes@2.1.0:
     dependencies:
       safe-buffer: 5.2.1
+
+  range-parser@1.2.1: {}
+
+  raw-body@3.0.2:
+    dependencies:
+      bytes: 3.1.2
+      http-errors: 2.0.1
+      iconv-lite: 0.7.2
+      unpipe: 1.0.0
 
   readable-stream@3.6.2:
     dependencies:
@@ -973,10 +2054,22 @@ snapshots:
 
   require-directory@2.1.1: {}
 
+  require-from-string@2.0.2: {}
+
   restore-cursor@3.1.0:
     dependencies:
       onetime: 5.1.2
       signal-exit: 3.0.7
+
+  router@2.2.0:
+    dependencies:
+      debug: 4.4.3(supports-color@8.1.1)
+      depd: 2.0.0
+      is-promise: 4.0.0
+      parseurl: 1.3.3
+      path-to-regexp: 8.3.0
+    transitivePeerDependencies:
+      - supports-color
 
   run-async@2.4.1: {}
 
@@ -992,15 +2085,107 @@ snapshots:
 
   semver@7.0.0: {}
 
+  semver@7.7.4: {}
+
+  send@1.2.1:
+    dependencies:
+      debug: 4.4.3(supports-color@8.1.1)
+      encodeurl: 2.0.0
+      escape-html: 1.0.3
+      etag: 1.8.1
+      fresh: 2.0.0
+      http-errors: 2.0.1
+      mime-types: 3.0.2
+      ms: 2.1.3
+      on-finished: 2.4.1
+      range-parser: 1.2.1
+      statuses: 2.0.2
+    transitivePeerDependencies:
+      - supports-color
+
   serialize-javascript@6.0.2:
     dependencies:
       randombytes: 2.1.0
+
+  serve-static@2.2.1:
+    dependencies:
+      encodeurl: 2.0.0
+      escape-html: 1.0.3
+      parseurl: 1.3.3
+      send: 1.2.1
+    transitivePeerDependencies:
+      - supports-color
+
+  setprototypeof@1.2.0: {}
+
+  shebang-command@2.0.0:
+    dependencies:
+      shebang-regex: 3.0.0
+
+  shebang-regex@3.0.0: {}
+
+  side-channel-list@1.0.0:
+    dependencies:
+      es-errors: 1.3.0
+      object-inspect: 1.13.4
+
+  side-channel-map@1.0.1:
+    dependencies:
+      call-bound: 1.0.4
+      es-errors: 1.3.0
+      get-intrinsic: 1.3.0
+      object-inspect: 1.13.4
+
+  side-channel-weakmap@1.0.2:
+    dependencies:
+      call-bound: 1.0.4
+      es-errors: 1.3.0
+      get-intrinsic: 1.3.0
+      object-inspect: 1.13.4
+      side-channel-map: 1.0.1
+
+  side-channel@1.1.0:
+    dependencies:
+      es-errors: 1.3.0
+      object-inspect: 1.13.4
+      side-channel-list: 1.0.0
+      side-channel-map: 1.0.1
+      side-channel-weakmap: 1.0.2
 
   signal-exit@3.0.7: {}
 
   simple-update-notifier@1.1.0:
     dependencies:
       semver: 7.0.0
+
+  smart-buffer@4.2.0: {}
+
+  socks-proxy-agent@8.0.5:
+    dependencies:
+      agent-base: 7.1.4
+      debug: 4.4.3(supports-color@8.1.1)
+      socks: 2.8.7
+    transitivePeerDependencies:
+      - supports-color
+
+  socks@2.8.7:
+    dependencies:
+      ip-address: 10.0.1
+      smart-buffer: 4.2.0
+
+  source-map@0.6.1:
+    optional: true
+
+  statuses@2.0.2: {}
+
+  streamx@2.23.0:
+    dependencies:
+      events-universal: 1.0.1
+      fast-fifo: 1.3.2
+      text-decoder: 1.2.3
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - react-native-b4a
 
   string-width@4.2.3:
     dependencies:
@@ -1030,11 +2215,40 @@ snapshots:
     dependencies:
       has-flag: 4.0.0
 
+  tar-fs@3.1.1:
+    dependencies:
+      pump: 3.0.3
+      tar-stream: 3.1.7
+    optionalDependencies:
+      bare-fs: 4.5.4
+      bare-path: 3.0.0
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - bare-buffer
+      - react-native-b4a
+
+  tar-stream@3.1.7:
+    dependencies:
+      b4a: 1.7.3
+      fast-fifo: 1.3.2
+      streamx: 2.23.0
+    transitivePeerDependencies:
+      - bare-abort-controller
+      - react-native-b4a
+
+  text-decoder@1.2.3:
+    dependencies:
+      b4a: 1.7.3
+    transitivePeerDependencies:
+      - react-native-b4a
+
   through@2.3.8: {}
 
   to-regex-range@5.0.1:
     dependencies:
       is-number: 7.0.0
+
+  toidentifier@1.0.1: {}
 
   touch@3.1.1: {}
 
@@ -1042,15 +2256,33 @@ snapshots:
 
   type-fest@0.21.3: {}
 
+  type-is@2.0.1:
+    dependencies:
+      content-type: 1.0.5
+      media-typer: 1.1.0
+      mime-types: 3.0.2
+
+  typed-query-selector@2.12.0: {}
+
   undefsafe@2.0.5: {}
 
   undici-types@5.26.5: {}
 
+  unpipe@1.0.0: {}
+
   util-deprecate@1.0.2: {}
+
+  vary@1.1.2: {}
 
   wcwidth@1.0.1:
     dependencies:
       defaults: 1.0.4
+
+  webdriver-bidi-protocol@0.4.0: {}
+
+  which@2.0.2:
+    dependencies:
+      isexe: 2.0.0
 
   workerpool@6.5.1: {}
 
@@ -1074,6 +2306,8 @@ snapshots:
 
   yargs-parser@20.2.9: {}
 
+  yargs-parser@21.1.1: {}
+
   yargs-unparser@2.0.0:
     dependencies:
       camelcase: 6.3.0
@@ -1091,4 +2325,27 @@ snapshots:
       y18n: 5.0.8
       yargs-parser: 20.2.9
 
+  yargs@17.7.2:
+    dependencies:
+      cliui: 8.0.1
+      escalade: 3.2.0
+      get-caller-file: 2.0.5
+      require-directory: 2.1.1
+      string-width: 4.2.3
+      y18n: 5.0.8
+      yargs-parser: 21.1.1
+
+  yauzl@2.10.0:
+    dependencies:
+      buffer-crc32: 0.2.13
+      fd-slicer: 1.1.0
+
   yocto-queue@0.1.0: {}
+
+  zod-to-json-schema@3.25.1(zod@4.3.6):
+    dependencies:
+      zod: 4.3.6
+
+  zod@3.25.76: {}
+
+  zod@4.3.6: {}
