@@ -62,7 +62,8 @@ export function useProxyStore() {
     ws.addEventListener('message', (ev) => {
       try {
         const data: ProxyRecord = JSON.parse(ev.data)
-        setRecords((prev) => [...prev, data])
+        // Prepend new records to show newest first
+        setRecords((prev) => [data, ...prev])
       } catch {}
     })
 

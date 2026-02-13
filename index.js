@@ -458,7 +458,8 @@ const proxyServer = http.createServer((req, res) => {
                 res.end()
             } else {
                 res.setHeader('Content-Type', 'application/json')
-                res.write(JSON.stringify(proxyRecordArr))
+                // Sort logs by time - newest to oldest (reverse chronological order)
+                res.write(JSON.stringify([...proxyRecordArr].reverse()))
                 res.end()
             }
         } else if (req.url.startsWith('/api/mocks')) {

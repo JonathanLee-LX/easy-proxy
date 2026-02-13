@@ -94,7 +94,7 @@ function App() {
                   onChange={(e) => setAutoScroll(e.target.checked)}
                   className="rounded"
                 />
-                自动滚动到底部
+                自动滚动到顶部
               </label>
             </div>
           </TabsContent>
