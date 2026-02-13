@@ -1,6 +1,6 @@
 {
   "name": "easy-dev-proxy",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -8,7 +8,10 @@
     "test": "mocha tests",
     "prepublish": "npm run test",
     "start:open": "node index.js --open",
-    "mcp": "node mcp-server.js"
+    "mcp": "node mcp-server.js",
+    "build:web": "cd web && npm run build",
+    "dev:web": "cd web && npm run dev",
+    "postinstall": "cd web && npm install && npm run build"
   },
   "bin": {
     "ep": "bin/index"

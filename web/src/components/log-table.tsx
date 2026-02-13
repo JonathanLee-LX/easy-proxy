@@ -1,0 +1,109 @@
+import { useRef, useEffect } from 'react'
+import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import type { ProxyRecord } from '@/types'
+
+interface LogTableProps {
+  records: ProxyRecord[]
+  selectedRecordId: number | null
+  onSelect: (id: number) => void
+  autoScroll: boolean
+}
+
+function getMethodColor(method: string) {
+  switch (method.toUpperCase()) {
+    case 'GET':
+      return 'text-blue-600'
+    case 'POST':
+      return 'text-green-600'
+    case 'PUT':
+      return 'text-amber-600'
+    case 'DELETE':
+      return 'text-red-600'
+    case 'PATCH':
+      return 'text-purple-600'
+    default:
+      return 'text-muted-foreground'
+  }
+}
+
+export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: LogTableProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const lastCountRef = useRef(records.length)
+
+  useEffect(() => {
+    if (autoScroll && records.length > lastCountRef.current && scrollRef.current) {
+      const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]')
+      if (viewport) {
+        requestAnimationFrame(() => {
+          viewport.scrollTop = viewport.scrollHeight
+        })
+      }
+    }
+    lastCountRef.current = records.length
+  }, [records.length, autoScroll])
+
+  return (
+    <ScrollArea className="h-[calc(100vh-12rem)]" ref={scrollRef}>
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-muted/50 hover:bg-muted/50">
+            <TableHead className="w-16 text-xs">方法</TableHead>
+            <TableHead className="text-xs">源地址</TableHead>
+            <TableHead className="text-xs">目标地址</TableHead>
+            <TableHead className="w-28 text-xs">时间</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {records.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} className="text-center text-muted-foreground py-16">
+                暂无请求记录
+              </TableCell>
+            </TableRow>
+          ) : (
+            records.map((record, index) => (
+              <TableRow
+                key={record.id ?? index}
+                className={`cursor-pointer transition-colors text-xs ${
+                  selectedRecordId === record.id
+                    ? 'bg-primary/5 hover:bg-primary/10'
+                    : 'hover:bg-muted/50'
+                }`}
+                onClick={() => record.id != null && onSelect(record.id)}
+              >
+                <TableCell className="py-1.5">
+                  <Badge variant="outline" className={`text-[10px] font-mono px-1.5 py-0 ${getMethodColor(record.method)}`}>
+                    {record.method}
+                  </Badge>
+                </TableCell>
+                <TableCell className="py-1.5 font-mono truncate max-w-[300px]" title={record.source}>
+                  {record.source}
+                </TableCell>
+                <TableCell className="py-1.5 font-mono truncate max-w-[300px]" title={record.target}>
+                  {record.mock && (
+                    <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 mr-1 text-orange-500 border-orange-300">
+                      MOCK
+                    </Badge>
+                  )}
+                  {record.target}
+                </TableCell>
+                <TableCell className="py-1.5 text-muted-foreground font-mono">
+                  {record.time}
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </ScrollArea>
+  )
+}

@@ -30,7 +30,124 @@ let ruleMap = {}
 let currentConfig = null // { path, format } 当前生效的配置
 
 const MAX_RECORD_SIZE = process.env.MAX_RECORD_SIZE ? parseInt(process.env.MAX_RECORD_SIZE) : 10000
+const MAX_DETAIL_SIZE = 200
+const MAX_BODY_SIZE = 100 * 1024 // 100KB
 const proxyRecordArr = []
+let recordIdSeq = 0
+const proxyRecordDetailMap = new Map()
+
+// ===== Mock 功能 =====
+const MOCK_FILE = path.join(epDir, 'mocks.json')
+let mockRules = [] // [{ id, urlPattern, method, statusCode, headers, body, enabled, name }]
+let mockIdSeq = 1
+
+function loadMockRules() {
+    try {
+        if (fs.existsSync(MOCK_FILE)) {
+            const data = JSON.parse(fs.readFileSync(MOCK_FILE, 'utf8'))
+            mockRules = Array.isArray(data.rules) ? data.rules : []
+            mockIdSeq = (data.nextId || Math.max(0, ...mockRules.map(r => r.id || 0))) + 1
+        }
+    } catch (err) {
+        console.error('加载 mock 规则失败:', err.message)
+        mockRules = []
+    }
+}
+
+function saveMockRules() {
+    try {
+        fs.writeFileSync(MOCK_FILE, JSON.stringify({ nextId: mockIdSeq, rules: mockRules }, null, 2), 'utf8')
+    } catch (err) {
+        console.error('保存 mock 规则失败:', err.message)
+    }
+}
+
+/**
+ * 检查请求是否匹配 mock 规则，返回匹配的规则或 null
+ * @param {string} url - 完整请求 URL
+ * @param {string} method - HTTP 方法
+ * @returns {object|null}
+ */
+function matchMockRule(url, method) {
+    return mockRules.find(rule => {
+        if (!rule.enabled) return false
+        if (rule.method && rule.method !== '*' && rule.method.toUpperCase() !== method.toUpperCase()) return false
+        try {
+            return new RegExp(rule.urlPattern).test(url)
+        } catch {
+            return url.includes(rule.urlPattern)
+        }
+    }) || null
+}
+
+/**
+ * 发送 mock 响应
+ * @param {http.IncomingMessage} req
+ * @param {http.ServerResponse} res
+ * @param {object} rule - mock 规则
+ * @param {object} logInfo - 日志信息 { method, source, target }
+ */
+function sendMockResponse(req, res, rule, logInfo) {
+    const statusCode = rule.statusCode || 200
+    // X-Mock-Rule 值可能含非 ASCII 字符（如中文），需要 encodeURI
+    const mockRuleName = rule.name || rule.id.toString()
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-Mock-Rule': encodeURIComponent(mockRuleName),
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': '*',
+        'Access-Control-Allow-Headers': '*',
+        ...rule.headers
+    }
+
+    // 排空请求体（避免 keep-alive 连接残留数据），同时立即发送响应
+    req.on('error', () => {})
+    req.resume()
+    try {
+        res.writeHead(statusCode, headers)
+        res.end(rule.body || '')
+    } catch (err) {
+        console.error('Mock 响应发送失败:', err.message)
+        try {
+            if (!res.headersSent) res.writeHead(statusCode)
+            res.end(rule.body || '')
+        } catch (_) {}
+    }
+
+    // 记录日志
+    const recordId = recordIdSeq++
+    const logData = {
+        id: recordId,
+        method: logInfo.method,
+        source: logInfo.source,
+        target: `[MOCK: ${rule.name || rule.urlPattern}]`,
+        time: new Date().toLocaleTimeString(),
+        mock: true
+    }
+    try {
+        localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
+    } catch (_) {}
+    proxyRecordArr.push(logData)
+    if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+        const removed = proxyRecordArr.shift()
+        if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+    }
+    const detail = {
+        requestHeaders: req.headers || {},
+        requestBody: '',
+        responseHeaders: headers,
+        responseBody: rule.body || '',
+        statusCode,
+        statusMessage: 'OK (Mock)'
+    }
+    proxyRecordDetailMap.set(recordId, detail)
+    if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
+        const firstKey = proxyRecordDetailMap.keys().next().value
+        proxyRecordDetailMap.delete(firstKey)
+    }
+}
+
+loadMockRules()
 
 /**
  * 加载配置并启动文件监听
@@ -96,12 +213,11 @@ const proxyServer = http.createServer((req, res) => {
 
     const serverPort = proxyServer.address().port
     if ((hostname === '127.0.0.1' || hostname === 'localhost')  && parseInt(port) === serverPort) {
-        if(req.url === '/') {
-            // request for proxy server
-            res.writeHead(200)
-            res.write(fs.readFileSync(path.resolve(__dirname, './index.html'), 'utf8'))
-            res.end()
-        } else if(req.url.startsWith('/api/rules')) {
+        // Serve React build or fallback to index.html
+        const webDistDir = path.resolve(__dirname, './web/dist')
+        const hasReactBuild = fs.existsSync(path.resolve(webDistDir, 'index.html'))
+
+        if(req.url.startsWith('/api/rules')) {
             const method = req.method.toLocaleLowerCase()
             if(method === 'put') {
                 if (!currentConfig || currentConfig.format === 'js') {
@@ -142,23 +258,230 @@ const proxyServer = http.createServer((req, res) => {
                 res.end()
             }
         } else if (req.url.startsWith('/api/logs')) {
+            const match = req.url.match(/^\/api\/logs\/(\d+)$/)
+            if (match) {
+                const id = parseInt(match[1], 10)
+                const detail = proxyRecordDetailMap.get(id)
+                res.setHeader('Content-Type', 'application/json')
+                if (detail) {
+                    res.write(JSON.stringify(detail))
+                } else {
+                    res.statusCode = 404
+                    res.write(JSON.stringify({ error: 'Not found' }))
+                }
+                res.end()
+            } else {
+                res.setHeader('Content-Type', 'application/json')
+                res.write(JSON.stringify(proxyRecordArr))
+                res.end()
+            }
+        } else if (req.url.startsWith('/api/mocks')) {
             res.setHeader('Content-Type', 'application/json')
-            res.write(JSON.stringify(proxyRecordArr))
+            const method = req.method.toUpperCase()
+
+            // DELETE /api/mocks/:id
+            const deleteMatch = req.url.match(/^\/api\/mocks\/(\d+)$/)
+            if (method === 'DELETE' && deleteMatch) {
+                const id = parseInt(deleteMatch[1], 10)
+                const idx = mockRules.findIndex(r => r.id === id)
+                if (idx !== -1) {
+                    mockRules.splice(idx, 1)
+                    saveMockRules()
+                    res.write(JSON.stringify({ status: 'success' }))
+                } else {
+                    res.statusCode = 404
+                    res.write(JSON.stringify({ error: 'Not found' }))
+                }
+                res.end()
+                return
+            }
+
+            // PUT /api/mocks/:id - 更新规则
+            const putMatch = req.url.match(/^\/api\/mocks\/(\d+)$/)
+            if (method === 'PUT' && putMatch) {
+                const id = parseInt(putMatch[1], 10)
+                let body = ''
+                req.on('data', chunk => { body += chunk })
+                req.on('end', () => {
+                    try {
+                        const data = JSON.parse(body)
+                        const idx = mockRules.findIndex(r => r.id === id)
+                        if (idx === -1) {
+                            res.statusCode = 404
+                            res.write(JSON.stringify({ error: 'Not found' }))
+                        } else {
+                            mockRules[idx] = { ...mockRules[idx], ...data, id }
+                            saveMockRules()
+                            res.write(JSON.stringify({ status: 'success', rule: mockRules[idx] }))
+                        }
+                    } catch (err) {
+                        res.statusCode = 400
+                        res.write(JSON.stringify({ error: err.message }))
+                    }
+                    res.end()
+                })
+                return
+            }
+
+            // POST /api/mocks - 创建规则
+            if (method === 'POST') {
+                let body = ''
+                req.on('data', chunk => { body += chunk })
+                req.on('end', () => {
+                    try {
+                        const data = JSON.parse(body)
+                        const rule = {
+                            id: mockIdSeq++,
+                            name: data.name || '',
+                            urlPattern: data.urlPattern || '',
+                            method: data.method || '*',
+                            statusCode: data.statusCode || 200,
+                            headers: data.headers || {},
+                            body: data.body || '',
+                            enabled: data.enabled !== false
+                        }
+                        mockRules.push(rule)
+                        saveMockRules()
+                        res.write(JSON.stringify({ status: 'success', rule }))
+                    } catch (err) {
+                        res.statusCode = 400
+                        res.write(JSON.stringify({ error: err.message }))
+                    }
+                    res.end()
+                })
+                return
+            }
+
+            // GET /api/mocks - 列出规则
+            res.write(JSON.stringify(mockRules))
             res.end()
+        } else if (hasReactBuild) {
+            // Serve static files from React build
+            let filePath = req.url === '/' ? '/index.html' : req.url
+            // Remove query string
+            filePath = filePath.split('?')[0]
+            const fullPath = path.resolve(webDistDir, '.' + filePath)
+            // Security: ensure the resolved path is within webDistDir
+            if (!fullPath.startsWith(webDistDir)) {
+                res.writeHead(403)
+                res.end()
+                return
+            }
+            if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+                const ext = path.extname(fullPath).toLowerCase()
+                const mimeTypes = {
+                    '.html': 'text/html',
+                    '.js': 'application/javascript',
+                    '.css': 'text/css',
+                    '.json': 'application/json',
+                    '.png': 'image/png',
+                    '.jpg': 'image/jpeg',
+                    '.svg': 'image/svg+xml',
+                    '.ico': 'image/x-icon',
+                    '.woff': 'font/woff',
+                    '.woff2': 'font/woff2',
+                }
+                res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream')
+                res.writeHead(200)
+                fs.createReadStream(fullPath).pipe(res)
+            } else {
+                // SPA fallback: serve index.html for non-file routes
+                res.setHeader('Content-Type', 'text/html')
+                res.writeHead(200)
+                res.write(fs.readFileSync(path.resolve(webDistDir, 'index.html'), 'utf8'))
+                res.end()
+            }
         } else {
-            res.writeHead(404)
-            res.end()
+            // Fallback to legacy index.html
+            if (req.url === '/' || !req.url.startsWith('/api')) {
+                const legacyHtml = path.resolve(__dirname, './index.html')
+                if (fs.existsSync(legacyHtml)) {
+                    res.setHeader('Content-Type', 'text/html')
+                    res.writeHead(200)
+                    res.write(fs.readFileSync(legacyHtml, 'utf8'))
+                    res.end()
+                } else {
+                    res.writeHead(404)
+                    res.end()
+                }
+            } else {
+                res.writeHead(404)
+                res.end()
+            }
         }
     } else {
         // proxy http request over http
-        const url = new URL(req.url, 'http://' + req.headers.host)
-        const proxyReq = http.request(url, (proxyRes) => {
-            res.writeHead(proxyRes.statusCode, proxyRes.headers)
+        const source = req.url
 
-            proxyRes.pipe(res)
+        // 检查 mock 规则
+        const mockRule = matchMockRule(source, req.method)
+        if (mockRule) {
+            return sendMockResponse(req, res, mockRule, { method: req.method, source, target: source })
+        }
+
+        const target = resolveTargetUrl(source, ruleMap) || source
+        const url = new URL(target.startsWith('http') ? target : req.url, 'http://' + req.headers.host)
+        const reqChunks = []
+        req.on('data', chunk => reqChunks.push(chunk))
+        req.on('end', () => {
+            const reqBody = Buffer.concat(reqChunks)
+            const proxyReq = http.request(url, {
+                method: req.method,
+                headers: req.headers
+            }, (proxyRes) => {
+                const resChunks = []
+                res.writeHead(proxyRes.statusCode, proxyRes.headers)
+                proxyRes.on('data', chunk => {
+                    resChunks.push(chunk)
+                    res.write(chunk)
+                })
+                proxyRes.on('end', () => {
+                    res.end()
+                    const resBody = Buffer.concat(resChunks)
+                    const recordId = recordIdSeq++
+                    const logData = {
+                        id: recordId,
+                        method: req.method,
+                        source,
+                        target: url.href,
+                        time: new Date().toLocaleTimeString()
+                    }
+                    localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
+                    proxyRecordArr.push(logData)
+                    if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+                        const removed = proxyRecordArr.shift()
+                        if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+                    }
+                    const safeStr = (buf, max) => {
+                        if (buf.length === 0) return ''
+                        if (buf.length > max) return `(truncated, ${buf.length} bytes)\n` + buf.slice(0, max).toString('utf8')
+                        try { return buf.toString('utf8') } catch { return '(binary)' }
+                    }
+                    const detail = {
+                        requestHeaders: req.headers,
+                        requestBody: safeStr(reqBody, MAX_BODY_SIZE),
+                        responseHeaders: proxyRes.headers,
+                        responseBody: safeStr(resBody, MAX_BODY_SIZE),
+                        statusCode: proxyRes.statusCode,
+                        statusMessage: proxyRes.statusMessage
+                    }
+                    proxyRecordDetailMap.set(recordId, detail)
+                    if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
+                        const firstKey = proxyRecordDetailMap.keys().next().value
+                        proxyRecordDetailMap.delete(firstKey)
+                    }
+                })
+            })
+            proxyReq.on('error', (err) => {
+                console.error('HTTP proxy error:', err.message)
+                if (!res.headersSent) {
+                    res.writeHead(502)
+                }
+                res.end()
+            })
+            proxyReq.write(reqBody)
+            proxyReq.end()
         })
-        copyHeaders(req, proxyReq)
-        req.pipe(proxyReq)
     }
 })
 
@@ -275,6 +598,12 @@ proxyServer.on('connect', async (req, socket, header) => {
                 const server = https.createServer({ cert: crt, key }, (req, res) => {
                     const source = 'https://' + req.headers.host + req.url
 
+                    // 检查 mock 规则
+                    const mockRule = matchMockRule(source, req.method)
+                    if (mockRule) {
+                        return sendMockResponse(req, res, mockRule, { method: req.method, source, target: source })
+                    }
+
                     // resolve targetUrl by against ruleMap
                     // 1. if targetUrl is ip address 127.0.0.1. Reuse current protocol
                     // 2. If targetURL is start with protocol url http://127.0.0.1
@@ -284,48 +613,72 @@ proxyServer.on('connect', async (req, socket, header) => {
                     }
 
                     const request = target.startsWith('https') ? https.request : http.request;
+                    const reqChunks = []
 
-                    const proxyReq = request(target, {
-                        method: req.method,
-                        rejectUnauthorized: false,
-                        headers: req.headers
-                    }, (proxyRes) => {
-                        // run beforeSendResponse hook
-                        // plugins.forEach(plugin => plugin.beforeSendResponse(res))
-                        let data
+                    req.on('data', chunk => reqChunks.push(chunk))
+                    req.on('end', () => {
+                        const reqBody = Buffer.concat(reqChunks)
+                        const proxyReq = request(target, {
+                            method: req.method,
+                            rejectUnauthorized: false,
+                            headers: req.headers
+                        }, (proxyRes) => {
+                            const resChunks = []
+                            res.writeHead(proxyRes.statusCode, proxyRes.statusMessage, proxyRes.headers)
 
-                        proxyRes.on('data', chunk => data += chunk)
-
-                        proxyRes.on('end', () => {
-                            const logData = {
-                                method: req.method,
-                                source,
-                                target,
-                                time: new Date().toLocaleTimeString()
-                            }
-                            localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
-                            proxyRecordArr.push(logData)
-                            if (proxyRecordArr.length > MAX_RECORD_SIZE) {
-                                proxyRecordArr.shift()
-                            }
-                            console.table(logData)
+                            proxyRes.on('data', chunk => {
+                                resChunks.push(chunk)
+                                res.write(chunk)
+                            })
+                            proxyRes.on('end', () => {
+                                res.end()
+                                const resBody = Buffer.concat(resChunks)
+                                const recordId = recordIdSeq++
+                                const logData = {
+                                    id: recordId,
+                                    method: req.method,
+                                    source,
+                                    target,
+                                    time: new Date().toLocaleTimeString()
+                                }
+                                localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
+                                proxyRecordArr.push(logData)
+                                if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+                                    const removed = proxyRecordArr.shift()
+                                    if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+                                }
+                                const safeStr = (buf, max) => {
+                                    if (buf.length === 0) return ''
+                                    if (buf.length > max) return `(truncated, ${buf.length} bytes)\n` + buf.slice(0, max).toString('utf8')
+                                    try { return buf.toString('utf8') } catch { return '(binary)' }
+                                }
+                                const detail = {
+                                    requestHeaders: req.headers,
+                                    requestBody: safeStr(reqBody, MAX_BODY_SIZE),
+                                    responseHeaders: proxyRes.headers,
+                                    responseBody: safeStr(resBody, MAX_BODY_SIZE),
+                                    statusCode: proxyRes.statusCode,
+                                    statusMessage: proxyRes.statusMessage
+                                }
+                                proxyRecordDetailMap.set(recordId, detail)
+                                if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
+                                    const ids = Array.from(proxyRecordDetailMap.keys()).sort((a, b) => a - b)
+                                    proxyRecordDetailMap.delete(ids[0])
+                                }
+                                console.table(logData)
+                            })
                         })
-                        res.writeHead(proxyRes.statusCode, proxyRes.statusMessage, proxyRes.headers)
-                        proxyRes.pipe(res)
-                    })
 
-                    req.pipe(proxyReq)
+                        proxyReq.write(reqBody)
+                        proxyReq.end()
 
-                    proxyReq.on('error', (error) => {
-                        console.error('[error debug]', originHost + req.url, error)
-                        res.statusCode = 500
-
-                        // run beforeSendResponse hook
-                        plugins.forEach(plugin => plugin.beforeSendResponse(res))
-
-                        res.write(JSON.stringify(error))
-
-                        res.end()
+                        proxyReq.on('error', (error) => {
+                            console.error('[error debug]', originHost + req.url, error)
+                            res.statusCode = 500
+                            plugins.forEach(plugin => plugin.beforeSendResponse(res))
+                            res.write(JSON.stringify(error))
+                            res.end()
+                        })
                     })
                 })
 
