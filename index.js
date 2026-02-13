@@ -1,17 +1,30 @@
 const http = require('http')
 const https = require('https')
 const { connect } = require('net')
-const { crtMgr } = require('./cert')
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
+
+// 必须在加载 cert 模块前创建证书目录（node-easy-cert 在加载时会检查）
+const epDir = path.resolve(os.homedir(), '.ep')
+const certDir = path.resolve(epDir, 'ca')
+if (!fs.existsSync(certDir)) {
+    fs.mkdirSync(certDir, { recursive: true })
+}
+
+const { crtMgr, ensureRootCA } = require('./cert')
 const { WebSocket, WebSocketServer } = require('ws')
 const { copyHeaders, resolveTargetUrl, getFreePort, loadConfig, ENV_FILE } = require('./helpers')
 const chokidar = require('chokidar')
-const { statSync, readFileSync, mkdirSync, writeFileSync } = require('fs')
 const chalk = require('chalk')
-const { resolve } = require('path')
+const { execSync } = require('child_process')
 const _debug = require('debug')
 
 const proxyDebug = _debug('proxy')
 const log = _debug('log')
+
+// 是否启用启动后自动打开浏览器并设置代理（--open 或 EP_OPEN=1）
+const AUTO_OPEN = process.argv.includes('--open') || process.env.EP_OPEN === '1'
 
 let ruleMap = {
 };
@@ -20,29 +33,37 @@ const MAX_RECORD_SIZE = process.env.MAX_RECORD_SIZE ? parseInt(process.env.MAX_R
 const proxyRecordArr = []
 
 /**
- * @param {string} path
+ * @param {string} configPath 配置文件路径
  */
-function ensureConfigFile(path) {
+function ensureConfigFile(configPath) {
+    const configDir = path.dirname(configPath)
+
+    if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true })
+        log('create config directory:', configDir)
+    }
+
+    if (!fs.existsSync(configPath)) {
+        fs.writeFileSync(configPath, '', 'utf8')
+        log('create config file:', configPath)
+    }
+
     try {
-        const stat = statSync(path)
+        const stat = fs.statSync(configPath)
         if (stat.isFile()) {
-            ruleMap = loadConfig(path)
-            const watcher = chokidar.watch(path)
+            ruleMap = loadConfig(configPath)
+            const watcher = chokidar.watch(configPath)
             logRuleMap()
 
-            watcher.on('change', (path, stats) => {
+            watcher.on('change', (changedPath, stats) => {
                 log(chalk.green('config file changed.'))
-                ruleMap = loadConfig(path)
+                ruleMap = loadConfig(changedPath)
                 logRuleMap()
             })
         }
     } catch (error) {
-        if(error) console.error(error)
-        mkdirSync(path, { recursive: true })
-        log('create envs directory.')
-        ensureConfigFile(path)
+        if (error) console.error(error)
     }
-
 }
 
 ensureConfigFile(ENV_FILE)
@@ -69,7 +90,7 @@ const proxyServer = http.createServer((req, res) => {
         if(req.url === '/') {
             // request for proxy server
             res.writeHead(200)
-            res.write(readFileSync(resolve(__dirname, './index.html'), 'utf8'))
+            res.write(fs.readFileSync(path.resolve(__dirname, './index.html'), 'utf8'))
             res.end()
         } else if(req.url.startsWith('/api/rules')) {
             const method = req.method.toLocaleLowerCase()
@@ -82,7 +103,7 @@ const proxyServer = http.createServer((req, res) => {
                     text += chunk
                 })
                 req.on('end', () => {
-                    writeFileSync(ENV_FILE, text)
+                    fs.writeFileSync(ENV_FILE, text)
                     res.write(JSON.stringify({ status: 'success' }))
                     res.end()
                 })
@@ -95,7 +116,7 @@ const proxyServer = http.createServer((req, res) => {
             } else {
                 // send default rules config
                 res.setHeader('Content-Type', 'text')
-                res.write(readFileSync(ENV_FILE))
+                res.write(fs.readFileSync(ENV_FILE))
                 res.end()
             }
         } else if (req.url.startsWith('/api/logs')) {
@@ -129,10 +150,70 @@ localWSServer.addListener('connection', (client, req) => {
     // })
 })
 
+/**
+ * 使用代理启动全新的浏览器实例（独立用户数据目录，不复用已运行的浏览器）
+ * @returns {boolean} 是否成功启动
+ */
+function openBrowserWithProxy(url, proxyServer) {
+    const platform = os.platform()
+    const userDataDir = path.join(epDir, 'chrome-proxy')
+    if (!fs.existsSync(userDataDir)) {
+        fs.mkdirSync(userDataDir, { recursive: true })
+    }
+    const browsers = platform === 'darwin'
+        ? ['Google Chrome', 'Microsoft Edge', 'Chromium']
+        : platform === 'win32'
+            ? ['chrome', 'msedge', 'chromium']
+            : ['google-chrome', 'chromium', 'chromium-browser']
+    const proxyArgs = `--user-data-dir="${userDataDir}" --proxy-server=${proxyServer}`
+    for (const app of browsers) {
+        try {
+            if (platform === 'darwin') {
+                execSync(`open -a "${app}" --args ${proxyArgs} "${url}"`, { stdio: 'ignore' })
+                return true
+            } else if (platform === 'win32') {
+                execSync(`start "" "${app}" ${proxyArgs} "${url}"`, { stdio: 'ignore' })
+                return true
+            } else {
+                execSync(`${app} ${proxyArgs} "${url}"`, { stdio: 'ignore' })
+                return true
+            }
+        } catch (err) {
+            continue
+        }
+    }
+    try {
+        if (platform === 'darwin') {
+            execSync(`open "${url}"`, { stdio: 'ignore' })
+        } else if (platform === 'win32') {
+            execSync(`start "" "${url}"`, { stdio: 'ignore' })
+        } else {
+            execSync(`xdg-open "${url}"`, { stdio: 'ignore' })
+        }
+        console.log(chalk.yellow('未找到 Chrome/Edge，已用默认浏览器打开，请手动设置代理:', proxyServer))
+        return true
+    } catch (err) {
+        console.error(chalk.red('浏览器并未启动:'), err.message)
+        return false
+    }
+}
 
-getFreePort().then(port => {
-    proxyServer.listen(port, () => proxyDebug('proxy-server start on ' + chalk.green(`${'http://127.0.0.1:' + port}`)))
-})
+;(async () => {
+    await ensureRootCA()
+    const port = await getFreePort()
+    proxyServer.listen(port, () => {
+        proxyDebug('proxy-server start on ' + chalk.green(`http://127.0.0.1:${port}`))
+        if (AUTO_OPEN) {
+            const proxyUrl = `http://127.0.0.1:${port}`
+            const proxyServer = `127.0.0.1:${port}`
+            if (openBrowserWithProxy(proxyUrl, proxyServer)) {
+                console.log(chalk.green('已启动浏览器（代理:'), proxyServer + chalk.green(')'))
+            } else {
+                console.log(chalk.yellow('浏览器并未启动，请手动打开'), chalk.cyan(proxyUrl), chalk.yellow('并设置代理'), proxyServer)
+            }
+        }
+    })
+})()
 
 // proxy https request over http
 proxyServer.on('connect', async (req, socket, header) => {

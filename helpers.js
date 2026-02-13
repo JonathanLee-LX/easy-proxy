@@ -89,7 +89,7 @@ function loadConfig(path) {
     }
 }
 
-const ENV_FILE = path.resolve(os.homedir(), './.jlx/.eprc')
+const ENV_FILE = path.resolve(os.homedir(), '.ep', '.eprc')
 
 
 // exports.copyHeaders = copyHeaders
