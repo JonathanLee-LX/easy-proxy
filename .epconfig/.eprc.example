@@ -1,0 +1,7 @@
+// 复制为 .eprc 使用，支持三种格式：
+// 1. hosts: IP domain1 domain2
+// 2. URL: https://localhost:8000 rule1 rule2
+// 3. 规则: rule target
+https://example.com 127.0.0.1:8080
+https://api.example.com http://127.0.0.1:8081
+https://localhost:8000 solution.wps.cn/console solution.wps.cn/dev-server

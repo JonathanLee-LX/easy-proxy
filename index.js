@@ -14,7 +14,7 @@ if (!fs.existsSync(certDir)) {
 
 const { crtMgr, ensureRootCA } = require('./cert')
 const { WebSocket, WebSocketServer } = require('ws')
-const { copyHeaders, resolveTargetUrl, getFreePort, loadConfig, ENV_FILE } = require('./helpers')
+const { copyHeaders, resolveTargetUrl, getFreePort, loadConfigFromFile, resolveConfigPath, ruleMapToEprcText, DEFAULT_CONFIG_PATH } = require('./helpers')
 const chokidar = require('chokidar')
 const chalk = require('chalk')
 const { execSync } = require('child_process')
@@ -26,47 +26,56 @@ const log = _debug('log')
 // 是否启用启动后自动打开浏览器并设置代理（--open 或 EP_OPEN=1）
 const AUTO_OPEN = process.argv.includes('--open') || process.env.EP_OPEN === '1'
 
-let ruleMap = {
-};
+let ruleMap = {}
+let currentConfig = null // { path, format } 当前生效的配置
 
 const MAX_RECORD_SIZE = process.env.MAX_RECORD_SIZE ? parseInt(process.env.MAX_RECORD_SIZE) : 10000
 const proxyRecordArr = []
 
 /**
- * @param {string} configPath 配置文件路径
+ * 加载配置并启动文件监听
  */
-function ensureConfigFile(configPath) {
-    const configDir = path.dirname(configPath)
+function loadAndWatchConfig(configPath, format) {
+    ruleMap = loadConfigFromFile(configPath, format)
+    currentConfig = { path: configPath, format }
+    logRuleMap()
 
+    if (format !== 'js') {
+        const watcher = chokidar.watch(configPath)
+        watcher.on('change', (changedPath) => {
+            log(chalk.green('config file changed.'))
+            ruleMap = loadConfigFromFile(changedPath, format)
+            logRuleMap()
+        })
+    }
+}
+
+/**
+ * 解析并加载配置，优先使用当前工作目录的 .eprc / ep.config.json / ep.config.js
+ */
+function ensureConfigFile() {
+    const resolved = resolveConfigPath()
+    if (resolved) {
+        loadAndWatchConfig(resolved.path, resolved.format)
+        proxyDebug('使用项目配置:', resolved.path)
+        return
+    }
+
+    const configPath = DEFAULT_CONFIG_PATH
+    const configDir = path.dirname(configPath)
     if (!fs.existsSync(configDir)) {
         fs.mkdirSync(configDir, { recursive: true })
         log('create config directory:', configDir)
     }
-
     if (!fs.existsSync(configPath)) {
         fs.writeFileSync(configPath, '', 'utf8')
         log('create config file:', configPath)
     }
-
-    try {
-        const stat = fs.statSync(configPath)
-        if (stat.isFile()) {
-            ruleMap = loadConfig(configPath)
-            const watcher = chokidar.watch(configPath)
-            logRuleMap()
-
-            watcher.on('change', (changedPath, stats) => {
-                log(chalk.green('config file changed.'))
-                ruleMap = loadConfig(changedPath)
-                logRuleMap()
-            })
-        }
-    } catch (error) {
-        if (error) console.error(error)
-    }
+    loadAndWatchConfig(configPath, 'eprc')
+    proxyDebug('使用默认配置:', configPath)
 }
 
-ensureConfigFile(ENV_FILE)
+ensureConfigFile()
 
 const httpsServerMap = new Map()
 
@@ -95,28 +104,41 @@ const proxyServer = http.createServer((req, res) => {
         } else if(req.url.startsWith('/api/rules')) {
             const method = req.method.toLocaleLowerCase()
             if(method === 'put') {
-                // update rules config
+                if (!currentConfig || currentConfig.format === 'js') {
+                    res.statusCode = 405
+                    res.setHeader('Content-Type', 'application/json')
+                    res.write(JSON.stringify({ error: '.js 配置文件为只读，无法通过界面保存' }))
+                    res.end()
+                    return
+                }
                 res.setHeader('Content-Type', 'application/json')
                 let text = ''
-
-                req.on('data', chunk => {
-                    text += chunk
-                })
+                req.on('data', chunk => { text += chunk })
                 req.on('end', () => {
-                    fs.writeFileSync(ENV_FILE, text)
-                    res.write(JSON.stringify({ status: 'success' }))
+                    try {
+                        const { parseEprc } = require('./helpers')
+                        const newRuleMap = parseEprc(text)
+                        if (currentConfig.format === 'json') {
+                            const content = JSON.stringify({ rules: newRuleMap }, null, 2)
+                            fs.writeFileSync(currentConfig.path, content, 'utf8')
+                        } else {
+                            fs.writeFileSync(currentConfig.path, text, 'utf8')
+                        }
+                        ruleMap = newRuleMap
+                        res.write(JSON.stringify({ status: 'success' }))
+                    } catch (err) {
+                        res.statusCode = 500
+                        res.write(JSON.stringify({ error: err.message }))
+                    }
                     res.end()
                 })
-
-                res.on('error', () => {
+                req.on('error', () => {
                     res.statusCode = 500
                     res.statusMessage = 'Internal error'
                 })
-
             } else {
-                // send default rules config
-                res.setHeader('Content-Type', 'text')
-                res.write(fs.readFileSync(ENV_FILE))
+                res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+                res.write(ruleMapToEprcText(ruleMap))
                 res.end()
             }
         } else if (req.url.startsWith('/api/logs')) {
@@ -297,22 +319,25 @@ proxyServer.on('connect', async (req, socket, header) => {
                 })
 
                 wsServer.on('connection', (ws, req) => {
-                    const targetUrl = resolveTargetUrl('wss://' + req.headers.host + req.url, ruleMap)
+                    const sourceWsUrl = 'wss://' + req.headers.host + req.url
+                    let targetUrl = resolveTargetUrl(sourceWsUrl, ruleMap)
+                    if (!targetUrl) targetUrl = sourceWsUrl
 
                     const proxyWs = new WebSocket(targetUrl, ws.protocol, {
                         rejectUnauthorized: false,
                         headers: req.headers
                     });
 
-                    proxyWs.on('message', (code, reason) => {
-                        ws.send(code.toString(), (err) => {
-                            if(err) console.error(err)
+                    proxyWs.on('message', (data) => {
+                        ws.send(data, (err) => {
+                            if (err) console.error(err)
                         })
                     })
 
-
-                    ws.on('message', (msg) => {
-                        proxyDebug(msg)
+                    ws.on('message', (data) => {
+                        proxyWs.send(data, (err) => {
+                            if (err) console.error(err)
+                        })
                     });
 
                     ws.on('error', (e) => {

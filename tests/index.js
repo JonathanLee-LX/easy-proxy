@@ -1,4 +1,4 @@
-const { resolveTargetUrl } = require('../helpers')
+const { resolveTargetUrl, parseEprc } = require('../helpers')
 const assert = require('assert')
 
 describe('Test resolveTargetUrl function.', function () {
@@ -60,5 +60,19 @@ describe('Test resolveTargetUrl function.', function () {
         assert.equal(resolveTargetUrl('wss://a.com/sock', {
             '^wss?://a.com': '127.0.0.1/hmr'
         }), 'wss://127.0.0.1/hmr')
+    })
+
+    it('should resolve URL format: solution.wps.cn/console -> https://localhost:8000', () => {
+        const ruleMap = parseEprc('https://localhost:8000 solution.wps.cn/console solution.wps.cn/dev-server')
+        assert.equal(resolveTargetUrl('https://solution.wps.cn/console/xxx', ruleMap), 'https://localhost:8000/console/xxx')
+        assert.equal(resolveTargetUrl('https://solution.wps.cn/dev-server/api', ruleMap), 'https://localhost:8000/dev-server/api')
+    })
+
+    it('should convert https target to wss for WebSocket requests', () => {
+        const ruleMap = parseEprc('https://localhost:8000 solution.wps.cn/dev-server')
+        assert.equal(
+            resolveTargetUrl('wss://solution.wps.cn/dev-server/133/n0gang51/websocket', ruleMap),
+            'wss://localhost:8000/dev-server/133/n0gang51/websocket'
+        )
     })
 });

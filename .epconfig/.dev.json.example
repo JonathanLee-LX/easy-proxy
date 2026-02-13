@@ -1,0 +1,6 @@
+{
+  "rules": {
+    "https://example.com": "127.0.0.1:8080",
+    "^https://api\\.example\\.com": "http://127.0.0.1:8081"
+  }
+}
