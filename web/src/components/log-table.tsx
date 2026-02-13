@@ -44,7 +44,8 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
       const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]')
       if (viewport) {
         requestAnimationFrame(() => {
-          viewport.scrollTop = viewport.scrollHeight
+          // Scroll to top to show newest logs (logs are now sorted newest first)
+          viewport.scrollTop = 0
         })
       }
     }
