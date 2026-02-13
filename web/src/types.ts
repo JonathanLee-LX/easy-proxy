@@ -5,6 +5,7 @@ export interface ProxyRecord {
   target: string
   time: string
   mock?: boolean
+  protocol?: string // 'h2' | 'h1.1'
 }
 
 export interface RecordDetail {

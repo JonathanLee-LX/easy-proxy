@@ -1,5 +1,6 @@
 const http = require('http')
 const https = require('https')
+const http2 = require('http2')
 const { connect } = require('net')
 const fs = require('fs')
 const os = require('os')
@@ -35,6 +36,191 @@ const MAX_BODY_SIZE = 100 * 1024 // 100KB
 const proxyRecordArr = []
 let recordIdSeq = 0
 const proxyRecordDetailMap = new Map()
+
+// ===== HTTP/2 代理支持 =====
+const h2SessionPool = new Map() // origin -> http2.ClientHttp2Session
+
+// HTTP/2 中需要移除的逐跳头部
+const HOP_BY_HOP_HEADERS = new Set([
+    'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
+    'te', 'trailer', 'transfer-encoding', 'upgrade', 'host'
+])
+
+/**
+ * 清理请求头，移除 HTTP/2 不兼容的逐跳头部
+ */
+function cleanHeadersForH2(headers) {
+    const cleaned = {}
+    for (const [key, value] of Object.entries(headers)) {
+        const lk = key.toLowerCase()
+        if (!HOP_BY_HOP_HEADERS.has(lk) && !lk.startsWith(':')) {
+            cleaned[lk] = value
+        }
+    }
+    return cleaned
+}
+
+/**
+ * 获取或创建指定 origin 的 HTTP/2 会话（带连接池复用）
+ * @param {string} origin - 如 https://example.com 或 https://120.92.124.158
+ * @param {string} [servername] - TLS SNI 主机名（域名转 IP 时保留原始域名用于路由）
+ * @returns {Promise<http2.ClientHttp2Session>}
+ */
+function getOrCreateH2Session(origin, servername) {
+    // 使用 origin + servername 作为缓存 key，避免不同域名共享同一 IP 会话时 SNI 冲突
+    const poolKey = servername ? `${origin}#${servername}` : origin
+    const cached = h2SessionPool.get(poolKey)
+    if (cached && !cached.closed && !cached.destroyed) {
+        return Promise.resolve(cached)
+    }
+    h2SessionPool.delete(poolKey)
+
+    return new Promise((resolve, reject) => {
+        const connectOpts = { rejectUnauthorized: false }
+        if (servername) connectOpts.servername = servername
+        const session = http2.connect(origin, connectOpts)
+
+        const timeout = setTimeout(() => {
+            session.destroy()
+            reject(new Error('HTTP/2 connection timeout'))
+        }, 5000)
+
+        session.once('connect', () => {
+            clearTimeout(timeout)
+            h2SessionPool.set(poolKey, session)
+            resolve(session)
+        })
+
+        session.once('error', (err) => {
+            clearTimeout(timeout)
+            h2SessionPool.delete(poolKey)
+            reject(err)
+        })
+
+        session.on('close', () => {
+            h2SessionPool.delete(poolKey)
+        })
+
+        session.on('goaway', () => {
+            h2SessionPool.delete(poolKey)
+            if (!session.destroyed) session.destroy()
+        })
+
+        // 空闲 60s 自动关闭
+        session.setTimeout(60000, () => {
+            h2SessionPool.delete(poolKey)
+            if (!session.destroyed) session.close()
+        })
+    })
+}
+
+/**
+ * 通过 HTTP/2 发起代理请求（流式）
+ * @returns {Promise<{statusCode, statusMessage, headers, stream, protocol}>}
+ */
+function proxyViaH2(target, method, headers, reqBody) {
+    const url = new URL(target)
+    const origin = url.origin
+    // 保留原始 Host 作为 :authority（规则将域名映射到 IP 时，目标服务器仍需原始域名来路由）
+    // HTTP/2 入站请求 headers 中 host 可能不存在，需同时检查 :authority 伪头
+    const originalHost = headers.host || headers.Host || headers[':authority'] || url.host
+    const originalHostname = originalHost.split(':')[0]
+    // 如果目标主机名与原始域名不同（如 IP 地址），传入 servername 以设置正确的 TLS SNI
+    const servername = (url.hostname !== originalHostname) ? originalHostname : undefined
+
+    return getOrCreateH2Session(origin, servername).then(session => {
+        return new Promise((resolve, reject) => {
+            try {
+                const h2Headers = cleanHeadersForH2(headers)
+                h2Headers[':method'] = method
+                h2Headers[':path'] = url.pathname + url.search
+                h2Headers[':authority'] = originalHost
+                h2Headers[':scheme'] = url.protocol.replace(':', '')
+
+                const h2Stream = session.request(h2Headers)
+
+                h2Stream.on('response', (resHeaders) => {
+                    const statusCode = resHeaders[':status']
+                    const cleanHeaders = {}
+                    for (const [k, v] of Object.entries(resHeaders)) {
+                        if (!k.startsWith(':')) cleanHeaders[k] = v
+                    }
+                    resolve({
+                        statusCode,
+                        statusMessage: '',
+                        headers: cleanHeaders,
+                        stream: h2Stream,
+                        protocol: 'h2'
+                    })
+                })
+
+                h2Stream.on('error', reject)
+
+                if (reqBody && reqBody.length > 0) h2Stream.write(reqBody)
+                h2Stream.end()
+            } catch (err) {
+                reject(err)
+            }
+        })
+    })
+}
+
+/**
+ * 通过 HTTP/1.1 发起代理请求（流式）
+ * @returns {Promise<{statusCode, statusMessage, headers, stream, protocol}>}
+ */
+function proxyViaH1(target, method, headers, reqBody) {
+    const url = new URL(target)
+    const requestFn = url.protocol === 'https:' ? https.request : http.request
+
+    // 清除 HTTP/2 伪头（:method, :path, :authority, :scheme），这些在 HTTP/1.1 中不合法
+    // 同时确保 host 头存在（HTTP/2 入站时只有 :authority 没有 host）
+    const h1Headers = {}
+    const originalHost = headers[':authority'] || headers.host || headers.Host || url.host
+    for (const [key, value] of Object.entries(headers)) {
+        if (!key.startsWith(':')) {
+            h1Headers[key] = value
+        }
+    }
+    if (!h1Headers.host && !h1Headers.Host) {
+        h1Headers.host = originalHost
+    }
+
+    return new Promise((resolve, reject) => {
+        const proxyReq = requestFn(target, {
+            method,
+            headers: h1Headers,
+            rejectUnauthorized: false
+        }, (proxyRes) => {
+            resolve({
+                statusCode: proxyRes.statusCode,
+                statusMessage: proxyRes.statusMessage || '',
+                headers: proxyRes.headers,
+                stream: proxyRes,
+                protocol: 'h1.1'
+            })
+        })
+        proxyReq.on('error', reject)
+        if (reqBody && reqBody.length > 0) proxyReq.write(reqBody)
+        proxyReq.end()
+    })
+}
+
+/**
+ * 智能代理请求：HTTPS 目标优先尝试 HTTP/2，失败回退 HTTP/1.1；HTTP 目标直接用 HTTP/1.1
+ * @returns {Promise<{statusCode, statusMessage, headers, stream, protocol}>}
+ */
+async function makeProxyRequest(target, method, headers, reqBody) {
+    if (target.startsWith('https')) {
+        try {
+            return await proxyViaH2(target, method, headers, reqBody)
+        } catch (err) {
+            proxyDebug('HTTP/2 请求失败，回退到 HTTP/1.1:', err.message)
+            return proxyViaH1(target, method, headers, reqBody)
+        }
+    }
+    return proxyViaH1(target, method, headers, reqBody)
+}
 
 // ===== Mock 功能 =====
 const MOCK_FILE = path.join(epDir, 'mocks.json')
@@ -595,8 +781,9 @@ proxyServer.on('connect', async (req, socket, header) => {
         return new Promise((resolve, reject) => {
             crtMgr.getCertificate(originHost, (error, key, crt) => {
                 if (error) return reject(error)
-                const server = https.createServer({ cert: crt, key }, (req, res) => {
-                    const source = 'https://' + req.headers.host + req.url
+                // 使用 HTTP/2 安全服务器，同时兼容 HTTP/1.1（用于 WebSocket Upgrade 等）
+                const server = http2.createSecureServer({ cert: crt, key, allowHTTP1: true }, (req, res) => {
+                    const source = 'https://' + (req.headers.host || req.authority || originHost) + req.url
 
                     // 检查 mock 规则
                     const mockRule = matchMockRule(source, req.method)
@@ -605,32 +792,25 @@ proxyServer.on('connect', async (req, socket, header) => {
                     }
 
                     // resolve targetUrl by against ruleMap
-                    // 1. if targetUrl is ip address 127.0.0.1. Reuse current protocol
-                    // 2. If targetURL is start with protocol url http://127.0.0.1
                     let target = resolveTargetUrl(source, ruleMap)
                     if(!target) {
                         target = source
                     }
 
-                    const request = target.startsWith('https') ? https.request : http.request;
                     const reqChunks = []
-
                     req.on('data', chunk => reqChunks.push(chunk))
-                    req.on('end', () => {
+                    req.on('end', async () => {
                         const reqBody = Buffer.concat(reqChunks)
-                        const proxyReq = request(target, {
-                            method: req.method,
-                            rejectUnauthorized: false,
-                            headers: req.headers
-                        }, (proxyRes) => {
+                        try {
+                            const proxyRes = await makeProxyRequest(target, req.method, req.headers, reqBody)
                             const resChunks = []
-                            res.writeHead(proxyRes.statusCode, proxyRes.statusMessage, proxyRes.headers)
+                            res.writeHead(proxyRes.statusCode, proxyRes.headers)
 
-                            proxyRes.on('data', chunk => {
+                            proxyRes.stream.on('data', chunk => {
                                 resChunks.push(chunk)
                                 res.write(chunk)
                             })
-                            proxyRes.on('end', () => {
+                            proxyRes.stream.on('end', () => {
                                 res.end()
                                 const resBody = Buffer.concat(resChunks)
                                 const recordId = recordIdSeq++
@@ -639,7 +819,8 @@ proxyServer.on('connect', async (req, socket, header) => {
                                     method: req.method,
                                     source,
                                     target,
-                                    time: new Date().toLocaleTimeString()
+                                    time: new Date().toLocaleTimeString(),
+                                    protocol: proxyRes.protocol
                                 }
                                 localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
                                 proxyRecordArr.push(logData)
@@ -667,18 +848,13 @@ proxyServer.on('connect', async (req, socket, header) => {
                                 }
                                 console.table(logData)
                             })
-                        })
-
-                        proxyReq.write(reqBody)
-                        proxyReq.end()
-
-                        proxyReq.on('error', (error) => {
-                            console.error('[error debug]', originHost + req.url, error)
-                            res.statusCode = 500
-                            plugins.forEach(plugin => plugin.beforeSendResponse(res))
-                            res.write(JSON.stringify(error))
-                            res.end()
-                        })
+                        } catch (err) {
+                            console.error('[error debug]', originHost + req.url, err)
+                            if (!res.headersSent) {
+                                try { res.writeHead(502) } catch (_) {}
+                            }
+                            try { res.end() } catch (_) {}
+                        }
                     })
                 })
 

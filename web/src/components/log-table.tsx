@@ -59,13 +59,14 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
             <TableHead className="w-16 text-xs">方法</TableHead>
             <TableHead className="text-xs">源地址</TableHead>
             <TableHead className="text-xs">目标地址</TableHead>
+            <TableHead className="w-14 text-xs">协议</TableHead>
             <TableHead className="w-28 text-xs">时间</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {records.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="text-center text-muted-foreground py-16">
+              <TableCell colSpan={5} className="text-center text-muted-foreground py-16">
                 暂无请求记录
               </TableCell>
             </TableRow>
@@ -95,6 +96,20 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                     </Badge>
                   )}
                   {record.target}
+                </TableCell>
+                <TableCell className="py-1.5">
+                  {record.protocol && (
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] font-mono px-1 py-0 ${
+                        record.protocol === 'h2'
+                          ? 'text-emerald-600 border-emerald-300'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      {record.protocol}
+                    </Badge>
+                  )}
                 </TableCell>
                 <TableCell className="py-1.5 text-muted-foreground font-mono">
                   {record.time}
