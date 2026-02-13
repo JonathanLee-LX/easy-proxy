@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -9,7 +9,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { ArrowDown, ArrowUp } from 'lucide-react'
 import type { ProxyRecord } from '@/types'
+
+type TimeSortOrder = 'asc' | 'desc'
 
 interface LogTableProps {
   records: ProxyRecord[]
@@ -38,19 +41,27 @@ function getMethodColor(method: string) {
 export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: LogTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastCountRef = useRef(records.length)
+  const [timeSortOrder, setTimeSortOrder] = useState<TimeSortOrder>('desc')
+
+  const sortedRecords = useMemo(() => {
+    return [...records].sort((a, b) => {
+      const idA = a.id ?? 0
+      const idB = b.id ?? 0
+      return timeSortOrder === 'desc' ? idB - idA : idA - idB
+    })
+  }, [records, timeSortOrder])
 
   useEffect(() => {
-    if (autoScroll && records.length > lastCountRef.current && scrollRef.current) {
+    if (autoScroll && sortedRecords.length > lastCountRef.current && scrollRef.current) {
       const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]')
       if (viewport) {
         requestAnimationFrame(() => {
-          // Scroll to top to show newest logs (logs are now sorted newest first)
           viewport.scrollTop = 0
         })
       }
     }
-    lastCountRef.current = records.length
-  }, [records.length, autoScroll])
+    lastCountRef.current = sortedRecords.length
+  }, [sortedRecords.length, autoScroll])
 
   return (
     <ScrollArea className="h-[calc(100vh-12rem)]" ref={scrollRef}>
@@ -61,18 +72,32 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
             <TableHead className="text-xs">源地址</TableHead>
             <TableHead className="text-xs">目标地址</TableHead>
             <TableHead className="w-14 text-xs">协议</TableHead>
-            <TableHead className="w-28 text-xs">时间</TableHead>
+            <TableHead className="w-28 text-xs">
+              <button
+                type="button"
+                onClick={() => setTimeSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
+                className="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
+                title={timeSortOrder === 'desc' ? '倒序（新→旧），点击切换为正序' : '正序（旧→新），点击切换为倒序'}
+              >
+                时间
+                {timeSortOrder === 'desc' ? (
+                  <ArrowDown className="h-3 w-3" />
+                ) : (
+                  <ArrowUp className="h-3 w-3" />
+                )}
+              </button>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {records.length === 0 ? (
+          {sortedRecords.length === 0 ? (
             <TableRow>
               <TableCell colSpan={5} className="text-center text-muted-foreground py-16">
                 暂无请求记录
               </TableCell>
             </TableRow>
           ) : (
-            records.map((record, index) => (
+            sortedRecords.map((record, index) => (
               <TableRow
                 key={record.id ?? index}
                 className={`cursor-pointer transition-colors text-xs ${

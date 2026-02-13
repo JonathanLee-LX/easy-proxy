@@ -9,9 +9,9 @@
     "prepublish": "npm run test",
     "start:open": "node index.js --open",
     "mcp": "node mcp-server.js",
-    "build:web": "cd web && npm run build",
-    "dev:web": "cd web && npm run dev",
-    "postinstall": "cd web && npm install && npm run build"
+    "build:web": "cd web && pnpm run build",
+    "dev:web": "cd web && pnpm run dev",
+    "postinstall": "cd web && pnpm install && pnpm run build"
   },
   "bin": {
     "ep": "bin/index"

@@ -763,13 +763,12 @@ function openBrowserWithProxy(url, proxyServer, remoteDebuggingPort) {
 })()
 
 // proxy https request over http
+// 仅对配置了反向代理规则的请求进行解密（MITM），其余 HTTPS 直接隧道转发以提升性能
 proxyServer.on('connect', async (req, socket, header) => {
     const originHost = req.url.split(':')[0]
-    proxyDebug('received connect request....')
-    // Send success response header
-    socket.write('HTTP/1.1 200 Connection Established\r\n' +
-        'Proxy-Agent: Node.js-Proxy\r\n' +
-        '\r\n');
+    const needDecrypt = !!resolveTargetUrl('https://' + req.url + '/', ruleMap)
+    proxyDebug('received connect request....', needDecrypt ? '(decrypt)' : '(tunnel)')
+
     socket.on('end', () => {
         // proxyDebug('end')
     })
@@ -777,6 +776,30 @@ proxyServer.on('connect', async (req, socket, header) => {
     socket.on('error', (err) => {
         console.error(err)
     })
+
+    // 无反向代理规则：直接隧道转发，不解密，减轻性能开销
+    if (!needDecrypt) {
+        const parts = req.url.split(':')
+        const host = parts[0]
+        const port = parts[1] ? parseInt(parts[1], 10) : 443
+        const connection = connect({ host, port }, () => {
+            socket.write('HTTP/1.1 200 Connection Established\r\n\r\n')
+            socket.pipe(connection)
+            connection.pipe(socket)
+        })
+        connection.on('error', (err) => {
+            proxyDebug('tunnel connect error', host + ':' + port, err.message)
+            if (!socket.destroyed) {
+                try { socket.end('HTTP/1.1 502 Bad Gateway\r\n\r\n') } catch (_) {}
+            }
+        })
+        return
+    }
+
+    // 有反向代理规则：解密并走代理逻辑
+    socket.write('HTTP/1.1 200 Connection Established\r\n' +
+        'Proxy-Agent: Node.js-Proxy\r\n' +
+        '\r\n')
 
     function createHttpsServerByCert() {
         return new Promise((resolve, reject) => {
@@ -805,7 +828,8 @@ proxyServer.on('connect', async (req, socket, header) => {
                         try {
                             const proxyRes = await makeProxyRequest(target, req.method, req.headers, reqBody)
                             const resChunks = []
-                            res.writeHead(proxyRes.statusCode, proxyRes.headers)
+                            // HTTP/2 不允许逐跳头（如 transfer-encoding），需过滤后再写入
+                            res.writeHead(proxyRes.statusCode, cleanHeadersForH2(proxyRes.headers))
 
                             proxyRes.stream.on('data', chunk => {
                                 resChunks.push(chunk)
