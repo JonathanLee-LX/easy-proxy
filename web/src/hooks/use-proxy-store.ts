@@ -43,6 +43,9 @@ export function useProxyStore() {
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null)
   const [recordDetail, setRecordDetail] = useState<RecordDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [maxRecords, setMaxRecords] = useState(1000)
+  const maxRecordsRef = useRef(maxRecords)
+  maxRecordsRef.current = maxRecords
   const wsRef = useRef<WebSocket | null>(null)
 
   // Load initial logs
@@ -67,7 +70,10 @@ export function useProxyStore() {
       ws.addEventListener('message', (ev) => {
         try {
           const data: ProxyRecord = JSON.parse(ev.data)
-          setRecords((prev) => [data, ...prev])
+          setRecords((prev) => {
+            const newRecords = [data, ...prev]
+            return newRecords.slice(0, maxRecordsRef.current)
+          })
         } catch (e) {
           console.error('Failed to parse WebSocket message:', e)
         }
@@ -244,6 +250,8 @@ export function useProxyStore() {
     selectedRecordId,
     recordDetail,
     detailLoading,
+    maxRecords,
+    setMaxRecords,
     fetchRules,
     saveRules,
     fetchDetail,

@@ -1,4 +1,5 @@
-import { useRef, useEffect, useMemo, useState } from 'react'
+import React, { useRef, useEffect, useMemo, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { Badge } from '@/components/ui/badge'
 import {
   Table,
@@ -38,6 +39,52 @@ function getMethodColor(method: string) {
   }
 }
 
+function TableRowContent({
+  record,
+}: {
+  record: ProxyRecord
+}) {
+  return (
+    <>
+      <TableCell className="py-1.5">
+        <Badge variant="outline" className={`text-[10px] font-mono px-1.5 py-0 ${getMethodColor(record.method)}`}>
+          {record.method}
+        </Badge>
+      </TableCell>
+      <TableCell className="py-1.5 font-mono truncate max-w-[300px]" title={record.source}>
+        {record.source}
+      </TableCell>
+      <TableCell className="py-1.5 font-mono truncate max-w-[300px]" title={record.target}>
+        {record.mock && (
+          <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 mr-1 text-orange-500 border-orange-300">
+            MOCK
+          </Badge>
+        )}
+        {record.target}
+      </TableCell>
+      <TableCell className="py-1.5">
+        {record.protocol && (
+          <Badge
+            variant="outline"
+            className={`text-[10px] font-mono px-1 py-0 ${
+              record.protocol === 'h2'
+                ? 'text-emerald-600 border-emerald-300'
+                : 'text-muted-foreground'
+            }`}
+          >
+            {record.protocol}
+          </Badge>
+        )}
+      </TableCell>
+      <TableCell className="py-1.5 text-muted-foreground font-mono">
+        {record.time}
+      </TableCell>
+    </>
+  )
+}
+
+const MemoizedTableRowContent = React.memo(TableRowContent)
+
 export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: LogTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastCountRef = useRef(records.length)
@@ -51,9 +98,23 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
     })
   }, [records, timeSortOrder])
 
+  const rowHeight = 36 // Approximate height of each row in pixels
+
+  const virtualizer = useVirtualizer({
+    count: sortedRecords.length,
+    getScrollElement: () => {
+      const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]')
+      return viewport as HTMLElement | null
+    },
+    estimateSize: () => rowHeight,
+    overscan: 10,
+  })
+
+  const virtualItems = virtualizer.getVirtualItems()
+
   useEffect(() => {
-    if (autoScroll && sortedRecords.length > lastCountRef.current && scrollRef.current) {
-      const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]')
+    if (autoScroll && sortedRecords.length > lastCountRef.current) {
+      const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]')
       if (viewport) {
         requestAnimationFrame(() => {
           viewport.scrollTop = 0
@@ -62,6 +123,17 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
     }
     lastCountRef.current = sortedRecords.length
   }, [sortedRecords.length, autoScroll])
+
+  // Keep scroll position stable when sorting changes
+  useEffect(() => {
+    if (scrollRef.current) {
+      const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement
+      if (viewport && virtualItems.length > 0) {
+        // Maintain scroll position by adjusting for the new virtual scroll offset
+        virtualizer.scrollToOffset(0)
+      }
+    }
+  }, [timeSortOrder])
 
   return (
     <ScrollArea className="h-[calc(100vh-12rem)]" ref={scrollRef}>
@@ -89,7 +161,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
             </TableHead>
           </TableRow>
         </TableHeader>
-        <TableBody>
+        <TableBody style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
           {sortedRecords.length === 0 ? (
             <TableRow>
               <TableCell colSpan={5} className="text-center text-muted-foreground py-16">
@@ -97,51 +169,32 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
               </TableCell>
             </TableRow>
           ) : (
-            sortedRecords.map((record, index) => (
-              <TableRow
-                key={record.id ?? index}
-                className={`cursor-pointer transition-colors text-xs ${
-                  selectedRecordId === record.id
-                    ? 'bg-primary/5 hover:bg-primary/10'
-                    : 'hover:bg-muted/50'
-                }`}
-                onClick={() => record.id != null && onSelect(record.id)}
-              >
-                <TableCell className="py-1.5">
-                  <Badge variant="outline" className={`text-[10px] font-mono px-1.5 py-0 ${getMethodColor(record.method)}`}>
-                    {record.method}
-                  </Badge>
-                </TableCell>
-                <TableCell className="py-1.5 font-mono truncate max-w-[300px]" title={record.source}>
-                  {record.source}
-                </TableCell>
-                <TableCell className="py-1.5 font-mono truncate max-w-[300px]" title={record.target}>
-                  {record.mock && (
-                    <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 mr-1 text-orange-500 border-orange-300">
-                      MOCK
-                    </Badge>
-                  )}
-                  {record.target}
-                </TableCell>
-                <TableCell className="py-1.5">
-                  {record.protocol && (
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] font-mono px-1 py-0 ${
-                        record.protocol === 'h2'
-                          ? 'text-emerald-600 border-emerald-300'
-                          : 'text-muted-foreground'
-                      }`}
-                    >
-                      {record.protocol}
-                    </Badge>
-                  )}
-                </TableCell>
-                <TableCell className="py-1.5 text-muted-foreground font-mono">
-                  {record.time}
-                </TableCell>
-              </TableRow>
-            ))
+            virtualItems.map((virtualRow) => {
+              const record = sortedRecords[virtualRow.index]
+              return (
+                <TableRow
+                  key={record.id ?? virtualRow.index}
+                  className={`cursor-pointer transition-colors text-xs ${
+                    selectedRecordId === record.id
+                      ? 'bg-primary/5 hover:bg-primary/10'
+                      : 'hover:bg-muted/50'
+                  }`}
+                  onClick={() => record.id != null && onSelect(record.id)}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <MemoizedTableRowContent
+                    record={record}
+                  />
+                </TableRow>
+              )
+            })
           )}
         </TableBody>
       </Table>
