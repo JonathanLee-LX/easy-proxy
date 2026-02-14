@@ -137,8 +137,8 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
 
   return (
     <ScrollArea className="h-[calc(100vh-12rem)]" ref={scrollRef}>
-      <Table>
-        <TableHeader>
+      <Table style={{ tableLayout: 'fixed' }}>
+        <TableHeader className="sticky top-0 z-10">
           <TableRow className="bg-muted/50 hover:bg-muted/50">
             <TableHead className="w-16 text-xs">方法</TableHead>
             <TableHead className="text-xs">源地址</TableHead>
