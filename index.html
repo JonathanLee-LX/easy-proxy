@@ -191,13 +191,54 @@
 
         window.__epStore = store
 
-        const protocol = location.protocol === "https" ? "wss://" : 'ws://';
-        const ws = new WebSocket(protocol + location.host + location.pathname)
-        ws.addEventListener('close', () => console.log('close'))
-        ws.addEventListener('message', (ev) => {
-            const data = JSON.parse(ev.data)
-            store.recordList.push(data)
-        })
+        // WebSocket with reconnection
+        let ws = null
+        let reconnectTimeout = null
+        let reconnectAttempts = 0
+        const MAX_RECONNECT_ATTEMPTS = 10
+        const BASE_RECONNECT_DELAY = 1000
+
+        const connectWebSocket = () => {
+            const protocol = location.protocol === "https:" ? "wss://" : "ws://";
+            ws = new WebSocket(protocol + location.host + location.pathname)
+
+            ws.addEventListener('error', (ev) => {
+                console.error('WebSocket error:', ev)
+            })
+
+            ws.addEventListener('close', () => {
+                console.log('WebSocket closed')
+                ws = null
+
+                // Exponential backoff reconnection
+                if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000)
+                    console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`)
+                    reconnectTimeout = setTimeout(() => {
+                        reconnectAttempts++
+                        connectWebSocket()
+                    }, delay)
+                } else {
+                    console.error('Max reconnection attempts reached')
+                }
+            })
+
+            ws.addEventListener('open', () => {
+                console.log('WebSocket connected')
+                reconnectAttempts = 0 // Reset on successful connection
+            })
+
+            ws.addEventListener('message', (ev) => {
+                try {
+                    const data = JSON.parse(ev.data)
+                    store.recordList.push(data)
+                } catch (e) {
+                    console.error('Failed to parse WebSocket message:', e)
+                }
+            })
+        }
+
+        connectWebSocket()
 
         function RecordList(props) {
             return {

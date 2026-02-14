@@ -53,26 +53,65 @@ export function useProxyStore() {
       .catch(console.error)
   }, [])
 
-  // WebSocket for real-time updates
+  // WebSocket for real-time updates with reconnection
   useEffect(() => {
-    const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://'
-    const ws = new WebSocket(protocol + location.host + '/')
-    wsRef.current = ws
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
+    let reconnectAttempts = 0
+    const MAX_RECONNECT_ATTEMPTS = 10
+    const BASE_RECONNECT_DELAY = 1000
 
-    ws.addEventListener('message', (ev) => {
-      try {
-        const data: ProxyRecord = JSON.parse(ev.data)
-        // Prepend new records to show newest first
-        setRecords((prev) => [data, ...prev])
-      } catch {}
-    })
+    const connectWebSocket = () => {
+      const protocol = location.protocol === 'https:' ? 'wss://' : 'ws://'
+      const ws = new WebSocket(protocol + location.host + '/')
 
-    ws.addEventListener('close', () => {
-      console.log('WebSocket closed')
-    })
+      ws.addEventListener('message', (ev) => {
+        try {
+          const data: ProxyRecord = JSON.parse(ev.data)
+          setRecords((prev) => [data, ...prev])
+        } catch (e) {
+          console.error('Failed to parse WebSocket message:', e)
+        }
+      })
+
+      ws.addEventListener('error', (ev) => {
+        console.error('WebSocket error:', ev)
+      })
+
+      ws.addEventListener('close', () => {
+        console.log('WebSocket closed')
+        wsRef.current = null
+
+        // Exponential backoff reconnection
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts), 30000)
+          console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`)
+          reconnectTimeout = setTimeout(() => {
+            reconnectAttempts++
+            connectWebSocket()
+          }, delay)
+        } else {
+          console.error('Max reconnection attempts reached')
+        }
+      })
+
+      ws.addEventListener('open', () => {
+        console.log('WebSocket connected')
+        reconnectAttempts = 0 // Reset on successful connection
+      })
+
+      wsRef.current = ws
+    }
+
+    connectWebSocket()
 
     return () => {
-      ws.close()
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout)
+      }
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
     }
   }, [])
 
