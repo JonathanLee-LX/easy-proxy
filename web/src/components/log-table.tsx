@@ -1,14 +1,6 @@
-import React, { useRef, useEffect, useMemo, useState } from 'react'
+import { useRef, useEffect, useMemo, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { Badge } from '@/components/ui/badge'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import type { ProxyRecord } from '@/types'
@@ -39,52 +31,6 @@ function getMethodColor(method: string) {
   }
 }
 
-function TableRowContent({
-  record,
-}: {
-  record: ProxyRecord
-}) {
-  return (
-    <>
-      <TableCell className="py-1.5">
-        <Badge variant="outline" className={`text-[10px] font-mono px-1.5 py-0 ${getMethodColor(record.method)}`}>
-          {record.method}
-        </Badge>
-      </TableCell>
-      <TableCell className="py-1.5 font-mono truncate max-w-[300px]" title={record.source}>
-        {record.source}
-      </TableCell>
-      <TableCell className="py-1.5 font-mono truncate max-w-[300px]" title={record.target}>
-        {record.mock && (
-          <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 mr-1 text-orange-500 border-orange-300">
-            MOCK
-          </Badge>
-        )}
-        {record.target}
-      </TableCell>
-      <TableCell className="py-1.5">
-        {record.protocol && (
-          <Badge
-            variant="outline"
-            className={`text-[10px] font-mono px-1 py-0 ${
-              record.protocol === 'h2'
-                ? 'text-emerald-600 border-emerald-300'
-                : 'text-muted-foreground'
-            }`}
-          >
-            {record.protocol}
-          </Badge>
-        )}
-      </TableCell>
-      <TableCell className="py-1.5 text-muted-foreground font-mono">
-        {record.time}
-      </TableCell>
-    </>
-  )
-}
-
-const MemoizedTableRowContent = React.memo(TableRowContent)
-
 export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: LogTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastCountRef = useRef(records.length)
@@ -98,7 +44,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
     })
   }, [records, timeSortOrder])
 
-  const rowHeight = 36 // Approximate height of each row in pixels
+  const rowHeight = 36
 
   const virtualizer = useVirtualizer({
     count: sortedRecords.length,
@@ -124,12 +70,10 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
     lastCountRef.current = sortedRecords.length
   }, [sortedRecords.length, autoScroll])
 
-  // Keep scroll position stable when sorting changes
   useEffect(() => {
     if (scrollRef.current) {
       const viewport = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement
       if (viewport && virtualItems.length > 0) {
-        // Maintain scroll position by adjusting for the new virtual scroll offset
         virtualizer.scrollToOffset(0)
       }
     }
@@ -137,67 +81,91 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
 
   return (
     <ScrollArea className="h-[calc(100vh-12rem)]" ref={scrollRef}>
-      <Table style={{ tableLayout: 'fixed' }}>
-        <TableHeader className="sticky top-0 z-10">
-          <TableRow className="bg-muted/50 hover:bg-muted/50">
-            <TableHead className="w-16 text-xs">方法</TableHead>
-            <TableHead className="text-xs">源地址</TableHead>
-            <TableHead className="text-xs">目标地址</TableHead>
-            <TableHead className="w-14 text-xs">协议</TableHead>
-            <TableHead className="w-28 text-xs">
-              <button
-                type="button"
-                onClick={() => setTimeSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
-                className="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
-                title={timeSortOrder === 'desc' ? '倒序（新→旧），点击切换为正序' : '正序（旧→新），点击切换为倒序'}
-              >
-                时间
-                {timeSortOrder === 'desc' ? (
-                  <ArrowDown className="h-3 w-3" />
-                ) : (
-                  <ArrowUp className="h-3 w-3" />
-                )}
-              </button>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
+      <div className="min-w-full">
+        {/* Header */}
+        <div className="flex bg-muted/50 text-xs font-medium border-b">
+          <div className="w-16 py-2 px-2">方法</div>
+          <div className="flex-1 py-2 px-2 min-w-[200px]">源地址</div>
+          <div className="flex-1 py-2 px-2 min-w-[200px]">目标地址</div>
+          <div className="w-14 py-2 px-2">协议</div>
+          <div className="w-28 py-2 px-2 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setTimeSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
+              className="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
+              title={timeSortOrder === 'desc' ? '倒序（新→旧），点击切换为正序' : '正序（旧→新），点击切换为倒序'}
+            >
+              时间
+              {timeSortOrder === 'desc' ? (
+                <ArrowDown className="h-3 w-3" />
+              ) : (
+                <ArrowUp className="h-3 w-3" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Virtual List */}
+        <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
           {sortedRecords.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={5} className="text-center text-muted-foreground py-16">
-                暂无请求记录
-              </TableCell>
-            </TableRow>
+            <div className="text-center text-muted-foreground py-16">
+              暂无请求记录
+            </div>
           ) : (
             virtualItems.map((virtualRow) => {
               const record = sortedRecords[virtualRow.index]
+              const isSelected = selectedRecordId === record.id
               return (
-                <TableRow
+                <div
                   key={record.id ?? virtualRow.index}
-                  className={`cursor-pointer transition-colors text-xs ${
-                    selectedRecordId === record.id
-                      ? 'bg-primary/5 hover:bg-primary/10'
-                      : 'hover:bg-muted/50'
+                  className={`flex cursor-pointer transition-colors text-xs absolute w-full ${
+                    isSelected ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-muted/50'
                   }`}
                   onClick={() => record.id != null && onSelect(record.id)}
                   style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
                     height: `${virtualRow.size}px`,
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
-                  <MemoizedTableRowContent
-                    record={record}
-                  />
-                </TableRow>
+                  <div className="w-16 py-1.5 px-2">
+                    <Badge variant="outline" className={`text-[10px] font-mono px-1.5 py-0 ${getMethodColor(record.method)}`}>
+                      {record.method}
+                    </Badge>
+                  </div>
+                  <div className="flex-1 py-1.5 px-2 font-mono truncate min-w-[200px]" title={record.source}>
+                    {record.source}
+                  </div>
+                  <div className="flex-1 py-1.5 px-2 font-mono truncate min-w-[200px]" title={record.target}>
+                    {record.mock && (
+                      <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 mr-1 text-orange-500 border-orange-300">
+                        MOCK
+                      </Badge>
+                    )}
+                    {record.target}
+                  </div>
+                  <div className="w-14 py-1.5 px-2">
+                    {record.protocol && (
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] font-mono px-1 py-0 ${
+                          record.protocol === 'h2'
+                            ? 'text-emerald-600 border-emerald-300'
+                            : 'text-muted-foreground'
+                        }`}
+                      >
+                        {record.protocol}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="w-28 py-1.5 px-2 text-muted-foreground font-mono">
+                    {record.time}
+                  </div>
+                </div>
               )
             })
           )}
-        </TableBody>
-      </Table>
+        </div>
+      </div>
     </ScrollArea>
   )
 }

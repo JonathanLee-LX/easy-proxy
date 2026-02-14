@@ -874,7 +874,13 @@ proxyServer.on('connect', async (req, socket, header) => {
                                 console.table(logData)
                             })
                         } catch (err) {
-                            console.error('[error debug]', originHost + req.url, err)
+                            const code = err.code || ''
+                            const isConnReset = code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ECONNREFUSED'
+                            if (isConnReset) {
+                                console.error('[proxy] upstream %s %s: %s', originHost + req.url, code, err.message)
+                            } else {
+                                console.error('[error debug]', originHost + req.url, err)
+                            }
                             if (!res.headersSent) {
                                 try { res.writeHead(502) } catch (_) {}
                             }
