@@ -639,16 +639,27 @@ const proxyServer = http.createServer((req, res) => {
                         const removed = proxyRecordArr.shift()
                         if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
                     }
-                    const safeStr = (buf, max) => {
+                    const safeStr = (buf, max, encoding) => {
                         if (buf.length === 0) return ''
+                        // 解压压缩的响应体
+                        if (encoding === 'gzip' || encoding === 'deflate' || encoding === 'br') {
+                            try {
+                                const zlib = require('zlib')
+                                buf = zlib.unzipSync(buf)
+                            } catch (e) {
+                                // 解压失败，返回原始内容
+                            }
+                        }
                         if (buf.length > max) return `(truncated, ${buf.length} bytes)\n` + buf.slice(0, max).toString('utf8')
                         try { return buf.toString('utf8') } catch { return '(binary)' }
                     }
+                    // 获取响应编码，用于解压
+                    const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                     const detail = {
                         requestHeaders: req.headers,
                         requestBody: safeStr(reqBody, MAX_BODY_SIZE),
                         responseHeaders: proxyRes.headers,
-                        responseBody: safeStr(resBody, MAX_BODY_SIZE),
+                        responseBody: safeStr(resBody, MAX_BODY_SIZE, responseEncoding),
                         statusCode: proxyRes.statusCode,
                         statusMessage: proxyRes.statusMessage
                     }
@@ -853,16 +864,27 @@ proxyServer.on('connect', async (req, socket, header) => {
                                     const removed = proxyRecordArr.shift()
                                     if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
                                 }
-                                const safeStr = (buf, max) => {
+                                const safeStr = (buf, max, encoding) => {
                                     if (buf.length === 0) return ''
+                                    // 解压压缩的响应体
+                                    if (encoding === 'gzip' || encoding === 'deflate' || encoding === 'br') {
+                                        try {
+                                            const zlib = require('zlib')
+                                            buf = zlib.unzipSync(buf)
+                                        } catch (e) {
+                                            // 解压失败，返回原始内容
+                                        }
+                                    }
                                     if (buf.length > max) return `(truncated, ${buf.length} bytes)\n` + buf.slice(0, max).toString('utf8')
                                     try { return buf.toString('utf8') } catch { return '(binary)' }
                                 }
+                                // 获取响应编码，用于解压
+                                const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                                 const detail = {
                                     requestHeaders: req.headers,
                                     requestBody: safeStr(reqBody, MAX_BODY_SIZE),
                                     responseHeaders: proxyRes.headers,
-                                    responseBody: safeStr(resBody, MAX_BODY_SIZE),
+                                    responseBody: safeStr(resBody, MAX_BODY_SIZE, responseEncoding),
                                     statusCode: proxyRes.statusCode,
                                     statusMessage: proxyRes.statusMessage
                                 }
