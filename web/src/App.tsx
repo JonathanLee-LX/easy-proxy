@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
 import { RuleConfig } from '@/components/rule-config'
 import { LogFilter } from '@/components/log-filter'
 import { LogTable } from '@/components/log-table'
@@ -7,11 +8,13 @@ import { DetailPanel } from '@/components/detail-panel'
 import { MockConfig } from '@/components/mock-config'
 import { useProxyStore } from '@/hooks/use-proxy-store'
 import { useFuzzyFilter } from '@/hooks/use-fuzzy-filter'
-import { Globe } from 'lucide-react'
+import { useTheme } from '@/components/theme-provider'
+import { Globe, Moon, Sun } from 'lucide-react'
 import type { MockRule } from '@/types'
 
 function App() {
   const store = useProxyStore()
+  const { theme, toggleTheme } = useTheme()
   const { filterText, setFilterText, filteredRecords } = useFuzzyFilter(store.records)
   const [recording, setRecording] = useState(true)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -55,6 +58,20 @@ function App() {
           <Globe className="h-5 w-5 text-primary" />
           <h1 className="text-sm font-semibold">Easy Proxy</h1>
           <span className="text-xs text-muted-foreground">开发代理工具</span>
+          <div className="flex-1" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            className="h-8 w-8"
+            aria-label="切换主题"
+          >
+            {theme === 'light' ? (
+              <Moon className="h-4 w-4" />
+            ) : (
+              <Sun className="h-4 w-4" />
+            )}
+          </Button>
         </div>
       </header>
 

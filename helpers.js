@@ -41,8 +41,14 @@ function resolveTargetUrl(url, ruleMap) {
     const tK = Object.keys(ruleMap).find(pattern => new RegExp(pattern).test(url))
     if (!tK) return null
     let urlSegment = ruleMap[tK];
-    if(!urlSegment.startsWith('http') && !urlSegment.startsWith('ws')) {
+    // file:// 协议保持原样，不添加协议前缀
+    if(!urlSegment.startsWith('http') && !urlSegment.startsWith('ws') && !urlSegment.startsWith('file')) {
         urlSegment = originUrlObj.protocol + urlSegment
+    }
+
+    // file:// URL 需要特殊处理，不使用 URL 解析
+    if (urlSegment.startsWith('file://')) {
+        return urlSegment
     }
 
     const targetURLObj = new URL(urlSegment)
@@ -96,12 +102,16 @@ function getConfigCandidates(configDir, env) {
 
 const IP_PATTERN = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/
 const URL_PATTERN = /^https?:\/\//
+const FILE_PATTERN = /^file:\/\//
+const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/[^\0]+/  // Windows 盘符或 Unix 绝对路径
 
 /**
  * 解析 .eprc 格式，支持三种写法：
  * 1. hosts 格式：IP domain1 domain2（target 在前）
  * 2. URL 格式：https://localhost:8000 rule1 rule2（完整 URL 在前）
- * 3. 规则格式：rule target 或 rule1 rule2 target（target 在行末）
+ * 3. file:// 格式：file:///path/to/local/file rule1 rule2（本地文件路径）
+ * 4. 本地文件路径格式：/path/to/file rule1 rule2 或 C:\path\to\file rule1 rule2
+ * 5. 规则格式：rule target 或 rule1 rule2 target（target 在行末）
  * 注释：以 # 或 // 开头
  */
 function parseEprc(content) {
@@ -111,12 +121,26 @@ function parseEprc(content) {
         const parts = trimmed.split(/\s+/).filter(Boolean)
         if (parts.length < 2) return acc
         let target, rules
-        if (IP_PATTERN.test(parts[0]) || URL_PATTERN.test(parts[0])) {
+        // 优先检查是否是 file:// 协议或本地文件路径
+        if (FILE_PATTERN.test(parts[0]) || LOCAL_FILE_PATTERN.test(parts[0])) {
+            [target, ...rules] = parts
+            // 本地文件路径需要转换为 file:// 格式
+            if (!FILE_PATTERN.test(target)) {
+                // 转换为 file:// 格式
+                if (LOCAL_FILE_PATTERN.test(target)) {
+                    target = 'file://' + (target.replace(/\\/g, '/'))
+                }
+            }
+        } else if (IP_PATTERN.test(parts[0]) || URL_PATTERN.test(parts[0])) {
             [target, ...rules] = parts
         } else {
             const reversed = [...parts].reverse()
             target = reversed[0]
             rules = reversed.slice(1)
+            // 检查 target 是否是本地文件路径
+            if (LOCAL_FILE_PATTERN.test(target)) {
+                target = 'file://' + (target.replace(/\\/g, '/'))
+            }
         }
         rules.forEach(rule => { acc[rule] = target })
         return acc
@@ -125,7 +149,7 @@ function parseEprc(content) {
 
 /**
  * 将 ruleMap 转为 .eprc 格式文本（用于 API 和保存）
- * IP/URL 类 target 输出为 target 在前，与 hosts/URL 格式一致
+ * IP/URL/file:// 类 target 输出为 target 在前，与 hosts/URL 格式一致
  */
 function ruleMapToEprcText(ruleMap) {
     const entries = Object.entries(ruleMap)
@@ -137,8 +161,13 @@ function ruleMapToEprcText(ruleMap) {
     })
     return Object.entries(byTarget)
         .map(([target, rules]) => {
-            const targetFirst = IP_PATTERN.test(target) || URL_PATTERN.test(target)
-            return targetFirst ? `${target} ${rules.join(' ')}` : `${rules.join(' ')} ${target}`
+            const targetFirst = IP_PATTERN.test(target) || URL_PATTERN.test(target) || FILE_PATTERN.test(target)
+            // file:// 格式转换为更友好的本地路径显示
+            let displayTarget = target
+            if (FILE_PATTERN.test(target)) {
+                displayTarget = target.replace(/^file:\/\//, '').replace(/\//g, path.sep)
+            }
+            return targetFirst ? `${displayTarget} ${rules.join(' ')}` : `${rules.join(' ')} ${displayTarget}`
         })
         .join('\n')
 }

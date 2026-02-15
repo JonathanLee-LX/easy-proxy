@@ -163,6 +163,11 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                         MOCK
                       </Badge>
                     )}
+                    {record.mapLocal && (
+                      <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 mr-1 text-blue-500 border-blue-300">
+                        LOCAL
+                      </Badge>
+                    )}
                     {record.target}
                   </div>
                   <div className="w-14 py-1.5 px-2">

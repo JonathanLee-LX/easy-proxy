@@ -5,6 +5,7 @@ export interface ProxyRecord {
   target: string
   time: string
   mock?: boolean
+  mapLocal?: boolean
   protocol?: string // 'h2' | 'h1.1'
   statusCode?: number
   duration?: number // milliseconds
@@ -23,6 +24,7 @@ export interface RuleItem {
   enabled: boolean
   rule: string
   target: string
+  targetType?: 'proxy' | 'map-local'  // 规则类型：代理或 Map Local
 }
 
 export interface MockRule {

@@ -351,6 +351,265 @@ function sendMockResponse(req, res, rule, logInfo) {
 
 loadMockRules()
 
+// ===== Map Local 功能 =====
+/**
+ * 根据文件扩展名获取 MIME 类型
+ * @param {string} filePath
+ * @returns {string}
+ */
+function getMimeType(filePath) {
+    const ext = path.extname(filePath).toLowerCase()
+    const mimeTypes = {
+        '.html': 'text/html',
+        '.htm': 'text/html',
+        '.css': 'text/css',
+        '.js': 'application/javascript',
+        '.mjs': 'application/javascript',
+        '.json': 'application/json',
+        '.xml': 'application/xml',
+        '.txt': 'text/plain',
+        '.md': 'text/markdown',
+        '.pdf': 'application/pdf',
+        '.zip': 'application/zip',
+        '.tar': 'application/x-tar',
+        '.gz': 'application/gzip',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.svg': 'image/svg+xml',
+        '.ico': 'image/x-icon',
+        '.webp': 'image/webp',
+        '.woff': 'font/woff',
+        '.woff2': 'font/woff2',
+        '.ttf': 'font/ttf',
+        '.eot': 'application/vnd.ms-fontobject',
+        '.otf': 'font/otf',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.ogg': 'audio/ogg',
+        '.wasm': 'application/wasm',
+        '.swf': 'application/x-shockwave-flash',
+    }
+    return mimeTypes[ext] || 'application/octet-stream'
+}
+
+/**
+ * 处理 Map Local 请求
+ * @param {http.IncomingMessage} req
+ * @param {http.ServerResponse} res
+ * @param {string} source - 原始请求 URL
+ * @param {string} fileUrl - file:// URL
+ */
+function handleMapLocalRequest(req, res, source, fileUrl) {
+    // 解析 file:// URL 获取文件路径
+    let filePath = fileUrl.replace(/^file:\/\//, '')
+    // 处理 Windows 路径（如 /C:/Users/...）
+    if (/^\/[A-Za-z]:\//.test(filePath)) {
+        filePath = filePath.substring(1)
+    }
+    // URL 解码
+    filePath = decodeURIComponent(filePath)
+
+    const startTime = Date.now()
+    const recordId = recordIdSeq++
+
+    // 排空请求体
+    req.on('error', () => {})
+    req.resume()
+
+    // 检查文件是否存在
+    if (!fs.existsSync(filePath)) {
+        const duration = Date.now() - startTime
+        const statusCode = 404
+        const errorBody = 'File not found: ' + filePath
+
+        res.writeHead(statusCode, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Access-Control-Allow-Origin': '*'
+        })
+        res.end(errorBody)
+
+        // 记录日志
+        const logData = {
+            id: recordId,
+            method: req.method,
+            source,
+            target: fileUrl,
+            time: new Date().toLocaleTimeString(),
+            mapLocal: true,
+            statusCode,
+            duration
+        }
+        try {
+            localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
+        } catch (_) {}
+        proxyRecordArr.push(logData)
+        if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+            const removed = proxyRecordArr.shift()
+            if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+        }
+        const detail = {
+            requestHeaders: req.headers || {},
+            requestBody: '',
+            responseHeaders: { 'Content-Type': 'text/plain; charset=utf-8' },
+            responseBody: errorBody,
+            statusCode,
+            statusMessage: 'Not Found',
+            method: req.method,
+            url: source,
+        }
+        proxyRecordDetailMap.set(recordId, detail)
+        if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
+            const firstKey = proxyRecordDetailMap.keys().next().value
+            proxyRecordDetailMap.delete(firstKey)
+        }
+        return
+    }
+
+    // 检查是否是目录
+    const stat = fs.statSync(filePath)
+    if (stat.isDirectory()) {
+        const duration = Date.now() - startTime
+        const statusCode = 403
+        const errorBody = 'Is a directory: ' + filePath
+
+        res.writeHead(statusCode, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Access-Control-Allow-Origin': '*'
+        })
+        res.end(errorBody)
+
+        const logData = {
+            id: recordId,
+            method: req.method,
+            source,
+            target: fileUrl,
+            time: new Date().toLocaleTimeString(),
+            mapLocal: true,
+            statusCode,
+            duration
+        }
+        try {
+            localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
+        } catch (_) {}
+        proxyRecordArr.push(logData)
+        if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+            const removed = proxyRecordArr.shift()
+            if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+        }
+        return
+    }
+
+    // 读取文件
+    try {
+        const fileContent = fs.readFileSync(filePath)
+        const mimeType = getMimeType(filePath)
+        const duration = Date.now() - startTime
+        const statusCode = 200
+
+        // 设置响应头
+        const headers = {
+            'Content-Type': mimeType,
+            'Content-Length': fileContent.length,
+            'Access-Control-Allow-Origin': '*'
+        }
+
+        // 对于某些 MIME 类型，设置额外的缓存头
+        if (mimeType.startsWith('image/') || mimeType.startsWith('font/')) {
+            headers['Cache-Control'] = 'public, max-age=31536000'
+        }
+
+        res.writeHead(statusCode, headers)
+        res.end(fileContent)
+
+        // 记录日志
+        const logData = {
+            id: recordId,
+            method: req.method,
+            source,
+            target: fileUrl,
+            time: new Date().toLocaleTimeString(),
+            mapLocal: true,
+            statusCode,
+            duration
+        }
+        try {
+            localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
+        } catch (_) {}
+        proxyRecordArr.push(logData)
+        if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+            const removed = proxyRecordArr.shift()
+            if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+        }
+
+        // 保存详情
+        const detail = {
+            requestHeaders: req.headers || {},
+            requestBody: '',
+            responseHeaders: headers,
+            responseBody: mimeType.startsWith('text/') || mimeType === 'application/json'
+                ? fileContent.toString('utf8')
+                : `(binary, ${fileContent.length} bytes)`,
+            statusCode,
+            statusMessage: 'OK',
+            method: req.method,
+            url: source,
+        }
+        proxyRecordDetailMap.set(recordId, detail)
+        if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
+            const firstKey = proxyRecordDetailMap.keys().next().value
+            proxyRecordDetailMap.delete(firstKey)
+        }
+    } catch (err) {
+        const duration = Date.now() - startTime
+        const statusCode = 500
+        const errorBody = 'Error reading file: ' + err.message
+
+        res.writeHead(statusCode, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Access-Control-Allow-Origin': '*'
+        })
+        res.end(errorBody)
+
+        const logData = {
+            id: recordId,
+            method: req.method,
+            source,
+            target: fileUrl,
+            time: new Date().toLocaleTimeString(),
+            mapLocal: true,
+            statusCode,
+            duration
+        }
+        try {
+            localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
+        } catch (_) {}
+        proxyRecordArr.push(logData)
+        if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+            const removed = proxyRecordArr.shift()
+            if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+        }
+        const detail = {
+            requestHeaders: req.headers || {},
+            requestBody: '',
+            responseHeaders: { 'Content-Type': 'text/plain; charset=utf-8' },
+            responseBody: errorBody,
+            statusCode,
+            statusMessage: 'Internal Server Error',
+            method: req.method,
+            url: source,
+        }
+        proxyRecordDetailMap.set(recordId, detail)
+        if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
+            const firstKey = proxyRecordDetailMap.keys().next().value
+            proxyRecordDetailMap.delete(firstKey)
+        }
+    }
+}
+
 /**
  * 加载配置并启动文件监听
  */
@@ -743,7 +1002,13 @@ const proxyServer = http.createServer((req, res) => {
             return sendMockResponse(req, res, mockRule, { method: req.method, source, target: source })
         }
 
-        const target = resolveTargetUrl(source, ruleMap) || source
+        // 检查 file:// 规则（Map Local）
+        const resolvedTarget = resolveTargetUrl(source, ruleMap)
+        if (resolvedTarget && resolvedTarget.startsWith('file://')) {
+            return handleMapLocalRequest(req, res, source, resolvedTarget)
+        }
+
+        const target = resolvedTarget || source
         const url = new URL(target.startsWith('http') ? target : req.url, 'http://' + req.headers.host)
         const reqChunks = []
         req.on('data', chunk => reqChunks.push(chunk))
@@ -968,8 +1233,14 @@ proxyServer.on('connect', async (req, socket, header) => {
                         return sendMockResponse(req, res, mockRule, { method: req.method, source, target: source })
                     }
 
+                    // 检查 file:// 规则（Map Local）
+                    const resolvedTarget = resolveTargetUrl(source, ruleMap)
+                    if (resolvedTarget && resolvedTarget.startsWith('file://')) {
+                        return handleMapLocalRequest(req, res, source, resolvedTarget)
+                    }
+
                     // resolve targetUrl by against ruleMap
-                    let target = resolveTargetUrl(source, ruleMap)
+                    let target = resolvedTarget
                     if(!target) {
                         target = source
                     }
