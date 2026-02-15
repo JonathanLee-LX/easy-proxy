@@ -277,16 +277,8 @@ function sendMockResponse(req, res, rule, logInfo) {
     const statusCode = rule.statusCode || 200
     const delay = rule.delay || 0
     const startTime = Date.now()
-    // X-Mock-Rule 值可能含非 ASCII 字符（如中文），需要 encodeURI
     const mockRuleName = rule.name || rule.id.toString()
-    const headers = {
-        'Content-Type': 'application/json',
-        'X-Mock-Rule': encodeURIComponent(mockRuleName),
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': '*',
-        'Access-Control-Allow-Headers': '*',
-        ...rule.headers
-    }
+    const isFileBody = rule.bodyType === 'file' && rule.body
 
     // 排空请求体（避免 keep-alive 连接残留数据）
     req.on('error', () => {})
@@ -294,51 +286,118 @@ function sendMockResponse(req, res, rule, logInfo) {
 
     const doSend = () => {
         const duration = Date.now() - startTime
-        try {
-            res.writeHead(statusCode, headers)
-            res.end(rule.body || '')
-        } catch (err) {
-            console.error('Mock 响应发送失败:', err.message)
-            try {
-                if (!res.headersSent) res.writeHead(statusCode)
-                res.end(rule.body || '')
-            } catch (_) {}
+        let responseBody = ''
+        let responseHeaders = {
+            'X-Mock-Rule': encodeURIComponent(mockRuleName),
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': '*',
+            'Access-Control-Allow-Headers': '*',
+            ...rule.headers
+        }
+        let finalStatusCode = statusCode
+        let statusMessage = 'OK (Mock)'
+
+        if (isFileBody) {
+            // bodyType === 'file'：读取本地文件作为响应体
+            let filePath = rule.body
+            // 处理 file:// 前缀
+            if (filePath.startsWith('file://')) filePath = filePath.replace(/^file:\/\//, '')
+            // Windows 路径修正
+            if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.substring(1)
+            filePath = decodeURIComponent(filePath)
+
+            if (!fs.existsSync(filePath)) {
+                finalStatusCode = 404
+                statusMessage = 'Not Found (Mock File)'
+                responseHeaders['Content-Type'] = 'text/plain; charset=utf-8'
+                responseBody = 'Mock file not found: ' + filePath
+            } else {
+                const stat = fs.statSync(filePath)
+                if (stat.isDirectory()) {
+                    finalStatusCode = 403
+                    statusMessage = 'Forbidden (Mock File)'
+                    responseHeaders['Content-Type'] = 'text/plain; charset=utf-8'
+                    responseBody = 'Is a directory: ' + filePath
+                } else {
+                    try {
+                        const fileContent = fs.readFileSync(filePath)
+                        const mimeType = getMimeType(filePath)
+                        responseHeaders['Content-Type'] = mimeType
+                        responseHeaders['Content-Length'] = fileContent.length
+                        // 发送二进制内容
+                        try {
+                            res.writeHead(finalStatusCode, responseHeaders)
+                            res.end(fileContent)
+                        } catch (err) {
+                            console.error('Mock 文件响应发送失败:', err.message)
+                            try { if (!res.headersSent) { res.writeHead(finalStatusCode); res.end(fileContent) } } catch (_) {}
+                        }
+                        // 记录详情（文本文件记录内容，二进制记录大小）
+                        responseBody = mimeType.startsWith('text/') || mimeType === 'application/json' || mimeType === 'application/javascript' || mimeType === 'application/xml'
+                            ? fileContent.toString('utf8').substring(0, MAX_BODY_SIZE)
+                            : `(binary, ${fileContent.length} bytes)`
+                        // 跳到日志记录（不再走下面的通用 res.end）
+                        logMockRecord()
+                        return
+                    } catch (err) {
+                        finalStatusCode = 500
+                        statusMessage = 'Error (Mock File)'
+                        responseHeaders['Content-Type'] = 'text/plain; charset=utf-8'
+                        responseBody = 'Error reading file: ' + err.message
+                    }
+                }
+            }
+        } else {
+            // bodyType === 'inline'（默认）：使用 rule.body 作为响应体
+            responseHeaders['Content-Type'] = responseHeaders['Content-Type'] || 'application/json'
+            responseBody = rule.body || ''
         }
 
-        // 记录日志
-        const recordId = recordIdSeq++
-        const logData = {
-            id: recordId,
-            method: logInfo.method,
-            source: logInfo.source,
-            target: `[MOCK: ${rule.name || rule.urlPattern}]`,
-            time: new Date().toLocaleTimeString(),
-            mock: true,
-            statusCode,
-            duration
-        }
         try {
-            localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
-        } catch (_) {}
-        proxyRecordArr.push(logData)
-        if (proxyRecordArr.length > MAX_RECORD_SIZE) {
-            const removed = proxyRecordArr.shift()
-            if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+            res.writeHead(finalStatusCode, responseHeaders)
+            res.end(responseBody)
+        } catch (err) {
+            console.error('Mock 响应发送失败:', err.message)
+            try { if (!res.headersSent) { res.writeHead(finalStatusCode); res.end(responseBody) } } catch (_) {}
         }
-        const detail = {
-            requestHeaders: req.headers || {},
-            requestBody: '',
-            responseHeaders: headers,
-            responseBody: rule.body || '',
-            statusCode,
-            statusMessage: 'OK (Mock)',
-            method: logInfo.method,
-            url: logInfo.source,
-        }
-        proxyRecordDetailMap.set(recordId, detail)
-        if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
-            const firstKey = proxyRecordDetailMap.keys().next().value
-            proxyRecordDetailMap.delete(firstKey)
+
+        logMockRecord()
+
+        function logMockRecord() {
+            const recordId = recordIdSeq++
+            const logData = {
+                id: recordId,
+                method: logInfo.method,
+                source: logInfo.source,
+                target: `[MOCK: ${rule.name || rule.urlPattern}]`,
+                time: new Date().toLocaleTimeString(),
+                mock: true,
+                statusCode: finalStatusCode,
+                duration
+            }
+            try {
+                localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
+            } catch (_) {}
+            proxyRecordArr.push(logData)
+            if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+                const removed = proxyRecordArr.shift()
+                if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+            }
+            const detail = {
+                requestHeaders: req.headers || {},
+                requestBody: '',
+                responseHeaders: responseHeaders,
+                responseBody: responseBody,
+                statusCode: finalStatusCode,
+                statusMessage,
+                method: logInfo.method,
+                url: logInfo.source,
+            }
+            proxyRecordDetailMap.set(recordId, detail)
+            if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
+                const firstKey = proxyRecordDetailMap.keys().next().value
+                proxyRecordDetailMap.delete(firstKey)
+            }
         }
     }
 
@@ -799,6 +858,7 @@ const proxyServer = http.createServer((req, res) => {
                             method: data.method || '*',
                             statusCode: data.statusCode || 200,
                             delay: data.delay || 0,
+                            bodyType: data.bodyType || 'inline',
                             headers: data.headers || {},
                             body: data.body || '',
                             enabled: data.enabled !== false

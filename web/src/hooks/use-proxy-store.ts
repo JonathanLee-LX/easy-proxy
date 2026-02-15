@@ -3,8 +3,6 @@ import type { ProxyRecord, RecordDetail, RuleItem, MockRule } from '@/types'
 
 const IP_PATTERN = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/
 const URL_PATTERN = /^https?:\/\//
-const FILE_PATTERN = /^file:\/\//
-const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/[^\0]+/  // Windows 盘符或 Unix 绝对路径
 
 function parseEprcRules(text: string): RuleItem[] {
   return text
@@ -19,39 +17,15 @@ function parseEprcRules(text: string): RuleItem[] {
       const parts = line.split(/\s+/).filter(Boolean)
       if (parts.length < 2) return []
 
-      // 判断 target 类型
-      let targetType: 'proxy' | 'map-local' = 'proxy'
-      let target = ''
-
-      // 检查是否是 file:// 或本地文件路径
-      if (FILE_PATTERN.test(parts[0]) || LOCAL_FILE_PATTERN.test(parts[0])) {
-        targetType = 'map-local'
-        const [t, ...rules] = parts
-        target = t
-        if (FILE_PATTERN.test(target)) {
-          // file:// 格式，转换为更友好的显示
-        } else if (LOCAL_FILE_PATTERN.test(target)) {
-          // 本地文件路径，转换为 file:// 格式用于后端
-          target = 'file://' + target.replace(/\\/g, '/')
-        }
-        return rules.map((rule) => ({ rule, target, targetType, enabled }))
-      }
-
       const isTargetFirst = IP_PATTERN.test(parts[0]) || URL_PATTERN.test(parts[0])
       if (isTargetFirst) {
-        const [t, ...rules] = parts
-        target = t
-        return rules.map((rule) => ({ rule, target, targetType, enabled }))
-      } else {
-        target = parts[parts.length - 1]
-        const rules = parts.slice(0, -1)
-        // 检查 target 是否是本地文件路径
-        if (LOCAL_FILE_PATTERN.test(target)) {
-          targetType = 'map-local'
-          target = 'file://' + target.replace(/\\/g, '/')
-        }
-        return rules.map((rule) => ({ rule, target, targetType, enabled }))
+        const [target, ...targetRules] = parts
+        return targetRules.map((rule) => ({ rule, target, enabled }))
       }
+
+      const target = parts[parts.length - 1]
+      const targetRules = parts.slice(0, -1)
+      return targetRules.map((rule) => ({ rule, target, enabled }))
     })
 }
 
@@ -59,14 +33,7 @@ function rulesToEprc(rules: RuleItem[]): string {
   return rules
     .map((r) => {
       const prefix = r.enabled ? '' : '//'
-      let target = r.target
-
-      // 如果是 map-local 类型，转换 file:// 为本地路径显示
-      if (r.targetType === 'map-local' && target.startsWith('file://')) {
-        target = target.replace(/^file:\/\//, '').replace(/\//g, '\\')
-      }
-
-      return `${prefix}${r.rule} ${target}`
+      return `${prefix}${r.rule} ${r.target}`
     })
     .join('\n')
 }

@@ -18,7 +18,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
-import { Plus, Trash2, Pencil } from 'lucide-react'
+import { Plus, Trash2, Pencil, FileText, Code } from 'lucide-react'
 import { JsonTextarea } from '@/components/json-textarea'
 import type { MockRule } from '@/types'
 
@@ -39,6 +39,7 @@ const EMPTY_RULE: Omit<MockRule, 'id'> = {
   method: '*',
   statusCode: 200,
   delay: 0,
+  bodyType: 'inline',
   headers: {},
   body: '',
   enabled: true,
@@ -86,6 +87,7 @@ export function MockConfig({
       method: rule.method,
       statusCode: rule.statusCode,
       delay: rule.delay || 0,
+      bodyType: rule.bodyType || 'inline',
       headers: rule.headers,
       body: rule.body,
       enabled: rule.enabled,
@@ -156,6 +158,7 @@ export function MockConfig({
               <TableHead>URL 匹配</TableHead>
               <TableHead className="w-20">方法</TableHead>
               <TableHead className="w-20">状态码</TableHead>
+              <TableHead className="w-16">类型</TableHead>
               <TableHead className="w-20">延迟</TableHead>
               <TableHead className="w-24">操作</TableHead>
             </TableRow>
@@ -163,7 +166,7 @@ export function MockConfig({
           <TableBody>
             {mockRules.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                   暂无 Mock 规则，点击"新增规则"或从请求日志详情中创建
                 </TableCell>
               </TableRow>
@@ -200,6 +203,17 @@ export function MockConfig({
                     >
                       {rule.statusCode}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {rule.bodyType === 'file' ? (
+                      <Badge variant="outline" className="text-xs text-blue-600">
+                        <FileText className="h-3 w-3 mr-0.5" />文件
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs text-muted-foreground">
+                        <Code className="h-3 w-3 mr-0.5" />内容
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground font-mono">
                     {rule.delay ? `${rule.delay}ms` : '-'}
@@ -300,20 +314,70 @@ export function MockConfig({
                 />
               </div>
             </div>
-            {/* 响应 Body */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-muted-foreground">响应内容 (Body)</label>
-                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={formatBody}>
-                  格式化 JSON
-                </Button>
+            {/* 响应来源切换 */}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">响应来源</label>
+              <div className="flex gap-1 p-0.5 bg-muted rounded-md w-fit">
+                <button
+                  type="button"
+                  className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors ${
+                    editForm.bodyType !== 'file'
+                      ? 'bg-background shadow-sm text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => updateField('bodyType', 'inline')}
+                >
+                  <Code className="h-3 w-3" />
+                  自定义内容
+                </button>
+                <button
+                  type="button"
+                  className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors ${
+                    editForm.bodyType === 'file'
+                      ? 'bg-background shadow-sm text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => updateField('bodyType', 'file')}
+                >
+                  <FileText className="h-3 w-3" />
+                  本地文件
+                </button>
               </div>
-              <JsonTextarea
-                value={editForm.body}
-                onChange={(v) => updateField('body', v)}
-                placeholder='{"code": 0, "data": {...}}'
-              />
             </div>
+            {/* 响应 Body */}
+            {editForm.bodyType === 'file' ? (
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">
+                  本地文件路径
+                  <span className="ml-1 font-normal text-muted-foreground/70">
+                    （支持绝对路径，自动推断 MIME 类型）
+                  </span>
+                </label>
+                <Input
+                  value={editForm.body}
+                  onChange={(e) => updateField('body', e.target.value)}
+                  placeholder="如：/Users/me/project/dist/app.js"
+                  className="h-8 font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  匹配请求时返回该文件内容，适合替换线上 JS/CSS/JSON 等资源
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground">响应内容 (Body)</label>
+                  <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={formatBody}>
+                    格式化 JSON
+                  </Button>
+                </div>
+                <JsonTextarea
+                  value={editForm.body}
+                  onChange={(v) => updateField('body', v)}
+                  placeholder='{"code": 0, "data": {...}}'
+                />
+              </div>
+            )}
             {/* 启用 */}
             <div className="flex items-center gap-2">
               <Checkbox

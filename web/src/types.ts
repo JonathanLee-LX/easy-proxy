@@ -5,7 +5,6 @@ export interface ProxyRecord {
   target: string
   time: string
   mock?: boolean
-  mapLocal?: boolean
   protocol?: string // 'h2' | 'h1.1'
   statusCode?: number
   duration?: number // milliseconds
@@ -24,7 +23,6 @@ export interface RuleItem {
   enabled: boolean
   rule: string
   target: string
-  targetType?: 'proxy' | 'map-local'  // 规则类型：代理或 Map Local
 }
 
 export interface MockRule {
@@ -34,7 +32,8 @@ export interface MockRule {
   method: string
   statusCode: number
   delay: number // milliseconds, 0 = no delay
+  bodyType: 'inline' | 'file' // inline: 自定义内容, file: 本地文件路径
   headers: Record<string, string>
-  body: string
+  body: string // bodyType=inline 时为响应内容, bodyType=file 时为文件路径
   enabled: boolean
 }
