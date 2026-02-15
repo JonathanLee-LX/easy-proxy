@@ -37,6 +37,13 @@ function App() {
     setMockInitialData(null)
   }, [])
 
+  const handleReplay = useCallback(async (id: number) => {
+    // replayRequest 失败会直接抛出含后端错误信息的异常，由 DetailPanel 捕获显示
+    const result = await store.replayRequest(id)
+    store.fetchDetail(result.recordId)
+    return result
+  }, [store.replayRequest, store.fetchDetail])
+
   // When paused, keep a snapshot of records
   const displayRecords = recording ? filteredRecords : filteredRecords
 
@@ -134,6 +141,7 @@ function App() {
         loading={store.detailLoading}
         selectedRecord={store.records.find(r => r.id === store.selectedRecordId)}
         onCreateMock={handleCreateMockFromLog}
+        onReplay={handleReplay}
       />
     </div>
   )

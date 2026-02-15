@@ -243,6 +243,15 @@ export function useProxyStore() {
     }
   }, [])
 
+  const replayRequest = useCallback(async (id: number) => {
+    const res = await fetch(`/api/replay/${id}`, { method: 'POST' })
+    const data = await res.json()
+    if (data.status === 'success') {
+      return data as { status: string; recordId: number; logData: ProxyRecord }
+    }
+    throw new Error(data.error || '重放请求失败')
+  }, [])
+
   return {
     records,
     rules,
@@ -262,5 +271,6 @@ export function useProxyStore() {
     createMock,
     updateMock,
     deleteMock,
+    replayRequest,
   }
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -9,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Loader2, Wand2 } from 'lucide-react'
+import { Loader2, Wand2, RotateCw } from 'lucide-react'
 import { highlightJson } from '@/lib/json-highlight'
 import type { RecordDetail, ProxyRecord } from '@/types'
 
@@ -20,6 +21,7 @@ interface DetailPanelProps {
   loading: boolean
   selectedRecord?: ProxyRecord
   onCreateMock?: (data: { source: string; responseBody: string; statusCode: number }) => void
+  onReplay?: (id: number) => Promise<unknown>
 }
 
 function getStatusColor(code: number) {
@@ -68,7 +70,9 @@ function BodyView({ body }: { body: string }) {
   )
 }
 
-export function DetailPanel({ open, onClose, detail, loading, selectedRecord, onCreateMock }: DetailPanelProps) {
+export function DetailPanel({ open, onClose, detail, loading, selectedRecord, onCreateMock, onReplay }: DetailPanelProps) {
+  const [replaying, setReplaying] = useState(false)
+
   const handleCreateMock = () => {
     if (detail && selectedRecord && onCreateMock) {
       onCreateMock({
@@ -76,6 +80,22 @@ export function DetailPanel({ open, onClose, detail, loading, selectedRecord, on
         responseBody: detail.responseBody,
         statusCode: detail.statusCode,
       })
+    }
+  }
+
+  const [replayError, setReplayError] = useState<string | null>(null)
+
+  const handleReplay = async () => {
+    if (selectedRecord?.id != null && onReplay) {
+      setReplaying(true)
+      setReplayError(null)
+      try {
+        await onReplay(selectedRecord.id)
+      } catch (err) {
+        setReplayError((err as Error).message || '重放失败')
+      } finally {
+        setReplaying(false)
+      }
     }
   }
 
@@ -90,21 +110,42 @@ export function DetailPanel({ open, onClose, detail, loading, selectedRecord, on
                 {detail.statusCode} {detail.statusMessage}
               </Badge>
             )}
-            {detail && onCreateMock && !selectedRecord?.mock && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="ml-auto h-7 text-xs"
-                onClick={handleCreateMock}
-              >
-                <Wand2 className="h-3.5 w-3.5 mr-1" />
-                创建 Mock
-              </Button>
-            )}
+            <div className="flex items-center gap-1.5 ml-auto">
+              {detail && onReplay && selectedRecord?.id != null && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={handleReplay}
+                  disabled={replaying}
+                  title="使用相同的请求参数重新发送请求"
+                >
+                  <RotateCw className={`h-3.5 w-3.5 mr-1 ${replaying ? 'animate-spin' : ''}`} />
+                  {replaying ? '重放中...' : '重放'}
+                </Button>
+              )}
+              {detail && onCreateMock && !selectedRecord?.mock && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={handleCreateMock}
+                >
+                  <Wand2 className="h-3.5 w-3.5 mr-1" />
+                  创建 Mock
+                </Button>
+              )}
+            </div>
           </SheetTitle>
         </SheetHeader>
 
         <Separator />
+
+        {replayError && (
+          <div className="mx-4 mt-2 px-3 py-2 rounded-md bg-red-50 border border-red-200 text-red-700 text-xs">
+            {replayError}
+          </div>
+        )}
 
         {loading ? (
           <div className="flex-1 flex items-center justify-center">

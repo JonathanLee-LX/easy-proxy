@@ -6,6 +6,8 @@ export interface ProxyRecord {
   time: string
   mock?: boolean
   protocol?: string // 'h2' | 'h1.1'
+  statusCode?: number
+  duration?: number // milliseconds
 }
 
 export interface RecordDetail {
@@ -29,6 +31,7 @@ export interface MockRule {
   urlPattern: string
   method: string
   statusCode: number
+  delay: number // milliseconds, 0 = no delay
   headers: Record<string, string>
   body: string
   enabled: boolean

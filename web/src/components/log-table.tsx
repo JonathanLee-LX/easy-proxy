@@ -31,6 +31,19 @@ function getMethodColor(method: string) {
   }
 }
 
+function getStatusColor(code: number) {
+  if (code >= 500) return 'text-red-600'
+  if (code >= 400) return 'text-amber-600'
+  if (code >= 300) return 'text-blue-600'
+  if (code >= 200) return 'text-green-600'
+  return 'text-muted-foreground'
+}
+
+function formatDuration(ms: number) {
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
 export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: LogTableProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastCountRef = useRef(records.length)
@@ -85,9 +98,11 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
         {/* Header */}
         <div className="flex bg-muted/50 text-xs font-medium border-b">
           <div className="w-16 py-2 px-2">方法</div>
+          <div className="w-14 py-2 px-2">状态</div>
           <div className="flex-1 py-2 px-2 min-w-[200px]">源地址</div>
           <div className="flex-1 py-2 px-2 min-w-[200px]">目标地址</div>
           <div className="w-14 py-2 px-2">协议</div>
+          <div className="w-16 py-2 px-2">耗时</div>
           <div className="w-28 py-2 px-2 flex items-center gap-1">
             <button
               type="button"
@@ -132,6 +147,13 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                       {record.method}
                     </Badge>
                   </div>
+                  <div className="w-14 py-1.5 px-2">
+                    {record.statusCode != null && (
+                      <span className={`text-[10px] font-mono font-semibold ${getStatusColor(record.statusCode)}`}>
+                        {record.statusCode}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex-1 py-1.5 px-2 font-mono truncate min-w-[200px]" title={record.source}>
                     {record.source}
                   </div>
@@ -156,6 +178,9 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                         {record.protocol}
                       </Badge>
                     )}
+                  </div>
+                  <div className="w-16 py-1.5 px-2 text-muted-foreground font-mono text-[10px]">
+                    {record.duration != null && formatDuration(record.duration)}
                   </div>
                   <div className="w-28 py-1.5 px-2 text-muted-foreground font-mono">
                     {record.time}

@@ -275,6 +275,8 @@ function matchMockRule(url, method) {
  */
 function sendMockResponse(req, res, rule, logInfo) {
     const statusCode = rule.statusCode || 200
+    const delay = rule.delay || 0
+    const startTime = Date.now()
     // X-Mock-Rule 值可能含非 ASCII 字符（如中文），需要 encodeURI
     const mockRuleName = rule.name || rule.id.toString()
     const headers = {
@@ -286,50 +288,64 @@ function sendMockResponse(req, res, rule, logInfo) {
         ...rule.headers
     }
 
-    // 排空请求体（避免 keep-alive 连接残留数据），同时立即发送响应
+    // 排空请求体（避免 keep-alive 连接残留数据）
     req.on('error', () => {})
     req.resume()
-    try {
-        res.writeHead(statusCode, headers)
-        res.end(rule.body || '')
-    } catch (err) {
-        console.error('Mock 响应发送失败:', err.message)
+
+    const doSend = () => {
+        const duration = Date.now() - startTime
         try {
-            if (!res.headersSent) res.writeHead(statusCode)
+            res.writeHead(statusCode, headers)
             res.end(rule.body || '')
+        } catch (err) {
+            console.error('Mock 响应发送失败:', err.message)
+            try {
+                if (!res.headersSent) res.writeHead(statusCode)
+                res.end(rule.body || '')
+            } catch (_) {}
+        }
+
+        // 记录日志
+        const recordId = recordIdSeq++
+        const logData = {
+            id: recordId,
+            method: logInfo.method,
+            source: logInfo.source,
+            target: `[MOCK: ${rule.name || rule.urlPattern}]`,
+            time: new Date().toLocaleTimeString(),
+            mock: true,
+            statusCode,
+            duration
+        }
+        try {
+            localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
         } catch (_) {}
+        proxyRecordArr.push(logData)
+        if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+            const removed = proxyRecordArr.shift()
+            if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+        }
+        const detail = {
+            requestHeaders: req.headers || {},
+            requestBody: '',
+            responseHeaders: headers,
+            responseBody: rule.body || '',
+            statusCode,
+            statusMessage: 'OK (Mock)',
+            method: logInfo.method,
+            url: logInfo.source,
+        }
+        proxyRecordDetailMap.set(recordId, detail)
+        if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
+            const firstKey = proxyRecordDetailMap.keys().next().value
+            proxyRecordDetailMap.delete(firstKey)
+        }
     }
 
-    // 记录日志
-    const recordId = recordIdSeq++
-    const logData = {
-        id: recordId,
-        method: logInfo.method,
-        source: logInfo.source,
-        target: `[MOCK: ${rule.name || rule.urlPattern}]`,
-        time: new Date().toLocaleTimeString(),
-        mock: true
-    }
-    try {
-        localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
-    } catch (_) {}
-    proxyRecordArr.push(logData)
-    if (proxyRecordArr.length > MAX_RECORD_SIZE) {
-        const removed = proxyRecordArr.shift()
-        if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
-    }
-    const detail = {
-        requestHeaders: req.headers || {},
-        requestBody: '',
-        responseHeaders: headers,
-        responseBody: rule.body || '',
-        statusCode,
-        statusMessage: 'OK (Mock)'
-    }
-    proxyRecordDetailMap.set(recordId, detail)
-    if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
-        const firstKey = proxyRecordDetailMap.keys().next().value
-        proxyRecordDetailMap.delete(firstKey)
+    if (delay > 0) {
+        setTimeout(doSend, delay)
+    } else {
+        doSend()
     }
 }
 
@@ -523,6 +539,7 @@ const proxyServer = http.createServer((req, res) => {
                             urlPattern: data.urlPattern || '',
                             method: data.method || '*',
                             statusCode: data.statusCode || 200,
+                            delay: data.delay || 0,
                             headers: data.headers || {},
                             body: data.body || '',
                             enabled: data.enabled !== false
@@ -542,6 +559,126 @@ const proxyServer = http.createServer((req, res) => {
             // GET /api/mocks - 列出规则
             res.write(JSON.stringify(mockRules))
             res.end()
+        } else if (req.url.startsWith('/api/replay')) {
+            // POST /api/replay/:id - 重放请求
+            res.setHeader('Content-Type', 'application/json')
+            const replayMatch = req.url.match(/^\/api\/replay\/(\d+)$/)
+            if (req.method === 'POST' && replayMatch) {
+                const id = parseInt(replayMatch[1], 10)
+                const record = proxyRecordArr.find(r => r.id === id)
+                const detail = proxyRecordDetailMap.get(id)
+                if (!detail) {
+                    res.statusCode = 404
+                    res.write(JSON.stringify({ error: '请求详情已过期或不存在' }))
+                    res.end()
+                    return
+                }
+                // 优先使用代理后的实际目标地址（如 IP），确保重放到相同服务器
+                // Mock/Replay 等合成目标以 '[' 开头，此时回退到源地址
+                let replayUrl
+                if (record && record.target && !record.target.startsWith('[')) {
+                    replayUrl = record.target
+                } else {
+                    replayUrl = detail.url || (record && record.source)
+                }
+                const replayMethod = detail.method || (record && record.method) || 'GET'
+                const sourceUrl = detail.url || (record && record.source) || replayUrl
+                if (!replayUrl) {
+                    res.statusCode = 400
+                    res.write(JSON.stringify({ error: '无法获取原始请求 URL' }))
+                    res.end()
+                    return
+                }
+                try {
+                    const parsedUrl = new URL(replayUrl)
+                    const isHttps = parsedUrl.protocol === 'https:'
+                    const requestFn = isHttps ? https.request : http.request
+                    // 清理 headers，移除 HTTP/2 伪头
+                    const replayHeaders = { ...detail.requestHeaders }
+                    delete replayHeaders[':method']
+                    delete replayHeaders[':path']
+                    delete replayHeaders[':authority']
+                    delete replayHeaders[':scheme']
+                    // 保留原始 Host 头（用于服务器路由），若不存在才用目标 URL 的 host
+                    if (!replayHeaders['host'] && !replayHeaders['Host']) {
+                        replayHeaders['host'] = parsedUrl.host
+                    }
+                    const startTime = Date.now()
+                    const replayReq = requestFn(replayUrl, {
+                        method: replayMethod,
+                        headers: replayHeaders,
+                        rejectUnauthorized: false
+                    }, (replayRes) => {
+                        const chunks = []
+                        replayRes.on('data', chunk => chunks.push(chunk))
+                        replayRes.on('end', () => {
+                            const duration = Date.now() - startTime
+                            const resBody = Buffer.concat(chunks)
+                            const newRecordId = recordIdSeq++
+                            const logData = {
+                                id: newRecordId,
+                                method: replayMethod,
+                                source: sourceUrl,
+                                target: `[REPLAY] ${replayUrl}`,
+                                time: new Date().toLocaleTimeString(),
+                                statusCode: replayRes.statusCode,
+                                duration
+                            }
+                            try {
+                                localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
+                            } catch (_) {}
+                            proxyRecordArr.push(logData)
+                            if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+                                const removed = proxyRecordArr.shift()
+                                if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+                            }
+                            const safeStr = (buf, max, encoding) => {
+                                if (buf.length === 0) return ''
+                                if (encoding === 'gzip' || encoding === 'deflate' || encoding === 'br') {
+                                    try { buf = require('zlib').unzipSync(buf) } catch (e) {}
+                                }
+                                if (buf.length > max) return `(truncated, ${buf.length} bytes)\n` + buf.slice(0, max).toString('utf8')
+                                try { return buf.toString('utf8') } catch { return '(binary)' }
+                            }
+                            const responseEncoding = replayRes.headers && replayRes.headers['content-encoding']
+                            const newDetail = {
+                                requestHeaders: detail.requestHeaders,
+                                requestBody: detail.requestBody,
+                                responseHeaders: replayRes.headers,
+                                responseBody: safeStr(resBody, MAX_BODY_SIZE, responseEncoding),
+                                statusCode: replayRes.statusCode,
+                                statusMessage: replayRes.statusMessage,
+                                method: replayMethod,
+                                url: sourceUrl,
+                            }
+                            proxyRecordDetailMap.set(newRecordId, newDetail)
+                            if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
+                                const firstKey = proxyRecordDetailMap.keys().next().value
+                                proxyRecordDetailMap.delete(firstKey)
+                            }
+                            res.write(JSON.stringify({ status: 'success', recordId: newRecordId, logData }))
+                            res.end()
+                        })
+                    })
+                    replayReq.on('error', (err) => {
+                        res.statusCode = 502
+                        res.write(JSON.stringify({ error: '重放请求失败: ' + err.message }))
+                        res.end()
+                    })
+                    if (detail.requestBody) {
+                        replayReq.write(detail.requestBody)
+                    }
+                    replayReq.end()
+                } catch (err) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: '重放失败: ' + err.message }))
+                    res.end()
+                }
+            } else {
+                res.statusCode = 405
+                res.write(JSON.stringify({ error: 'Method not allowed' }))
+                res.end()
+            }
         } else if (hasReactBuild) {
             // Serve static files from React build
             let filePath = req.url === '/' ? '/index.html' : req.url
@@ -612,6 +749,7 @@ const proxyServer = http.createServer((req, res) => {
         req.on('data', chunk => reqChunks.push(chunk))
         req.on('end', () => {
             const reqBody = Buffer.concat(reqChunks)
+            const startTime = Date.now()
             const proxyReq = http.request(url, {
                 method: req.method,
                 headers: req.headers
@@ -631,7 +769,9 @@ const proxyServer = http.createServer((req, res) => {
                         method: req.method,
                         source,
                         target: url.href,
-                        time: new Date().toLocaleTimeString()
+                        time: new Date().toLocaleTimeString(),
+                        statusCode: proxyRes.statusCode,
+                        duration: Date.now() - startTime
                     }
                     localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
                     proxyRecordArr.push(logData)
@@ -661,7 +801,9 @@ const proxyServer = http.createServer((req, res) => {
                         responseHeaders: proxyRes.headers,
                         responseBody: safeStr(resBody, MAX_BODY_SIZE, responseEncoding),
                         statusCode: proxyRes.statusCode,
-                        statusMessage: proxyRes.statusMessage
+                        statusMessage: proxyRes.statusMessage,
+                        method: req.method,
+                        url: source,
                     }
                     proxyRecordDetailMap.set(recordId, detail)
                     if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
@@ -836,6 +978,7 @@ proxyServer.on('connect', async (req, socket, header) => {
                     req.on('data', chunk => reqChunks.push(chunk))
                     req.on('end', async () => {
                         const reqBody = Buffer.concat(reqChunks)
+                        const startTime = Date.now()
                         try {
                             const proxyRes = await makeProxyRequest(target, req.method, req.headers, reqBody)
                             const resChunks = []
@@ -856,7 +999,9 @@ proxyServer.on('connect', async (req, socket, header) => {
                                     source,
                                     target,
                                     time: new Date().toLocaleTimeString(),
-                                    protocol: proxyRes.protocol
+                                    protocol: proxyRes.protocol,
+                                    statusCode: proxyRes.statusCode,
+                                    duration: Date.now() - startTime
                                 }
                                 localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
                                 proxyRecordArr.push(logData)
@@ -886,7 +1031,9 @@ proxyServer.on('connect', async (req, socket, header) => {
                                     responseHeaders: proxyRes.headers,
                                     responseBody: safeStr(resBody, MAX_BODY_SIZE, responseEncoding),
                                     statusCode: proxyRes.statusCode,
-                                    statusMessage: proxyRes.statusMessage
+                                    statusMessage: proxyRes.statusMessage,
+                                    method: req.method,
+                                    url: source,
                                 }
                                 proxyRecordDetailMap.set(recordId, detail)
                                 if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {

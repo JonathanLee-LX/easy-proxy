@@ -32,6 +32,18 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
           const method = cleanTerm.slice(7).toUpperCase()
           matches = record.method.toUpperCase() === method
         }
+        // status: filter (e.g., status:200, status:4xx, status:5xx)
+        else if (cleanTerm.startsWith('status:')) {
+          const pattern = cleanTerm.slice(7).toLowerCase()
+          if (!record.statusCode) {
+            matches = false
+          } else if (pattern.includes('x')) {
+            const prefix = pattern.replace(/x/gi, '')
+            matches = record.statusCode.toString().startsWith(prefix)
+          } else {
+            matches = record.statusCode.toString() === pattern
+          }
+        }
         // domain: filter
         else if (cleanTerm.startsWith('domain:')) {
           const domain = cleanTerm.slice(7).toLowerCase()

@@ -38,6 +38,7 @@ const EMPTY_RULE: Omit<MockRule, 'id'> = {
   urlPattern: '',
   method: '*',
   statusCode: 200,
+  delay: 0,
   headers: {},
   body: '',
   enabled: true,
@@ -84,6 +85,7 @@ export function MockConfig({
       urlPattern: rule.urlPattern,
       method: rule.method,
       statusCode: rule.statusCode,
+      delay: rule.delay || 0,
       headers: rule.headers,
       body: rule.body,
       enabled: rule.enabled,
@@ -154,13 +156,14 @@ export function MockConfig({
               <TableHead>URL 匹配</TableHead>
               <TableHead className="w-20">方法</TableHead>
               <TableHead className="w-20">状态码</TableHead>
+              <TableHead className="w-20">延迟</TableHead>
               <TableHead className="w-24">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {mockRules.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                   暂无 Mock 规则，点击"新增规则"或从请求日志详情中创建
                 </TableCell>
               </TableRow>
@@ -197,6 +200,9 @@ export function MockConfig({
                     >
                       {rule.statusCode}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground font-mono">
+                    {rule.delay ? `${rule.delay}ms` : '-'}
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
@@ -258,7 +264,7 @@ export function MockConfig({
               />
             </div>
             {/* 方法和状态码 */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">HTTP 方法</label>
                 <select
@@ -280,6 +286,16 @@ export function MockConfig({
                   type="number"
                   value={editForm.statusCode}
                   onChange={(e) => updateField('statusCode', parseInt(e.target.value) || 200)}
+                  className="h-8"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">响应延迟 (ms)</label>
+                <Input
+                  type="number"
+                  value={editForm.delay}
+                  onChange={(e) => updateField('delay', parseInt(e.target.value) || 0)}
+                  placeholder="0"
                   className="h-8"
                 />
               </div>
