@@ -75,13 +75,15 @@ function resolveTargetUrl(url, ruleMap) {
     return targetURLObj.toString()
 }
 
-const BASE_PORT = parseInt(process.env.PORT) || 8989
+const parsedBasePort = parseInt(process.env.PORT, 10)
+const BASE_PORT = Number.isFinite(parsedBasePort) && parsedBasePort > 0 ? parsedBasePort : 8989
 
 async function getFreePort() {
-    // find a free port
-    setBasePort(BASE_PORT);
-    setHighestPort(9999);
-    return getPortPromise();
+    // portfinder requires stopPort >= basePort
+    const highestPort = Math.max(9999, BASE_PORT)
+    setBasePort(BASE_PORT)
+    setHighestPort(highestPort)
+    return getPortPromise()
 }
 
 const CONFIG_DIR = '.epconfig'
@@ -103,7 +105,7 @@ function getConfigCandidates(configDir, env) {
 const IP_PATTERN = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/
 const URL_PATTERN = /^https?:\/\//
 const FILE_PATTERN = /^file:\/\//
-const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/|^\\|^[^\0]+/  // Windows 盘符或 Unix 绝对路径或反斜杠开头路径
+const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/|^\\/  // Windows 盘符或 Unix 绝对路径或反斜杠开头路径
 
 /**
  * 解析 .eprc 格式，支持三种写法：

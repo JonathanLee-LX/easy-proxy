@@ -2,6 +2,14 @@
 
 > 产品定位：面向前端/全栈开发者的轻量级开发代理工具，核心价值 —— **简单、够用、开箱即用**。
 
+## 重构进展（插件架构 Phase 1）
+
+- 已完成插件运行时骨架（`PluginManager` + `HookDispatcher`）与 `off/shadow/on` pipeline
+- 已完成内置 `router`/`logger` 插件接线，`mock` 插件支持 inline 短路（默认关闭）
+- 已提供重构观测 API：`/api/pipeline/*`、`/api/plugins*`、`/api/refactor/status`
+- 已建立重构回归基线（`npm run test:refactor`）与 smoke 验证脚本（`npm run smoke:refactor`）
+- 下一阶段重点：按 host 白名单小流量 `on` 模式灰度 + 回滚演练
+
 ## 已实现功能
 
 | 模块 | 功能 | 状态 |

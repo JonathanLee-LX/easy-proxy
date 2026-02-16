@@ -16,6 +16,23 @@ if (!fs.existsSync(certDir)) {
 const { crtMgr, ensureRootCA } = require('./cert')
 const { WebSocket, WebSocketServer } = require('ws')
 const { copyHeaders, resolveTargetUrl, getFreePort, loadConfigFromFile, resolveConfigPath, ruleMapToEprcText, DEFAULT_CONFIG_PATH } = require('./helpers')
+const { PluginManager, HookDispatcher } = require('./core/plugin-runtime')
+const { bootstrapPlugins } = require('./core/plugin-bootstrap')
+const { createPipeline, normalizeMode } = require('./core/pipeline')
+const { createShadowCompareTracker } = require('./core/shadow-compare')
+const { evaluateShadowReadiness, buildReadinessAdvice } = require('./core/shadow-readiness')
+const { decideRoute } = require('./core/route-decision')
+const { sendShortResponse } = require('./core/short-response')
+const { safeBodyToString } = require('./core/body-utils')
+const { buildRefactorStatus } = require('./core/refactor-status')
+const { buildPluginHealth } = require('./core/plugin-health')
+const { parseHostAllowlist, createOnModeGate } = require('./core/on-mode-gate')
+const { createPipelineGate } = require('./core/pipeline-gate')
+const { buildRefactorConfig } = require('./core/refactor-config')
+const { createBuiltinPlugins } = require('./plugins/builtin')
+const { createBuiltinRouterPlugin } = require('./plugins/builtin/router-plugin')
+const { createBuiltinLoggerPlugin } = require('./plugins/builtin/logger-plugin')
+const { createBuiltinMockPlugin } = require('./plugins/builtin/mock-plugin')
 const chokidar = require('chokidar')
 const chalk = require('chalk')
 const { execSync } = require('child_process')
@@ -26,6 +43,27 @@ const log = _debug('log')
 
 // 是否启用启动后自动打开浏览器并设置代理（--open 或 EP_OPEN=1）
 const AUTO_OPEN = process.argv.includes('--open') || process.env.EP_OPEN === '1'
+const REFACTOR_CONFIG = buildRefactorConfig(process.env, {
+    normalizeMode,
+    parseHostAllowlist,
+})
+const PLUGIN_MODE = REFACTOR_CONFIG.pluginMode
+const SHADOW_WARN_MIN_SAMPLES = REFACTOR_CONFIG.shadowWarnMinSamples
+const SHADOW_WARN_DIFF_RATE = REFACTOR_CONFIG.shadowWarnDiffRate
+const PLUGIN_ON_HOSTS = REFACTOR_CONFIG.pluginOnHosts
+const ENABLE_BUILTIN_ROUTER_PLUGIN = REFACTOR_CONFIG.enableBuiltinRouter
+const ENABLE_BUILTIN_LOGGER_PLUGIN = REFACTOR_CONFIG.enableBuiltinLogger
+const ENABLE_BUILTIN_MOCK_PLUGIN = REFACTOR_CONFIG.enableBuiltinMock
+
+// Phase 1 骨架：先挂载运行时与 pipeline，默认 off 不改变现有行为
+const pluginManager = new PluginManager({ logger: console })
+const hookDispatcher = new HookDispatcher(pluginManager, { logger: console })
+const requestPipeline = createPipeline({
+    mode: PLUGIN_MODE,
+    pluginManager,
+    dispatcher: hookDispatcher,
+    logger: console,
+})
 
 let ruleMap = {}
 let currentConfig = null // { path, format } 当前生效的配置
@@ -36,6 +74,17 @@ const MAX_BODY_SIZE = 100 * 1024 // 100KB
 const proxyRecordArr = []
 let recordIdSeq = 0
 const proxyRecordDetailMap = new Map()
+const builtinLoggerPlugin = createBuiltinLoggerPlugin({ maxEntries: MAX_RECORD_SIZE })
+const shadowCompareTracker = createShadowCompareTracker({ maxSamples: 30 })
+const onModeGate = createOnModeGate({
+    mode: PLUGIN_MODE,
+    allowlist: PLUGIN_ON_HOSTS,
+})
+const pipelineGate = createPipelineGate({
+    requestPipeline,
+    onModeGate,
+    enableBuiltinMockPlugin: ENABLE_BUILTIN_MOCK_PLUGIN,
+})
 
 // ===== HTTP/2 代理支持 =====
 const h2SessionPool = new Map() // origin -> http2.ClientHttp2Session
@@ -951,20 +1000,12 @@ const proxyServer = http.createServer((req, res) => {
                                 const removed = proxyRecordArr.shift()
                                 if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
                             }
-                            const safeStr = (buf, max, encoding) => {
-                                if (buf.length === 0) return ''
-                                if (encoding === 'gzip' || encoding === 'deflate' || encoding === 'br') {
-                                    try { buf = require('zlib').unzipSync(buf) } catch (e) {}
-                                }
-                                if (buf.length > max) return `(truncated, ${buf.length} bytes)\n` + buf.slice(0, max).toString('utf8')
-                                try { return buf.toString('utf8') } catch { return '(binary)' }
-                            }
                             const responseEncoding = replayRes.headers && replayRes.headers['content-encoding']
                             const newDetail = {
                                 requestHeaders: detail.requestHeaders,
                                 requestBody: detail.requestBody,
                                 responseHeaders: replayRes.headers,
-                                responseBody: safeStr(resBody, MAX_BODY_SIZE, responseEncoding),
+                                responseBody: safeBodyToString(resBody, MAX_BODY_SIZE, responseEncoding),
                                 statusCode: replayRes.statusCode,
                                 statusMessage: replayRes.statusMessage,
                                 method: replayMethod,
@@ -998,6 +1039,167 @@ const proxyServer = http.createServer((req, res) => {
                 res.write(JSON.stringify({ error: 'Method not allowed' }))
                 res.end()
             }
+        } else if (req.url.startsWith('/api/pipeline/shadow-stats')) {
+            res.setHeader('Content-Type', 'application/json')
+            if (req.method === 'DELETE' || req.method === 'POST') {
+                shadowCompareTracker.reset()
+                onModeGate.reset()
+                res.write(JSON.stringify({
+                    status: 'success',
+                    stats: shadowCompareTracker.getStats(),
+                    onModeGate: onModeGate.getStats(),
+                }))
+            } else {
+                res.write(JSON.stringify({
+                    ...shadowCompareTracker.getStats(),
+                    onModeGate: onModeGate.getStats(),
+                }))
+            }
+            res.end()
+        } else if (req.url.startsWith('/api/pipeline/readiness')) {
+            res.setHeader('Content-Type', 'application/json')
+            const shadowStats = shadowCompareTracker.getStats()
+            const readiness = evaluateShadowReadiness(shadowStats, {
+                minSamples: SHADOW_WARN_MIN_SAMPLES,
+                maxDiffRate: SHADOW_WARN_DIFF_RATE,
+            })
+            const gateStats = onModeGate.getStats()
+            const advice = buildReadinessAdvice({
+                mode: requestPipeline.mode,
+                readiness,
+                allowlist: Array.from(PLUGIN_ON_HOSTS),
+                onModeGate: gateStats,
+            })
+            res.write(JSON.stringify({
+                mode: requestPipeline.mode,
+                readiness,
+                advice,
+                shadowStats,
+                onModeGate: gateStats,
+                allowlist: Array.from(PLUGIN_ON_HOSTS),
+            }))
+            res.end()
+        } else if (req.url.startsWith('/api/refactor/status')) {
+            res.setHeader('Content-Type', 'application/json')
+            const shadowStats = shadowCompareTracker.getStats()
+            const readiness = evaluateShadowReadiness(shadowStats, {
+                minSamples: SHADOW_WARN_MIN_SAMPLES,
+                maxDiffRate: SHADOW_WARN_DIFF_RATE,
+            })
+            const gateStats = onModeGate.getStats()
+            const advice = buildReadinessAdvice({
+                mode: requestPipeline.mode,
+                readiness,
+                allowlist: Array.from(PLUGIN_ON_HOSTS),
+                onModeGate: gateStats,
+            })
+            const pluginStats = hookDispatcher.getPluginStats ? hookDispatcher.getPluginStats() : {}
+            const plugins = pluginManager.getAll().map((plugin) => ({
+                id: plugin.manifest.id,
+                name: plugin.manifest.name,
+                version: plugin.manifest.version,
+                state: pluginManager.getState(plugin.manifest.id),
+                stats: pluginStats[plugin.manifest.id] || null,
+            }))
+            const payload = buildRefactorStatus({
+                runtime: {
+                    pid: process.pid,
+                    uptimeSec: Math.floor(process.uptime()),
+                },
+                mode: requestPipeline.mode,
+                allowlist: Array.from(PLUGIN_ON_HOSTS),
+                readiness,
+                advice,
+                shadowStats,
+                onModeGate: gateStats,
+                plugins,
+                loggerSummary: typeof builtinLoggerPlugin.getSummary === 'function'
+                    ? builtinLoggerPlugin.getSummary()
+                    : null,
+            })
+            res.write(JSON.stringify(payload))
+            res.end()
+        } else if (req.url.startsWith('/api/pipeline/config')) {
+            res.setHeader('Content-Type', 'application/json')
+            res.write(JSON.stringify({
+                mode: requestPipeline.mode,
+                allowlist: Array.from(PLUGIN_ON_HOSTS),
+                plugins: {
+                    router: ENABLE_BUILTIN_ROUTER_PLUGIN,
+                    logger: ENABLE_BUILTIN_LOGGER_PLUGIN,
+                    mock: ENABLE_BUILTIN_MOCK_PLUGIN,
+                },
+                thresholds: {
+                    shadowWarnMinSamples: SHADOW_WARN_MIN_SAMPLES,
+                    shadowWarnDiffRate: SHADOW_WARN_DIFF_RATE,
+                },
+                onModeGate: onModeGate.getStats(),
+            }))
+            res.end()
+        } else if (req.url.startsWith('/api/plugins/logger')) {
+            res.setHeader('Content-Type', 'application/json')
+            const pluginStats = hookDispatcher.getPluginStats ? hookDispatcher.getPluginStats() : {}
+            res.write(JSON.stringify({
+                pluginId: 'builtin.logger',
+                mode: requestPipeline.mode,
+                stats: pluginStats['builtin.logger'] || null,
+                summary: typeof builtinLoggerPlugin.getSummary === 'function'
+                    ? builtinLoggerPlugin.getSummary()
+                    : null,
+                recent: typeof builtinLoggerPlugin.getRecentEntries === 'function'
+                    ? builtinLoggerPlugin.getRecentEntries()
+                    : [],
+            }))
+            res.end()
+        } else if (req.url.startsWith('/api/plugins/mock')) {
+            res.setHeader('Content-Type', 'application/json')
+            const pluginStats = hookDispatcher.getPluginStats ? hookDispatcher.getPluginStats() : {}
+            res.write(JSON.stringify({
+                pluginId: 'builtin.mock',
+                enabled: ENABLE_BUILTIN_MOCK_PLUGIN,
+                mode: requestPipeline.mode,
+                stats: pluginStats['builtin.mock'] || null,
+                takeoverRule: 'only inline mock in on mode and host-gated',
+                allowlist: Array.from(PLUGIN_ON_HOSTS),
+            }))
+            res.end()
+        } else if (req.url.startsWith('/api/plugins/health')) {
+            res.setHeader('Content-Type', 'application/json')
+            const pluginStats = hookDispatcher.getPluginStats ? hookDispatcher.getPluginStats() : {}
+            const pluginStates = {}
+            const manifests = pluginManager.getAll().map((plugin) => {
+                pluginStates[plugin.manifest.id] = pluginManager.getState(plugin.manifest.id)
+                return plugin.manifest
+            })
+            const health = buildPluginHealth({
+                plugins: manifests,
+                pluginStates,
+                pluginStats,
+            })
+            res.write(JSON.stringify({
+                mode: requestPipeline.mode,
+                ...health,
+            }))
+            res.end()
+        } else if (req.url.startsWith('/api/plugins')) {
+            res.setHeader('Content-Type', 'application/json')
+            const pluginStats = hookDispatcher.getPluginStats ? hookDispatcher.getPluginStats() : {}
+            const plugins = pluginManager.getAll().map((plugin) => ({
+                id: plugin.manifest.id,
+                name: plugin.manifest.name,
+                version: plugin.manifest.version,
+                hooks: plugin.manifest.hooks,
+                permissions: plugin.manifest.permissions,
+                priority: plugin.manifest.priority,
+                state: pluginManager.getState(plugin.manifest.id),
+                stats: pluginStats[plugin.manifest.id] || null,
+            }))
+            res.write(JSON.stringify({
+                mode: requestPipeline.mode,
+                total: plugins.length,
+                plugins,
+            }))
+            res.end()
         } else if (hasReactBuild) {
             // Serve static files from React build
             let filePath = req.url === '/' ? '/index.html' : req.url
@@ -1058,22 +1260,40 @@ const proxyServer = http.createServer((req, res) => {
 
         // 检查 mock 规则
         const mockRule = matchMockRule(source, req.method)
-        if (mockRule) {
+        if (mockRule && !shouldUsePluginMockForRequest(source, mockRule)) {
             return sendMockResponse(req, res, mockRule, { method: req.method, source, target: source })
         }
 
-        // 检查 file:// 规则（Map Local）
-        const resolvedTarget = resolveTargetUrl(source, ruleMap)
-        if (resolvedTarget && resolvedTarget.startsWith('file://')) {
-            return handleMapLocalRequest(req, res, source, resolvedTarget)
-        }
-
-        const target = resolvedTarget || source
-        const url = new URL(target.startsWith('http') ? target : req.url, 'http://' + req.headers.host)
         const reqChunks = []
         req.on('data', chunk => reqChunks.push(chunk))
-        req.on('end', () => {
+        req.on('end', async () => {
             const reqBody = Buffer.concat(reqChunks)
+            const legacyResolvedTarget = resolveTargetUrl(source, ruleMap)
+            if (legacyResolvedTarget && legacyResolvedTarget.startsWith('file://')) {
+                return handleMapLocalRequest(req, res, source, legacyResolvedTarget)
+            }
+            const legacyTarget = legacyResolvedTarget || source
+            const routeDecision = await decideRoute({
+                source,
+                method: req.method,
+                headers: req.headers,
+                reqBody,
+                legacyTarget,
+                requestPipeline,
+                canUsePipelineExecuteForSource,
+                observeShadowDecision,
+                fallbackResolve: async () => ({
+                    target: legacyTarget,
+                    shortCircuited: false,
+                    response: null,
+                }),
+            })
+            let target = routeDecision.target
+            if (routeDecision.shortCircuited) {
+                sendShortResponse(res, routeDecision.response)
+                return
+            }
+            const url = new URL(target.startsWith('http') ? target : req.url, 'http://' + req.headers.host)
             const startTime = Date.now()
             const proxyReq = http.request(url, {
                 method: req.method,
@@ -1098,33 +1318,20 @@ const proxyServer = http.createServer((req, res) => {
                         statusCode: proxyRes.statusCode,
                         duration: Date.now() - startTime
                     }
+                    emitLegacyResponseToPlugins(logData)
                     localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
                     proxyRecordArr.push(logData)
                     if (proxyRecordArr.length > MAX_RECORD_SIZE) {
                         const removed = proxyRecordArr.shift()
                         if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
                     }
-                    const safeStr = (buf, max, encoding) => {
-                        if (buf.length === 0) return ''
-                        // 解压压缩的响应体
-                        if (encoding === 'gzip' || encoding === 'deflate' || encoding === 'br') {
-                            try {
-                                const zlib = require('zlib')
-                                buf = zlib.unzipSync(buf)
-                            } catch (e) {
-                                // 解压失败，返回原始内容
-                            }
-                        }
-                        if (buf.length > max) return `(truncated, ${buf.length} bytes)\n` + buf.slice(0, max).toString('utf8')
-                        try { return buf.toString('utf8') } catch { return '(binary)' }
-                    }
                     // 获取响应编码，用于解压
                     const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                     const detail = {
                         requestHeaders: req.headers,
-                        requestBody: safeStr(reqBody, MAX_BODY_SIZE),
+                        requestBody: safeBodyToString(reqBody, MAX_BODY_SIZE),
                         responseHeaders: proxyRes.headers,
-                        responseBody: safeStr(resBody, MAX_BODY_SIZE, responseEncoding),
+                        responseBody: safeBodyToString(resBody, MAX_BODY_SIZE, responseEncoding),
                         statusCode: proxyRes.statusCode,
                         statusMessage: proxyRes.statusMessage,
                         method: req.method,
@@ -1138,6 +1345,7 @@ const proxyServer = http.createServer((req, res) => {
                 })
             })
             proxyReq.on('error', (err) => {
+                emitLegacyErrorToPlugins('onBeforeResponse', err)
                 console.error('HTTP proxy error:', err.message)
                 if (!res.headersSent) {
                     res.writeHead(502)
@@ -1216,10 +1424,15 @@ function openBrowserWithProxy(url, proxyServer, remoteDebuggingPort) {
 
 ;(async () => {
     await ensureRootCA()
+    await bootstrapBuiltinPlugins()
     const port = await getFreePort()
     proxyServer.listen(port, () => {
         const proxyUrl = `http://127.0.0.1:${port}`
         proxyDebug('proxy-server start on ' + chalk.green(proxyUrl))
+        proxyDebug('plugin pipeline mode: ' + chalk.cyan(requestPipeline.mode))
+        if (requestPipeline.mode === 'on') {
+            proxyDebug('plugin on host allowlist: ' + (PLUGIN_ON_HOSTS.size > 0 ? Array.from(PLUGIN_ON_HOSTS).join(',') : '(all)'))
+        }
         if (process.env.EP_MCP) {
             const mcpFile = path.join(epDir, 'mcp-proxy-url.json')
             const mcpData = { proxyUrl }
@@ -1289,26 +1502,39 @@ proxyServer.on('connect', async (req, socket, header) => {
 
                     // 检查 mock 规则
                     const mockRule = matchMockRule(source, req.method)
-                    if (mockRule) {
+                    if (mockRule && !shouldUsePluginMockForRequest(source, mockRule)) {
                         return sendMockResponse(req, res, mockRule, { method: req.method, source, target: source })
-                    }
-
-                    // 检查 file:// 规则（Map Local）
-                    const resolvedTarget = resolveTargetUrl(source, ruleMap)
-                    if (resolvedTarget && resolvedTarget.startsWith('file://')) {
-                        return handleMapLocalRequest(req, res, source, resolvedTarget)
-                    }
-
-                    // resolve targetUrl by against ruleMap
-                    let target = resolvedTarget
-                    if(!target) {
-                        target = source
                     }
 
                     const reqChunks = []
                     req.on('data', chunk => reqChunks.push(chunk))
                     req.on('end', async () => {
                         const reqBody = Buffer.concat(reqChunks)
+                        const legacyResolvedTarget = resolveTargetUrl(source, ruleMap)
+                        if (legacyResolvedTarget && legacyResolvedTarget.startsWith('file://')) {
+                            return handleMapLocalRequest(req, res, source, legacyResolvedTarget)
+                        }
+                        const legacyTarget = legacyResolvedTarget || source
+                        const routeDecision = await decideRoute({
+                            source,
+                            method: req.method,
+                            headers: req.headers,
+                            reqBody,
+                            legacyTarget,
+                            requestPipeline,
+                            canUsePipelineExecuteForSource,
+                            observeShadowDecision,
+                            fallbackResolve: async () => ({
+                                target: legacyTarget,
+                                shortCircuited: false,
+                                response: null,
+                            }),
+                        })
+                        let target = routeDecision.target
+                        if (routeDecision.shortCircuited) {
+                            sendShortResponse(res, routeDecision.response)
+                            return
+                        }
                         const startTime = Date.now()
                         try {
                             const proxyRes = await makeProxyRequest(target, req.method, req.headers, reqBody)
@@ -1334,33 +1560,20 @@ proxyServer.on('connect', async (req, socket, header) => {
                                     statusCode: proxyRes.statusCode,
                                     duration: Date.now() - startTime
                                 }
+                                emitLegacyResponseToPlugins(logData)
                                 localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
                                 proxyRecordArr.push(logData)
                                 if (proxyRecordArr.length > MAX_RECORD_SIZE) {
                                     const removed = proxyRecordArr.shift()
                                     if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
                                 }
-                                const safeStr = (buf, max, encoding) => {
-                                    if (buf.length === 0) return ''
-                                    // 解压压缩的响应体
-                                    if (encoding === 'gzip' || encoding === 'deflate' || encoding === 'br') {
-                                        try {
-                                            const zlib = require('zlib')
-                                            buf = zlib.unzipSync(buf)
-                                        } catch (e) {
-                                            // 解压失败，返回原始内容
-                                        }
-                                    }
-                                    if (buf.length > max) return `(truncated, ${buf.length} bytes)\n` + buf.slice(0, max).toString('utf8')
-                                    try { return buf.toString('utf8') } catch { return '(binary)' }
-                                }
                                 // 获取响应编码，用于解压
                                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                                 const detail = {
                                     requestHeaders: req.headers,
-                                    requestBody: safeStr(reqBody, MAX_BODY_SIZE),
+                                    requestBody: safeBodyToString(reqBody, MAX_BODY_SIZE),
                                     responseHeaders: proxyRes.headers,
-                                    responseBody: safeStr(resBody, MAX_BODY_SIZE, responseEncoding),
+                                    responseBody: safeBodyToString(resBody, MAX_BODY_SIZE, responseEncoding),
                                     statusCode: proxyRes.statusCode,
                                     statusMessage: proxyRes.statusMessage,
                                     method: req.method,
@@ -1381,6 +1594,7 @@ proxyServer.on('connect', async (req, socket, header) => {
                             } else {
                                 console.error('[error debug]', originHost + req.url, err)
                             }
+                            emitLegacyErrorToPlugins('onBeforeResponse', err)
                             if (!res.headersSent) {
                                 try { res.writeHead(502) } catch (_) {}
                             }
@@ -1482,4 +1696,112 @@ function logRuleMap() {
         return arr
     }, [])
     console.table(ruleArr)
+}
+
+function observeShadowDecision(method, source, baseTarget, observedTarget) {
+    const isDiff = shadowCompareTracker.record({ method, source, baseTarget, observedTarget })
+    if (isDiff) {
+        proxyDebug('pipeline shadow target diff:', baseTarget, '->', observedTarget)
+    }
+    const stats = shadowCompareTracker.getStats()
+    if (
+        stats.total >= SHADOW_WARN_MIN_SAMPLES &&
+        stats.diffRate >= SHADOW_WARN_DIFF_RATE &&
+        stats.total % SHADOW_WARN_MIN_SAMPLES === 0
+    ) {
+        console.warn(
+            '[shadow-compare] diff rate is high: total=%d diff=%d diffRate=%s threshold=%s',
+            stats.total,
+            stats.diff,
+            stats.diffRate,
+            SHADOW_WARN_DIFF_RATE
+        )
+    }
+    if (stats.total > 0 && stats.total % 200 === 0) {
+        proxyDebug(
+            'pipeline shadow compare stats total=%d diff=%d diffRate=%s',
+            stats.total,
+            stats.diff,
+            stats.diffRate
+        )
+    }
+}
+
+function emitLegacyResponseToPlugins(logData) {
+    const startContext = {
+        request: {
+            method: logData.method,
+            url: logData.source,
+            headers: {},
+            body: '',
+        },
+        meta: {
+            _pluginRequestStartAt: Date.now() - (logData.duration || 0),
+            source: 'legacy-bridge',
+        },
+    }
+    const responseContext = {
+        request: {
+            method: logData.method,
+            url: logData.source,
+            headers: {},
+            body: '',
+        },
+        response: {
+            statusCode: logData.statusCode,
+            headers: {},
+            body: '',
+        },
+        meta: {
+            _pluginRequestStartAt: Date.now() - (logData.duration || 0),
+            source: 'legacy-bridge',
+        },
+    }
+    hookDispatcher.dispatch('onRequestStart', startContext)
+        .then(() => hookDispatcher.dispatch('onAfterResponse', responseContext))
+        .catch(() => {})
+}
+
+function emitLegacyErrorToPlugins(phase, error) {
+    const ctx = {
+        phase,
+        error,
+        meta: {
+            source: 'legacy-bridge',
+        },
+    }
+    hookDispatcher.dispatch('onError', ctx).catch(() => {})
+}
+
+function shouldApplyPipelineOnForSource(source) {
+    return pipelineGate.shouldApplyPipelineOnForSource(source)
+}
+
+function canUsePipelineExecuteForSource(source) {
+    return pipelineGate.canUsePipelineExecuteForSource(source)
+}
+
+async function bootstrapBuiltinPlugins() {
+    const plugins = createBuiltinPlugins({
+        enableMock: ENABLE_BUILTIN_MOCK_PLUGIN,
+        enableRouter: ENABLE_BUILTIN_ROUTER_PLUGIN,
+        enableLogger: ENABLE_BUILTIN_LOGGER_PLUGIN,
+        createMockPlugin: createBuiltinMockPlugin,
+        createRouterPlugin: createBuiltinRouterPlugin,
+        findMockMatch: (url, method) => matchMockRule(url, method),
+        getRuleMap: () => ruleMap,
+        loggerPlugin: builtinLoggerPlugin,
+    })
+    await bootstrapPlugins({
+        pluginManager,
+        plugins,
+        contextFactory: (manifest) => ({
+            manifest,
+            log: console,
+        }),
+    })
+}
+
+function shouldUsePluginMockForRequest(source, rule) {
+    return pipelineGate.shouldUsePluginMockForRequest(source, rule)
 }

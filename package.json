@@ -5,7 +5,13 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "start:plugin:off": "EP_PLUGIN_MODE=off node index.js",
+    "start:plugin:shadow": "EP_PLUGIN_MODE=shadow node index.js",
+    "start:plugin:on": "EP_PLUGIN_MODE=on node index.js",
+    "smoke:refactor": "node scripts/refactor-smoke.js",
+    "drill:rollout": "node scripts/plugin-rollout-drill.js",
     "test": "mocha tests",
+    "test:refactor": "node -c index.js && npm test",
     "prepublish": "npm run test",
     "start:open": "node index.js --open",
     "mcp": "node mcp-server.js",
