@@ -18,7 +18,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
-import { Plus, Trash2, Pencil, FileText, Code } from 'lucide-react'
+import { Plus, Trash2, Pencil, FileText, Code, ChevronDown, ChevronRight } from 'lucide-react'
 import { JsonTextarea } from '@/components/json-textarea'
 import type { MockRule } from '@/types'
 
@@ -58,6 +58,9 @@ export function MockConfig({
   const [editId, setEditId] = useState<number | null>(null) // null = create, number = edit
   const [editForm, setEditForm] = useState<Omit<MockRule, 'id'>>(EMPTY_RULE)
   const [saving, setSaving] = useState(false)
+  const [headersExpanded, setHeadersExpanded] = useState(false)
+  const [headerKey, setHeaderKey] = useState('')
+  const [headerValue, setHeaderValue] = useState('')
 
   useEffect(() => {
     fetchMocks()
@@ -69,13 +72,24 @@ export function MockConfig({
       setEditId(null)
       setEditForm({ ...EMPTY_RULE, ...initialEditData })
       setEditOpen(true)
+      setHeadersExpanded(Object.keys(initialEditData.headers || {}).length > 0)
       onInitialEditConsumed?.()
     }
   }, [initialEditData, onInitialEditConsumed])
 
+  // 关闭编辑面板时重置 header 输入框
+  useEffect(() => {
+    if (!editOpen) {
+      setHeaderKey('')
+      setHeaderValue('')
+      setHeadersExpanded(false)
+    }
+  }, [editOpen])
+
   const openCreate = useCallback(() => {
     setEditId(null)
     setEditForm(EMPTY_RULE)
+    setHeadersExpanded(false)
     setEditOpen(true)
   }, [])
 
@@ -88,10 +102,11 @@ export function MockConfig({
       statusCode: rule.statusCode,
       delay: rule.delay || 0,
       bodyType: rule.bodyType || 'inline',
-      headers: rule.headers,
+      headers: rule.headers || {},
       body: rule.body,
       enabled: rule.enabled,
     })
+    setHeadersExpanded(!!rule.headers && Object.keys(rule.headers).length > 0)
     setEditOpen(true)
   }, [])
 
@@ -159,14 +174,15 @@ export function MockConfig({
               <TableHead className="w-20">方法</TableHead>
               <TableHead className="w-20">状态码</TableHead>
               <TableHead className="w-16">类型</TableHead>
-              <TableHead className="w-20">延迟</TableHead>
-              <TableHead className="w-24">操作</TableHead>
+              <TableHead className="w-16">延迟</TableHead>
+              <TableHead className="w-16">响应头</TableHead>
+              <TableHead className="w-20">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {mockRules.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                   暂无 Mock 规则，点击"新增规则"或从请求日志详情中创建
                 </TableCell>
               </TableRow>
@@ -217,6 +233,15 @@ export function MockConfig({
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground font-mono">
                     {rule.delay ? `${rule.delay}ms` : '-'}
+                  </TableCell>
+                  <TableCell>
+                    {rule.headers && Object.keys(rule.headers).length > 0 ? (
+                      <Badge variant="secondary" className="text-xs">
+                        {Object.keys(rule.headers).length}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
@@ -378,6 +403,104 @@ export function MockConfig({
                 />
               </div>
             )}
+            {/* Response Headers */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                onClick={() => setHeadersExpanded(!headersExpanded)}
+              >
+                {headersExpanded ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+                响应头 (Headers)
+                {Object.keys(editForm.headers || {}).length > 0 && (
+                  <Badge variant="secondary" className="ml-1 text-xs">
+                    {Object.keys(editForm.headers || {}).length}
+                  </Badge>
+                )}
+              </button>
+              {headersExpanded && (
+                <div className="space-y-2 pl-4 border-l-2 border-muted">
+                  {/* 已添加的 headers 列表 */}
+                  {Object.entries(editForm.headers || {}).length > 0 ? (
+                    <div className="space-y-1">
+                      {Object.entries(editForm.headers || {}).map(([key, value]) => (
+                        <div key={key} className="flex items-center gap-2">
+                          <Input
+                            value={key}
+                            onChange={(e) => {
+                              const newHeaders = { ...editForm.headers }
+                              delete newHeaders[key]
+                              if (e.target.value) {
+                                newHeaders[e.target.value] = value
+                              }
+                              updateField('headers', newHeaders)
+                            }}
+                            placeholder="Header 名称"
+                            className="h-7 font-mono text-xs flex-1"
+                          />
+                          <Input
+                            value={value}
+                            onChange={(e) => {
+                              updateField('headers', { ...editForm.headers, [key]: e.target.value })
+                            }}
+                            placeholder="Header 值"
+                            className="h-7 font-mono text-xs flex-1"
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => {
+                              const newHeaders = { ...editForm.headers }
+                              delete newHeaders[key]
+                              updateField('headers', newHeaders)
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">暂无自定义响应头</p>
+                  )}
+                  {/* 新增 header */}
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={headerKey}
+                      onChange={(e) => setHeaderKey(e.target.value)}
+                      placeholder="Header 名称"
+                      className="h-7 font-mono text-xs flex-1"
+                    />
+                    <Input
+                      value={headerValue}
+                      onChange={(e) => setHeaderValue(e.target.value)}
+                      placeholder="Header 值"
+                      className="h-7 font-mono text-xs flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7"
+                      onClick={() => {
+                        if (headerKey && headerValue) {
+                          updateField('headers', { ...editForm.headers, [headerKey]: headerValue })
+                          setHeaderKey('')
+                          setHeaderValue('')
+                        }
+                      }}
+                      disabled={!headerKey || !headerValue}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
             {/* 启用 */}
             <div className="flex items-center gap-2">
               <Checkbox

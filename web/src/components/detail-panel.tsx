@@ -20,7 +20,7 @@ interface DetailPanelProps {
   detail: RecordDetail | null
   loading: boolean
   selectedRecord?: ProxyRecord
-  onCreateMock?: (data: { source: string; responseBody: string; statusCode: number }) => void
+  onCreateMock?: (data: { source: string; responseBody: string; statusCode: number; responseHeaders?: Record<string, string> }) => void
   onReplay?: (id: number) => Promise<unknown>
 }
 
@@ -79,6 +79,7 @@ export function DetailPanel({ open, onClose, detail, loading, selectedRecord, on
         source: selectedRecord.source,
         responseBody: detail.responseBody,
         statusCode: detail.statusCode,
+        responseHeaders: detail.responseHeaders,
       })
     }
   }
