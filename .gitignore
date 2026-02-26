@@ -12,7 +12,9 @@ core/**/*.map
 plugins/**/*.js
 plugins/**/*.d.ts
 plugins/**/*.map
-!plugins/**/*.spec.js
+tests/**/*.js
+tests/**/*.d.ts
+tests/**/*.map
 helpers.js
 helpers.d.ts
 helpers.*.map

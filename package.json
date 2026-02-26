@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc -p tsconfig.test.json",
     "build:watch": "tsc --watch",
     "prebuild": "rm -rf dist",
     "start": "npm run build && node index.js",
@@ -13,7 +13,7 @@
     "start:plugin:on": "EP_PLUGIN_MODE=on npm start",
     "smoke:refactor": "node scripts/refactor-smoke.js",
     "drill:rollout": "node scripts/plugin-rollout-drill.js",
-    "test": "mocha tests",
+    "test": "mocha 'dist/**/*.spec.js' 'dist/**/index.js'",
     "test:refactor": "npm run build && node -c index.js && npm test",
     "prepublish": "npm run build && npm run test",
     "start:open": "npm run build && node index.js --open",
@@ -41,7 +41,8 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^18.13.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^18.19.130",
     "@types/ws": "^8.5.4",
     "mocha": "^10.2.0",
     "nodemon": "^2.0.20",

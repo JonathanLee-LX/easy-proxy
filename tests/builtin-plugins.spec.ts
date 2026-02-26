@@ -17,7 +17,7 @@ describe('builtin router plugin', () => {
         }
         plugin.onBeforeProxy(ctx)
         assert.strictEqual(ctx.target, 'https://127.0.0.1:8080/path')
-        assert.strictEqual(ctx.meta.routerMatched, true)
+        assert.strictEqual((ctx.meta as any).routerMatched, true)
     })
 
     it('keeps target when no rule matched', () => {
@@ -34,7 +34,7 @@ describe('builtin router plugin', () => {
         }
         plugin.onBeforeProxy(ctx)
         assert.strictEqual(ctx.target, 'https://a.com/path')
-        assert.strictEqual(ctx.meta.routerMatched, undefined)
+        assert.strictEqual((ctx.meta as any).routerMatched, undefined)
     })
 })
 
@@ -93,3 +93,4 @@ describe('builtin logger plugin', () => {
     })
 })
 
+export {};

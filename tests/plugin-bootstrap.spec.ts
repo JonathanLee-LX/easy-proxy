@@ -29,3 +29,4 @@ describe('plugin-bootstrap bootstrapPlugins', () => {
     })
 })
 
+export {};

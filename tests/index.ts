@@ -75,4 +75,4 @@ describe('Test resolveTargetUrl function.', function () {
             'wss://localhost:8000/dev-server/133/n0gang51/websocket'
         )
     })
-});
+});export {};

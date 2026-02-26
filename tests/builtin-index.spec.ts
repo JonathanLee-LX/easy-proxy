@@ -20,3 +20,4 @@ describe('plugins/builtin createBuiltinPlugins', () => {
     })
 })
 
+export {};

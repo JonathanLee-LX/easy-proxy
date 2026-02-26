@@ -23,3 +23,4 @@ describe('body-utils safeBodyToString', () => {
     })
 })
 
+export {};

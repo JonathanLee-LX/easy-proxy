@@ -46,3 +46,4 @@ describe('refactor-config buildRefactorConfig', () => {
     })
 })
 
+export {};

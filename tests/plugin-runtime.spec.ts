@@ -1,7 +1,7 @@
 const assert = require('assert')
 const { PluginManager, HookDispatcher } = require('../dist/core/plugin-runtime')
 
-function createPlugin(overrides = {}) {
+function createPlugin(overrides: any = {}) {
     return {
         manifest: {
             id: 'test.plugin',
@@ -152,3 +152,4 @@ describe('plugin-runtime HookDispatcher', () => {
     })
 })
 
+export {};

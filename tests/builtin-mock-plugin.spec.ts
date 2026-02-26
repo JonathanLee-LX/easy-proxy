@@ -26,7 +26,7 @@ describe('builtin mock plugin', () => {
         assert.strictEqual(shortRes.statusCode, 201)
         assert.strictEqual(shortRes.headers['x-test'], '1')
         assert.strictEqual(shortRes.body, '{"ok":true}')
-        assert.strictEqual(ctx.meta.mockRuleId, 1)
+        assert.strictEqual((ctx.meta as any).mockRuleId, 1)
     })
 
     it('skips non-inline file mock rules', async () => {
@@ -71,3 +71,4 @@ describe('builtin mock plugin', () => {
     })
 })
 
+export {};

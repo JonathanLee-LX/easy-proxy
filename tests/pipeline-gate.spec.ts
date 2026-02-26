@@ -45,3 +45,4 @@ describe('pipeline-gate createPipelineGate', () => {
     })
 })
 
+export {};

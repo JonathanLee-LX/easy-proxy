@@ -36,3 +36,4 @@ describe('short-response sendShortResponse', () => {
     })
 })
 
+export {};

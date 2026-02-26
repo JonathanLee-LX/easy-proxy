@@ -41,3 +41,4 @@ describe('plugin-health buildPluginHealth', () => {
     })
 })
 
+export {};
