@@ -314,3 +314,9 @@ type Plugin = {
 - 输出“Phase 1 任务拆解看板”（按 Agent 维度分配）。
 - 定义基线回归清单（功能/性能/稳定性）。
 
+---
+
+## 15. 相关文档
+
+- [ADR-001: Plugin API 与 Hook 协议](./ADR-001-plugin-api.md) - 插件 API 接口定版
+- [插件系统完整开发指南](./PLUGIN_SYSTEM_GUIDE.md) - 详细的插件开发教程，包含接口说明、示例代码和最佳实践
