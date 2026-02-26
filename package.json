@@ -4,16 +4,19 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "start:plugin:off": "EP_PLUGIN_MODE=off node index.js",
-    "start:plugin:shadow": "EP_PLUGIN_MODE=shadow node index.js",
-    "start:plugin:on": "EP_PLUGIN_MODE=on node index.js",
+    "build": "tsc && tsc -p tsconfig.test.json",
+    "build:watch": "tsc --watch",
+    "prebuild": "rm -rf dist",
+    "start": "npm run build && node index.js",
+    "start:plugin:off": "EP_PLUGIN_MODE=off npm start",
+    "start:plugin:shadow": "EP_PLUGIN_MODE=shadow npm start",
+    "start:plugin:on": "EP_PLUGIN_MODE=on npm start",
     "smoke:refactor": "node scripts/refactor-smoke.js",
     "drill:rollout": "node scripts/plugin-rollout-drill.js",
-    "test": "mocha tests",
-    "test:refactor": "node -c index.js && npm test",
-    "prepublish": "npm run test",
-    "start:open": "node index.js --open",
+    "test": "mocha 'dist/**/*.spec.js' 'dist/**/index.js'",
+    "test:refactor": "npm run build && node -c index.js && npm test",
+    "prepublish": "npm run build && npm run test",
+    "start:open": "npm run build && node index.js --open",
     "mcp": "node mcp-server.js",
     "build:web": "cd web && pnpm run build",
     "dev:web": "cd web && pnpm run dev",
@@ -38,9 +41,11 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^18.13.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^18.19.130",
     "@types/ws": "^8.5.4",
     "mocha": "^10.2.0",
-    "nodemon": "^2.0.20"
+    "nodemon": "^2.0.20",
+    "typescript": "^5.9.3"
   }
 }
