@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { createPipeline, normalizeMode } = require('../core/pipeline')
+const { createPipeline, normalizeMode } = require('../dist/pipeline')
 
 describe('pipeline normalizeMode', () => {
     it('falls back to off for unsupported modes', () => {

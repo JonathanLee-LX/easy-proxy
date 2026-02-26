@@ -3,7 +3,7 @@
     "target": "ES2020",
     "module": "commonjs",
     "lib": ["ES2020"],
-    "outDir": "./core",
+    "outDir": "./dist",
     "rootDir": "./core",
     "strict": true,
     "esModuleInterop": true,
@@ -22,7 +22,7 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "allowJs": true,
+    "allowJs": false,
     "checkJs": false
   },
   "include": [
@@ -31,7 +31,6 @@
   "exclude": [
     "node_modules",
     "dist",
-    "web",
-    "core/**/*.js"
+    "web"
   ]
 }

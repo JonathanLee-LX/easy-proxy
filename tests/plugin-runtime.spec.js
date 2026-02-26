@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { PluginManager, HookDispatcher } = require('../core/plugin-runtime')
+const { PluginManager, HookDispatcher } = require('../dist/plugin-runtime')
 
 function createPlugin(overrides = {}) {
     return {

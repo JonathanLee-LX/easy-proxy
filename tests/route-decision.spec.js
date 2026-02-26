@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { decideRoute } = require('../core/route-decision')
+const { decideRoute } = require('../dist/route-decision')
 
 describe('route-decision decideRoute', () => {
     it('uses pipeline path when canUse returns true', async () => {

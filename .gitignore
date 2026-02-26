@@ -5,3 +5,7 @@ node_modules
 solution-*.png
 web/node_modules
 web/dist
+dist
+core/**/*.js
+core/**/*.d.ts
+core/**/*.map

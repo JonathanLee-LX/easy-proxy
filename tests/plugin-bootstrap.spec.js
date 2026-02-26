@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { bootstrapPlugins } = require('../core/plugin-bootstrap')
+const { bootstrapPlugins } = require('../dist/plugin-bootstrap')
 
 describe('plugin-bootstrap bootstrapPlugins', () => {
     it('registers plugins and starts manager lifecycle', async () => {

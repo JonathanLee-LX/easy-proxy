@@ -1,6 +1,6 @@
 const assert = require('assert')
 const zlib = require('zlib')
-const { safeBodyToString } = require('../core/body-utils')
+const { safeBodyToString } = require('../dist/body-utils')
 
 describe('body-utils safeBodyToString', () => {
     it('returns empty for empty buffer', () => {

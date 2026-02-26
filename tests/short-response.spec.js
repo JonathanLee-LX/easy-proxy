@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { normalizeShortResponse, sendShortResponse } = require('../core/short-response')
+const { normalizeShortResponse, sendShortResponse } = require('../dist/short-response')
 
 describe('short-response normalizeShortResponse', () => {
     it('uses defaults when fields are missing', () => {
