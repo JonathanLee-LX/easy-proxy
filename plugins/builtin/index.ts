@@ -1,21 +1,23 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createBuiltinPlugins = createBuiltinPlugins;
-function createBuiltinPlugins(options) {
-    const plugins = [];
+import { Plugin, BuiltinPluginsOptions } from '../../core/types';
+
+export function createBuiltinPlugins(options: BuiltinPluginsOptions): Plugin[] {
+    const plugins: Plugin[] = [];
+    
     if (options.enableMock) {
         plugins.push(options.createMockPlugin({
-            findMatch: options.findMockMatch,
+            findMatch: options.findMockMatch!,
         }));
     }
+    
     if (options.enableRouter) {
         plugins.push(options.createRouterPlugin({
-            getRuleMap: options.getRuleMap,
+            getRuleMap: options.getRuleMap!,
         }));
     }
+    
     if (options.enableLogger && options.loggerPlugin) {
         plugins.push(options.loggerPlugin);
     }
+    
     return plugins;
 }
-//# sourceMappingURL=index.js.map

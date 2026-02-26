@@ -1,47 +1,12 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.crtMgr = void 0;
-exports.ensureRootCA = ensureRootCA;
-const EasyCert = require("node-easy-cert");
-const os = __importStar(require("os"));
-const inquirer = __importStar(require("inquirer"));
-const child_process_1 = require("child_process");
-const fs_1 = require("fs");
-const path = __importStar(require("path"));
+const EasyCert = require('node-easy-cert');
+import * as os from 'os';
+const inquirer = require('inquirer');
+import { execSync } from 'child_process';
+import { stat, mkdirSync } from 'fs';
+import * as path from 'path';
+
 const rootDirPath = path.resolve(os.homedir(), '.ep', 'ca');
+
 const options = {
     rootDirPath: rootDirPath,
     inMemory: false,
@@ -52,41 +17,53 @@ const options = {
         { shortName: 'OU', value: 'easy-proxy SSL Proxy' }
     ]
 };
+
 const easyCert = new EasyCert(options);
 const crtMgr = Object.assign({}, easyCert);
-exports.crtMgr = crtMgr;
+
 crtMgr.ifRootCAFileExists = easyCert.isRootCAFileExists;
-async function doGenerate(overwrite) {
+
+interface CertPaths {
+    keyPath: string;
+    crtPath: string;
+}
+
+async function doGenerate(overwrite: boolean): Promise<CertPaths> {
     const rootOptions = {
         commonName: 'easy-proxy',
         overwrite: overwrite
     };
+
     return new Promise((resolvePromise, reject) => {
-        (0, fs_1.stat)(rootDirPath, (err, stats) => {
+        stat(rootDirPath, (err, stats) => {
             if (err) {
-                (0, fs_1.mkdirSync)(rootDirPath, { recursive: true });
-            }
-            else if (stats.isDirectory()) {
+                mkdirSync(rootDirPath, { recursive: true });
+            } else if (stats.isDirectory()) {
                 // directory exists
             }
-            easyCert.generateRootCA(rootOptions, (error, keyPath, crtPath) => {
-                if (error)
-                    reject(error);
-                else
-                    resolvePromise({ keyPath, crtPath });
+
+            easyCert.generateRootCA(rootOptions, (error: Error | null, keyPath: string, crtPath: string) => {
+                if (error) reject(error);
+                else resolvePromise({ keyPath, crtPath });
             });
         });
     });
 }
-async function getCAStatus() {
-    const result = {
+
+interface CAStatus {
+    exist: boolean;
+    trusted?: boolean;
+}
+
+// Exported for future use
+export async function getCAStatus(): Promise<CAStatus> {
+    const result: CAStatus = {
         exist: false,
     };
     const ifExist = easyCert.isRootCAFileExists();
     if (!ifExist) {
         return result;
-    }
-    else {
+    } else {
         result.exist = true;
         if (!/^win/.test(process.platform)) {
             result.trusted = easyCert.ifRootCATrusted;
@@ -94,33 +71,33 @@ async function getCAStatus() {
         return result;
     }
 }
-function openCertForUser(rootCAPath) {
+
+function openCertForUser(rootCAPath: string): void {
     const platform = os.platform();
     if (platform === 'darwin') {
         try {
-            (0, child_process_1.execSync)(`open "${rootCAPath}"`, { stdio: 'inherit' });
+            execSync(`open "${rootCAPath}"`, { stdio: 'inherit' });
             console.log('\n已打开证书文件，请在 Keychain Access 中：');
             console.log('  1. 双击证书 -> 展开「Trust」');
             console.log('  2. 将「When using this certificate」设为「Always Trust」');
             console.log('  3. 关闭窗口并输入密码保存\n');
-        }
-        catch (err) {
+        } catch (err) {
             console.log('证书路径:', rootCAPath);
         }
-    }
-    else if (platform === 'win32') {
+    } else if (platform === 'win32') {
         try {
-            (0, child_process_1.execSync)(`start "" "${rootCAPath}"`, { stdio: 'inherit' });
+            execSync(`start "" "${rootCAPath}"`, { stdio: 'inherit' });
             console.log('\n已打开证书，请按系统提示安装并信任。\n');
-        }
-        catch (err) {
+        } catch (err) {
             console.log('证书路径:', rootCAPath);
         }
     }
 }
-async function trustRootCA() {
+
+async function trustRootCA(): Promise<void> {
     const platform = os.platform();
     const rootCAPath = crtMgr.getRootCAFilePath();
+
     const answer = await inquirer.prompt([
         {
             type: 'list',
@@ -133,45 +110,48 @@ async function trustRootCA() {
             ]
         }
     ]);
+
     if (answer.trustCA === 'manual') {
         openCertForUser(rootCAPath);
         return;
     }
+
     if (answer.trustCA === 'skip') {
         console.log('证书路径:', rootCAPath, '- 请稍后手动添加信任以支持 HTTPS 代理。');
         return;
     }
+
     if (platform === 'darwin' && answer.trustCA === 'auto') {
         try {
-            (0, child_process_1.execSync)(`sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "${rootCAPath}"`, {
+            execSync(`sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "${rootCAPath}"`, {
                 stdio: 'inherit'
             });
             console.log('根证书已成功添加到系统信任。');
-        }
-        catch (err) {
+        } catch (err) {
             console.error('自动添加失败，正在打开证书文件供手动添加...');
             openCertForUser(rootCAPath);
         }
-    }
-    else if (platform === 'win32' && answer.trustCA === 'auto') {
+    } else if (platform === 'win32' && answer.trustCA === 'auto') {
         openCertForUser(rootCAPath);
     }
 }
-async function ensureRootCA() {
+
+export async function ensureRootCA(): Promise<void> {
     if (!crtMgr.ifRootCAFileExists()) {
         const { keyPath, crtPath } = await doGenerate(false);
         console.log('根证书已生成:', keyPath, crtPath);
     }
-    const isTrusted = await new Promise((resolve, reject) => {
-        crtMgr.ifRootCATrusted((err, trusted) => {
-            if (err)
-                resolve(false);
-            else
-                resolve(trusted);
+
+    const isTrusted = await new Promise<boolean>((resolve) => {
+        crtMgr.ifRootCATrusted((err: Error, trusted: boolean) => {
+            if (err) resolve(false);
+            else resolve(trusted);
         });
     });
+
     if (!isTrusted && !process.env.EP_HEADLESS && !process.env.EP_MCP) {
         await trustRootCA();
     }
 }
-//# sourceMappingURL=cert.js.map
+
+export { crtMgr };

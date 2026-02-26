@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { buildRefactorStatus } = require('../dist/refactor-status')
+const { buildRefactorStatus } = require('../dist/core/refactor-status')
 
 describe('refactor-status buildRefactorStatus', () => {
     it('returns normalized status payload', () => {

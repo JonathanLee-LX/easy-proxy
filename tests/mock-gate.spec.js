@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { shouldUsePluginMock } = require('../dist/mock-gate')
+const { shouldUsePluginMock } = require('../dist/core/mock-gate')
 
 describe('mock-gate shouldUsePluginMock', () => {
     it('returns false when plugin is disabled', () => {

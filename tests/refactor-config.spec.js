@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { buildRefactorConfig, parseBool } = require('../dist/refactor-config')
+const { buildRefactorConfig, parseBool } = require('../dist/core/refactor-config')
 
 describe('refactor-config parseBool', () => {
     it('parses truthy and falsy strings', () => {

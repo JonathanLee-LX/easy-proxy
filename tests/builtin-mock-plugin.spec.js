@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { createBuiltinMockPlugin } = require('../plugins/builtin/mock-plugin')
+const { createBuiltinMockPlugin } = require('../dist/plugins/builtin/mock-plugin')
 
 describe('builtin mock plugin', () => {
     it('short-circuits inline mock response', async () => {

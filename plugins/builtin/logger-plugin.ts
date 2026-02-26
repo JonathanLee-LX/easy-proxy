@@ -1,13 +1,19 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createBuiltinLoggerPlugin = createBuiltinLoggerPlugin;
-function createBuiltinLoggerPlugin(options = {}) {
+import { Plugin, LoggerPluginOptions, HookContext, ResponseContext, LoggerEntry, LoggerSummary } from '../../core/types';
+
+type StatusBucket = '2xx' | '3xx' | '4xx' | '5xx' | 'other';
+
+interface LoggerPlugin extends Plugin {
+    getRecentEntries(): LoggerEntry[];
+    getSummary(): LoggerSummary;
+}
+
+export function createBuiltinLoggerPlugin(options: LoggerPluginOptions = {}): LoggerPlugin {
     const maxEntries = typeof options.maxEntries === 'number' ? options.maxEntries : 1000;
-    const entries = [];
+    const entries: LoggerEntry[] = [];
     const counters = {
         totalResponses: 0,
         totalErrors: 0,
-        byMethod: Object.create(null),
+        byMethod: Object.create(null) as Record<string, number>,
         byStatusBucket: {
             '2xx': 0,
             '3xx': 0,
@@ -16,11 +22,12 @@ function createBuiltinLoggerPlugin(options = {}) {
             other: 0,
         },
         duration: {
-            min: null,
-            max: null,
+            min: null as number | null,
+            max: null as number | null,
             sum: 0,
         },
     };
+
     return {
         manifest: {
             id: 'builtin.logger',
@@ -32,15 +39,16 @@ function createBuiltinLoggerPlugin(options = {}) {
             hooks: ['onRequestStart', 'onAfterResponse', 'onError'],
             priority: 90,
         },
-        async setup() { },
-        onRequestStart(ctx) {
+        async setup() {},
+        onRequestStart(ctx: HookContext): void {
             ctx.meta._pluginRequestStartAt = Date.now();
         },
-        onAfterResponse(ctx) {
-            const startAt = ctx.meta._pluginRequestStartAt || Date.now();
+        onAfterResponse(ctx: ResponseContext): void {
+            const startAt = (ctx.meta._pluginRequestStartAt as number) || Date.now();
             const duration = Date.now() - startAt;
             const statusCode = ctx.response.statusCode;
             const method = String(ctx.request.method || 'UNKNOWN').toUpperCase();
+            
             entries.push({
                 type: 'response',
                 method,
@@ -49,6 +57,7 @@ function createBuiltinLoggerPlugin(options = {}) {
                 duration,
                 ts: Date.now(),
             });
+            
             counters.totalResponses += 1;
             counters.byMethod[method] = (counters.byMethod[method] || 0) + 1;
             const bucket = statusToBucket(statusCode);
@@ -56,10 +65,10 @@ function createBuiltinLoggerPlugin(options = {}) {
             counters.duration.sum += duration;
             counters.duration.min = counters.duration.min == null ? duration : Math.min(counters.duration.min, duration);
             counters.duration.max = counters.duration.max == null ? duration : Math.max(counters.duration.max, duration);
-            if (entries.length > maxEntries)
-                entries.shift();
+            
+            if (entries.length > maxEntries) entries.shift();
         },
-        onError(ctx) {
+        onError(ctx: any): void {
             entries.push({
                 type: 'error',
                 phase: ctx.phase,
@@ -67,13 +76,12 @@ function createBuiltinLoggerPlugin(options = {}) {
                 ts: Date.now(),
             });
             counters.totalErrors += 1;
-            if (entries.length > maxEntries)
-                entries.shift();
+            if (entries.length > maxEntries) entries.shift();
         },
-        getRecentEntries() {
+        getRecentEntries(): LoggerEntry[] {
             return entries.slice();
         },
-        getSummary() {
+        getSummary(): LoggerSummary {
             return {
                 totalResponses: counters.totalResponses,
                 totalErrors: counters.totalErrors,
@@ -88,15 +96,11 @@ function createBuiltinLoggerPlugin(options = {}) {
         },
     };
 }
-function statusToBucket(statusCode) {
-    if (statusCode >= 200 && statusCode < 300)
-        return '2xx';
-    if (statusCode >= 300 && statusCode < 400)
-        return '3xx';
-    if (statusCode >= 400 && statusCode < 500)
-        return '4xx';
-    if (statusCode >= 500 && statusCode < 600)
-        return '5xx';
+
+function statusToBucket(statusCode: number): StatusBucket {
+    if (statusCode >= 200 && statusCode < 300) return '2xx';
+    if (statusCode >= 300 && statusCode < 400) return '3xx';
+    if (statusCode >= 400 && statusCode < 500) return '4xx';
+    if (statusCode >= 500 && statusCode < 600) return '5xx';
     return 'other';
 }
-//# sourceMappingURL=logger-plugin.js.map

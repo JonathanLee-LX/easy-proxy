@@ -1,6 +1,6 @@
 const assert = require('assert')
-const { createBuiltinRouterPlugin } = require('../plugins/builtin/router-plugin')
-const { createBuiltinLoggerPlugin } = require('../plugins/builtin/logger-plugin')
+const { createBuiltinRouterPlugin } = require('../dist/plugins/builtin/router-plugin')
+const { createBuiltinLoggerPlugin } = require('../dist/plugins/builtin/logger-plugin')
 
 describe('builtin router plugin', () => {
     it('rewrites target when rule matched', () => {

@@ -1,8 +1,8 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createBuiltinMockPlugin = createBuiltinMockPlugin;
-function createBuiltinMockPlugin(options) {
+import { Plugin, MockPluginOptions, HookContext } from '../../core/types';
+
+export function createBuiltinMockPlugin(options: MockPluginOptions): Plugin {
     const findMatch = options.findMatch;
+    
     return {
         manifest: {
             id: 'builtin.mock',
@@ -14,19 +14,19 @@ function createBuiltinMockPlugin(options) {
             hooks: ['onBeforeProxy'],
             priority: 20,
         },
-        async setup() { },
-        async onBeforeProxy(ctx) {
-            if (!ctx || !ctx.request)
-                return;
+        async setup() {},
+        async onBeforeProxy(ctx: HookContext): Promise<void> {
+            if (!ctx || !ctx.request) return;
+            
             const rule = findMatch(ctx.request.url || '', ctx.request.method);
-            if (!rule)
-                return;
-            if (rule.bodyType && rule.bodyType !== 'inline')
-                return;
+            if (!rule) return;
+            if (rule.bodyType && rule.bodyType !== 'inline') return;
+
             const delay = Number(rule.delay || 0);
             if (delay > 0) {
                 await new Promise((resolve) => setTimeout(resolve, delay));
             }
+
             ctx.meta.mockRuleId = rule.id;
             ctx.meta.mockRuleName = rule.name || '';
             ctx.respond({
@@ -44,4 +44,3 @@ function createBuiltinMockPlugin(options) {
         },
     };
 }
-//# sourceMappingURL=mock-plugin.js.map

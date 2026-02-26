@@ -1,56 +1,25 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_CONFIG_PATH = exports.CONFIG_DIR = void 0;
-exports.copyHeaders = copyHeaders;
-exports.resolveTargetUrl = resolveTargetUrl;
-exports.getFreePort = getFreePort;
-exports.parseEprc = parseEprc;
-exports.ruleMapToEprcText = ruleMapToEprcText;
-exports.resolveConfigPath = resolveConfigPath;
-exports.loadConfigFromFile = loadConfigFromFile;
-exports.loadConfig = loadConfig;
-const portfinder_1 = require("portfinder");
-const os = __importStar(require("os"));
-const path = __importStar(require("path"));
-const fs_1 = require("fs");
-function copyHeaders(sourceReq, targetReq) {
+import { getPortPromise, setBasePort, setHighestPort } from 'portfinder';
+import * as os from 'os';
+import * as path from 'path';
+import { readFileSync, existsSync } from 'fs';
+import * as http from 'http';
+
+export interface ConfigCandidate {
+    path: string;
+    format: 'json' | 'js' | 'eprc';
+}
+
+export interface ConfigResult {
+    path: string;
+    format: 'json' | 'js' | 'eprc';
+}
+
+export type RuleMap = Record<string, string>;
+
+export function copyHeaders(sourceReq: http.IncomingMessage, targetReq: http.ClientRequest): http.ClientRequest {
     for (const name in sourceReq.headers) {
         if (Object.hasOwnProperty.call(sourceReq.headers, name)) {
-            if (name === 'origin')
-                continue;
+            if (name === 'origin') continue;
             const value = sourceReq.headers[name];
             if (value !== undefined) {
                 targetReq.setHeader(name, value);
@@ -59,46 +28,59 @@ function copyHeaders(sourceReq, targetReq) {
     }
     return targetReq;
 }
-function resolveTargetUrl(url, ruleMap) {
+
+export function resolveTargetUrl(url: string, ruleMap: RuleMap): string | null {
     const originUrlObj = new URL(url);
     const tK = Object.keys(ruleMap).find(pattern => new RegExp(pattern).test(url));
-    if (!tK)
-        return null;
+    if (!tK) return null;
+    
     let urlSegment = ruleMap[tK];
+    
     if (!urlSegment.startsWith('http') && !urlSegment.startsWith('ws') && !urlSegment.startsWith('file')) {
         urlSegment = originUrlObj.protocol + urlSegment;
     }
+
     if (urlSegment.startsWith('file://')) {
         return urlSegment;
     }
+
     const targetURLObj = new URL(urlSegment);
+
     if (!targetURLObj.port && originUrlObj.port) {
         targetURLObj.port = originUrlObj.port;
     }
+
     if (targetURLObj.pathname === '/' && originUrlObj.pathname !== '/') {
         targetURLObj.pathname = originUrlObj.pathname;
     }
+
     if (targetURLObj.search === '' && originUrlObj.search) {
         targetURLObj.search = originUrlObj.search;
     }
+
     const originIsWs = /^wss?:\/\//.test(url);
     const targetIsHttp = /^https?:\/\//.test(targetURLObj.toString());
     if (originIsWs && targetIsHttp) {
         targetURLObj.protocol = originUrlObj.protocol;
     }
+
     return targetURLObj.toString();
 }
+
 const parsedBasePort = parseInt(process.env.PORT || '', 10);
 const BASE_PORT = Number.isFinite(parsedBasePort) && parsedBasePort > 0 ? parsedBasePort : 8989;
-async function getFreePort() {
+
+export async function getFreePort(): Promise<number> {
     const highestPort = Math.max(9999, BASE_PORT);
-    (0, portfinder_1.setBasePort)(BASE_PORT);
-    (0, portfinder_1.setHighestPort)(highestPort);
-    return (0, portfinder_1.getPortPromise)();
+    setBasePort(BASE_PORT);
+    setHighestPort(highestPort);
+    return getPortPromise();
 }
-exports.CONFIG_DIR = '.epconfig';
-exports.DEFAULT_CONFIG_PATH = path.resolve(os.homedir(), '.ep', '.eprc');
-function getConfigCandidates(configDir, env) {
+
+export const CONFIG_DIR = '.epconfig';
+export const DEFAULT_CONFIG_PATH = path.resolve(os.homedir(), '.ep', '.eprc');
+
+function getConfigCandidates(configDir: string, env: string): ConfigCandidate[] {
     const prefix = path.join(configDir, `.${env}`);
     return [
         { path: prefix + '.json', format: 'json' },
@@ -106,20 +88,23 @@ function getConfigCandidates(configDir, env) {
         { path: prefix, format: 'eprc' }
     ];
 }
+
 const IP_PATTERN = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/;
 const URL_PATTERN = /^https?:\/\//;
 const FILE_PATTERN = /^file:\/\//;
 const LOCAL_FILE_PATTERN = /^[A-Za-z]:\\|^\/|^\\/;
-function parseEprc(content) {
+
+export function parseEprc(content: string): RuleMap {
     return content.split(/\r?\n/).reduce((acc, line) => {
         const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//'))
-            return acc;
+        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//')) return acc;
+        
         const parts = trimmed.split(/\s+/).filter(Boolean);
-        if (parts.length < 2)
-            return acc;
-        let target;
-        let rules;
+        if (parts.length < 2) return acc;
+        
+        let target: string;
+        let rules: string[];
+        
         if (FILE_PATTERN.test(parts[0]) || LOCAL_FILE_PATTERN.test(parts[0])) {
             [target, ...rules] = parts;
             if (!FILE_PATTERN.test(target)) {
@@ -127,11 +112,9 @@ function parseEprc(content) {
                     target = 'file://' + (target.replace(/\\/g, '/'));
                 }
             }
-        }
-        else if (IP_PATTERN.test(parts[0]) || URL_PATTERN.test(parts[0])) {
+        } else if (IP_PATTERN.test(parts[0]) || URL_PATTERN.test(parts[0])) {
             [target, ...rules] = parts;
-        }
-        else {
+        } else {
             const reversed = [...parts].reverse();
             target = reversed[0];
             rules = reversed.slice(1);
@@ -139,68 +122,70 @@ function parseEprc(content) {
                 target = 'file://' + (target.replace(/\\/g, '/'));
             }
         }
+        
         rules.forEach(rule => { acc[rule] = target; });
         return acc;
-    }, Object.create(null));
+    }, Object.create(null) as RuleMap);
 }
-function ruleMapToEprcText(ruleMap) {
+
+export function ruleMapToEprcText(ruleMap: RuleMap): string {
     const entries = Object.entries(ruleMap);
-    if (entries.length === 0)
-        return '';
-    const byTarget = {};
+    if (entries.length === 0) return '';
+    
+    const byTarget: Record<string, string[]> = {};
     entries.forEach(([rule, target]) => {
-        if (!byTarget[target])
-            byTarget[target] = [];
+        if (!byTarget[target]) byTarget[target] = [];
         byTarget[target].push(rule);
     });
+    
     return Object.entries(byTarget)
         .map(([target, rules]) => {
-        const targetFirst = IP_PATTERN.test(target) || URL_PATTERN.test(target) || FILE_PATTERN.test(target);
-        let displayTarget = target;
-        if (FILE_PATTERN.test(target)) {
-            displayTarget = target.replace(/^file:\/\//, '').replace(/\//g, path.sep);
-        }
-        return targetFirst ? `${displayTarget} ${rules.join(' ')}` : `${rules.join(' ')} ${displayTarget}`;
-    })
+            const targetFirst = IP_PATTERN.test(target) || URL_PATTERN.test(target) || FILE_PATTERN.test(target);
+            let displayTarget = target;
+            if (FILE_PATTERN.test(target)) {
+                displayTarget = target.replace(/^file:\/\//, '').replace(/\//g, path.sep);
+            }
+            return targetFirst ? `${displayTarget} ${rules.join(' ')}` : `${rules.join(' ')} ${displayTarget}`;
+        })
         .join('\n');
 }
-function resolveConfigPath() {
+
+export function resolveConfigPath(): ConfigResult | null {
     const cwd = process.cwd();
-    const configDir = path.join(cwd, exports.CONFIG_DIR);
-    if (!(0, fs_1.existsSync)(configDir))
-        return null;
+    const configDir = path.join(cwd, CONFIG_DIR);
+    if (!existsSync(configDir)) return null;
+
     const env = process.env.EP_ENV || 'eprc';
     const candidates = getConfigCandidates(configDir, env);
     for (const { path: filePath, format } of candidates) {
-        if ((0, fs_1.existsSync)(filePath)) {
+        if (existsSync(filePath)) {
             return { path: filePath, format };
         }
     }
     return null;
 }
-function loadConfigFromFile(configPath, format) {
+
+export function loadConfigFromFile(configPath: string, format: 'eprc' | 'json' | 'js'): RuleMap {
     try {
         if (format === 'eprc') {
-            const content = (0, fs_1.readFileSync)(configPath, 'utf8');
+            const content = readFileSync(configPath, 'utf8');
             return parseEprc(content);
         }
         if (format === 'json') {
-            const content = (0, fs_1.readFileSync)(configPath, 'utf8');
+            const content = readFileSync(configPath, 'utf8');
             const data = JSON.parse(content);
             const rules = data.rules || data;
-            const result = {};
+            const result: RuleMap = {};
             for (const [key, value] of Object.entries(rules)) {
                 if (Array.isArray(value)) {
                     for (const domain of value) {
-                        result[domain] = key;
+                        result[domain as string] = key;
                     }
-                }
-                else if (typeof value === 'string') {
+                } else if (typeof value === 'string') {
                     const trimmedValue = value.trim();
                     if (IP_PATTERN.test(trimmedValue) || URL_PATTERN.test(trimmedValue) || FILE_PATTERN.test(trimmedValue)) {
                         result[key] = value;
-                    }
-                    else {
+                    } else {
                         const domains = trimmedValue.split(/\s+/).filter(Boolean);
                         for (const domain of domains) {
                             result[domain] = key;
@@ -215,15 +200,14 @@ function loadConfigFromFile(configPath, format) {
             const rules = mod.rules ?? mod.default?.rules ?? mod;
             return typeof rules === 'object' && rules !== null ? rules : {};
         }
-    }
-    catch (err) {
+    } catch (err: any) {
         console.error('加载配置失败:', configPath, err.message);
     }
     return {};
 }
+
 /** @deprecated 使用 loadConfigFromFile */
-function loadConfig(filePath) {
-    const content = (0, fs_1.readFileSync)(filePath, 'utf8');
+export function loadConfig(filePath: string): RuleMap {
+    const content = readFileSync(filePath, 'utf8');
     return parseEprc(content);
 }
-//# sourceMappingURL=helpers.js.map

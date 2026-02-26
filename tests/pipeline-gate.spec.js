@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { createPipelineGate } = require('../dist/pipeline-gate')
+const { createPipelineGate } = require('../dist/core/pipeline-gate')
 
 describe('pipeline-gate createPipelineGate', () => {
     it('uses onModeGate for on mode and allows shadow mode by default', () => {

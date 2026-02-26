@@ -1,8 +1,8 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createBuiltinRouterPlugin = createBuiltinRouterPlugin;
-function createBuiltinRouterPlugin(options) {
+import { Plugin, RouterPluginOptions, HookContext } from '../../core/types';
+
+export function createBuiltinRouterPlugin(options: RouterPluginOptions): Plugin {
     const getRuleMap = options.getRuleMap;
+    
     return {
         manifest: {
             id: 'builtin.router',
@@ -14,11 +14,11 @@ function createBuiltinRouterPlugin(options) {
             hooks: ['onBeforeProxy'],
             priority: 30,
         },
-        async setup() { },
-        onBeforeProxy(ctx) {
+        async setup() {},
+        onBeforeProxy(ctx: HookContext): void {
             const sourceUrl = ctx.request && ctx.request.url;
-            if (!sourceUrl)
-                return;
+            if (!sourceUrl) return;
+            
             // Import resolveTargetUrl dynamically to avoid circular dependency
             const { resolveTargetUrl } = require('../../helpers');
             const mapped = resolveTargetUrl(sourceUrl, getRuleMap());
@@ -29,4 +29,3 @@ function createBuiltinRouterPlugin(options) {
         },
     };
 }
-//# sourceMappingURL=router-plugin.js.map

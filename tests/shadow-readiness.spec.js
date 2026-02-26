@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { evaluateShadowReadiness, buildReadinessAdvice } = require('../dist/shadow-readiness')
+const { evaluateShadowReadiness, buildReadinessAdvice } = require('../dist/core/shadow-readiness')
 
 describe('shadow-readiness evaluateShadowReadiness', () => {
     it('returns insufficient_samples when total is below threshold', () => {

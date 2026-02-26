@@ -4,7 +4,7 @@
     "module": "commonjs",
     "lib": ["ES2020"],
     "outDir": "./dist",
-    "rootDir": "./core",
+    "rootDir": "./",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -26,11 +26,15 @@
     "checkJs": false
   },
   "include": [
-    "core/**/*.ts"
+    "core/**/*.ts",
+    "plugins/**/*.ts",
+    "helpers.ts",
+    "cert.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "web"
+    "web",
+    "tests"
   ]
 }

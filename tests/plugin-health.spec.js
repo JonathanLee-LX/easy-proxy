@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { buildPluginHealth } = require('../dist/plugin-health')
+const { buildPluginHealth } = require('../dist/core/plugin-health')
 
 describe('plugin-health buildPluginHealth', () => {
     it('returns healthy overall when all running without failures', () => {

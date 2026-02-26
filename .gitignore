@@ -9,3 +9,13 @@ dist
 core/**/*.js
 core/**/*.d.ts
 core/**/*.map
+plugins/**/*.js
+plugins/**/*.d.ts
+plugins/**/*.map
+!plugins/**/*.spec.js
+helpers.js
+helpers.d.ts
+helpers.*.map
+cert.js
+cert.d.ts
+cert.*.map

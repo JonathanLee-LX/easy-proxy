@@ -15,6 +15,7 @@ export interface PluginManifest {
     permissions: string[];
     hooks: string[];
     priority?: number;
+    type?: string;
 }
 
 export interface Plugin {
@@ -333,4 +334,64 @@ export interface BootstrapPluginsOptions {
     pluginManager: any;
     plugins?: Plugin[];
     contextFactory?(manifest: PluginManifest): PluginContext;
+}
+
+export interface RouterPluginOptions {
+    getRuleMap(): Record<string, string>;
+}
+
+export interface LoggerPluginOptions {
+    maxEntries?: number;
+}
+
+export interface MockPluginOptions {
+    findMatch(url: string, method?: string): MockRule | null;
+}
+
+export interface MockRule {
+    id?: string | number;
+    name?: string;
+    bodyType?: string;
+    delay?: number;
+    statusCode?: number;
+    headers?: Record<string, string>;
+    body?: string;
+}
+
+export interface LoggerEntry {
+    type: 'response' | 'error';
+    method?: string;
+    url?: string;
+    statusCode?: number;
+    duration?: number;
+    ts: number;
+    phase?: string;
+    message?: string;
+}
+
+export interface LoggerSummary {
+    totalResponses: number;
+    totalErrors: number;
+    byMethod: Record<string, number>;
+    byStatusBucket: {
+        '2xx': number;
+        '3xx': number;
+        '4xx': number;
+        '5xx': number;
+        other: number;
+    };
+    avgDuration: number;
+    minDuration: number | null;
+    maxDuration: number | null;
+}
+
+export interface BuiltinPluginsOptions {
+    enableMock: boolean;
+    enableRouter: boolean;
+    enableLogger: boolean;
+    createMockPlugin(options: MockPluginOptions): Plugin;
+    createRouterPlugin(options: RouterPluginOptions): Plugin;
+    findMockMatch?(url: string, method?: string): MockRule | null;
+    getRuleMap?(): Record<string, string>;
+    loggerPlugin?: Plugin;
 }

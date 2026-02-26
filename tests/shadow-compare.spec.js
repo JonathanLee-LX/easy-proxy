@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { createShadowCompareTracker } = require('../dist/shadow-compare')
+const { createShadowCompareTracker } = require('../dist/core/shadow-compare')
 
 describe('shadow compare tracker', () => {
     it('records same and diff counts', () => {

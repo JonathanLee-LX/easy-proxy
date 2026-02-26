@@ -5,7 +5,7 @@ const {
   parseEprc,
   ruleMapToEprcText,
   resolveTargetUrl,
-} = require('../helpers')
+} = require('../dist/helpers')
 
 describe('helpers.parseEprc', () => {
   it('parses target-first host format', () => {

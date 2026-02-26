@@ -1,5 +1,5 @@
 const assert = require('assert')
-const { parseHostAllowlist, createOnModeGate } = require('../dist/on-mode-gate')
+const { parseHostAllowlist, createOnModeGate } = require('../dist/core/on-mode-gate')
 
 describe('on-mode-gate parseHostAllowlist', () => {
     it('parses comma-separated hosts into normalized set', () => {
