@@ -273,5 +273,22 @@ export function useProxyStore() {
     updateMock,
     deleteMock,
     replayRequest,
+    // Plugin stubs
+    plugins: [],
+    pluginMode: 'none',
+    fetchPlugins: async () => {},
+    startPlugin: async () => false,
+    stopPlugin: async () => false,
+    thirdPartyPlugins: [],
+    thirdPartySecurity: {},
+    fetchThirdPartyPlugins: async () => {},
+    loadThirdPartyPlugin: async () => false,
+    unloadThirdPartyPlugin: async () => false,
+    // Rule sets stubs
+    ruleSets: [],
+    fetchRuleSets: async () => {},
+    saveRuleSet: async () => false,
+    switchRuleSet: async () => false,
+    deleteRuleSet: async () => false,
   }
 }
