@@ -1,6 +1,5 @@
 {
-  "rules": {
-    "https://example.com": "127.0.0.1:8080",
-    "https://api.example.com": "http://127.0.0.1:8081"
-  }
+  "10.23.10.11": ["kdocs.cn", "www.kdocs.cn", "web.wps.cn", "api.kdocs.cn"],
+  "127.0.0.1": ["localhost.wbridge.kdocs.cn"],
+  "https://localhost:8000": ["solution.wps.cn/console", "solution.wps.cn/dev-server"]
 }
