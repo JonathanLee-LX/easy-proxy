@@ -11,16 +11,27 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Plus, Save, Trash2, Layers } from 'lucide-react'
-import type { RuleItem } from '@/types'
+import type { RuleItem, RuleSet } from '@/types'
 
 interface RuleConfigProps {
   rules: RuleItem[]
   setRules: React.Dispatch<React.SetStateAction<RuleItem[]>>
   fetchRules: () => Promise<void>
-  saveRules: (items: RuleItem[]) => Promise<boolean>
+  saveRules?: (items: RuleItem[]) => Promise<boolean>
+  /** @deprecated 暂未实现 */
+  ruleSets?: RuleSet[]
+  /** @deprecated 暂未实现 */
+  fetchRuleSets?: () => Promise<void>
+  /** @deprecated 暂未实现 */
+  saveRuleSet?: (name: string, rules: RuleItem[]) => Promise<RuleSet | null>
+  /** @deprecated 暂未实现 */
+  switchRuleSet?: (id: number) => Promise<boolean>
+  /** @deprecated 暂未实现 */
+  deleteRuleSet?: (id: number) => Promise<boolean>
 }
 
-export function RuleConfig({ rules, setRules, fetchRules, saveRules }: RuleConfigProps) {
+export function RuleConfig(props: RuleConfigProps) {
+  const { rules, setRules, fetchRules, saveRules } = props
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [mergeByTarget, setMergeByTarget] = useState(false)
@@ -173,6 +184,7 @@ export function RuleConfig({ rules, setRules, fetchRules, saveRules }: RuleConfi
   )
 
   const handleSave = useCallback(async () => {
+    if (!saveRules) return
     setSaving(true)
     setSaveStatus('idle')
     const ok = await saveRules(rules)
@@ -199,15 +211,19 @@ export function RuleConfig({ rules, setRules, fetchRules, saveRules }: RuleConfi
             <Plus className="h-4 w-4 mr-1" />
             添加规则
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
-            <Save className="h-4 w-4 mr-1" />
-            {saving ? '保存中...' : '保存'}
-          </Button>
-          {saveStatus === 'success' && (
-            <span className="text-sm text-green-600 self-center">已保存</span>
-          )}
-          {saveStatus === 'error' && (
-            <span className="text-sm text-red-600 self-center">保存失败</span>
+          {saveRules && (
+            <>
+              <Button size="sm" onClick={handleSave} disabled={saving}>
+                <Save className="h-4 w-4 mr-1" />
+                {saving ? '保存中...' : '保存'}
+              </Button>
+              {saveStatus === 'success' && (
+                <span className="text-sm text-green-600 self-center">已保存</span>
+              )}
+              {saveStatus === 'error' && (
+                <span className="text-sm text-red-600 self-center">保存失败</span>
+              )}
+            </>
           )}
         </div>
       </div>

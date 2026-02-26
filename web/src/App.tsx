@@ -147,6 +147,7 @@ function App() {
                 rules={store.rules}
                 setRules={store.setRules}
                 fetchRules={store.fetchRules}
+                saveRules={store.saveRules}
                 ruleSets={store.ruleSets}
                 fetchRuleSets={store.fetchRuleSets}
                 saveRuleSet={store.saveRuleSet}

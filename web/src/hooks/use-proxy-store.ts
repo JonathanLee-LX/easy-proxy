@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { ProxyRecord, RecordDetail, RuleItem, MockRule } from '@/types'
+import type { ProxyRecord, RecordDetail, RuleItem, MockRule, Plugin, RuleSet } from '@/types'
 
 const IP_PATTERN = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/
 const URL_PATTERN = /^https?:\/\//
@@ -253,6 +253,135 @@ export function useProxyStore() {
     throw new Error(data.error || '重放请求失败')
   }, [])
 
+  // ===== 插件功能 =====
+  const [plugins, setPlugins] = useState<Plugin[]>([])
+  const [pluginMode, setPluginMode] = useState<'on' | 'off' | 'shadow'>('off')
+  const [thirdPartyPlugins, setThirdPartyPlugins] = useState<Plugin[]>([])
+  const [thirdPartySecurity, setThirdPartySecurity] = useState<{ allowAll: boolean; trusted: string[] }>({
+    allowAll: false,
+    trusted: [],
+  })
+
+  const fetchPlugins = useCallback(async () => {
+    try {
+      const res = await fetch('/api/plugins')
+      const data = await res.json()
+      setPluginMode(data.mode || 'off')
+      setPlugins(data.plugins || [])
+    } catch (err) {
+      console.error('Failed to fetch plugins:', err)
+    }
+  }, [])
+
+  const startPlugin = useCallback(async (id: string) => {
+    try {
+      await fetch(`/api/plugins/${id}/start`, { method: 'POST' })
+    } catch (err) {
+      console.error('Failed to start plugin:', err)
+    }
+  }, [])
+
+  const stopPlugin = useCallback(async (id: string) => {
+    try {
+      await fetch(`/api/plugins/${id}/stop`, { method: 'POST' })
+    } catch (err) {
+      console.error('Failed to stop plugin:', err)
+    }
+  }, [])
+
+  const fetchThirdPartyPlugins = useCallback(async () => {
+    try {
+      const res = await fetch('/api/plugins/third-party')
+      const data = await res.json()
+      setThirdPartyPlugins(data.plugins || [])
+      setThirdPartySecurity(data.security || { allowAll: false, trusted: [] })
+    } catch (err) {
+      console.error('Failed to fetch third-party plugins:', err)
+    }
+  }, [])
+
+  const loadThirdPartyPlugin = useCallback(async (path: string) => {
+    try {
+      await fetch('/api/plugins/third-party/load', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      })
+    } catch (err) {
+      console.error('Failed to load third-party plugin:', err)
+    }
+  }, [])
+
+  const unloadThirdPartyPlugin = useCallback(async (id: string) => {
+    try {
+      await fetch(`/api/plugins/third-party/${id}/unload`, { method: 'POST' })
+    } catch (err) {
+      console.error('Failed to unload third-party plugin:', err)
+    }
+  }, [])
+
+  // ===== 规则集功能 =====
+  const [ruleSets, setRuleSets] = useState<RuleSet[]>([])
+
+  const fetchRuleSets = useCallback(async () => {
+    try {
+      const res = await fetch('/api/rulesets')
+      const data = await res.json()
+      setRuleSets(Array.isArray(data) ? data : [])
+    } catch (err) {
+      console.error('Failed to fetch rule sets:', err)
+    }
+  }, [])
+
+  const saveRuleSet = useCallback(async (name: string, rules: RuleItem[]) => {
+    try {
+      const res = await fetch('/api/rulesets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, rules }),
+      })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setRuleSets((prev) => [...prev, data.ruleSet])
+        return data.ruleSet as RuleSet
+      }
+      return null
+    } catch (err) {
+      console.error('Failed to save rule set:', err)
+      return null
+    }
+  }, [])
+
+  const switchRuleSet = useCallback(async (id: number) => {
+    try {
+      const res = await fetch(`/api/rulesets/${id}/switch`, { method: 'POST' })
+      const data = await res.json()
+      if (data.status === 'success') {
+        await fetchRules()
+        return true
+      }
+      return false
+    } catch (err) {
+      console.error('Failed to switch rule set:', err)
+      return false
+    }
+  }, [fetchRules])
+
+  const deleteRuleSet = useCallback(async (id: number) => {
+    try {
+      const res = await fetch(`/api/rulesets/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.status === 'success') {
+        setRuleSets((prev) => prev.filter((rs) => rs.id !== id))
+        return true
+      }
+      return false
+    } catch (err) {
+      console.error('Failed to delete rule set:', err)
+      return false
+    }
+  }, [])
+
   return {
     records,
     rules,
@@ -273,5 +402,22 @@ export function useProxyStore() {
     updateMock,
     deleteMock,
     replayRequest,
+    // 插件相关
+    plugins,
+    pluginMode,
+    fetchPlugins,
+    startPlugin,
+    stopPlugin,
+    thirdPartyPlugins,
+    thirdPartySecurity,
+    fetchThirdPartyPlugins,
+    loadThirdPartyPlugin,
+    unloadThirdPartyPlugin,
+    // 规则集相关
+    ruleSets,
+    fetchRuleSets,
+    saveRuleSet,
+    switchRuleSet,
+    deleteRuleSet,
   }
 }

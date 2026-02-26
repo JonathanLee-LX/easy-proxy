@@ -37,3 +37,20 @@ export interface MockRule {
   body: string // bodyType=inline 时为响应内容, bodyType=file 时为文件路径
   enabled: boolean
 }
+
+export interface Plugin {
+  id: string
+  name: string
+  version: string
+  hooks: string[]
+  permissions: string[]
+  priority: number
+  state: 'running' | 'stopped' | 'error'
+  stats: Record<string, unknown> | null
+}
+
+export interface RuleSet {
+  id: number
+  name: string
+  rules: RuleItem[]
+}

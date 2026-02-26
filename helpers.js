@@ -211,19 +211,24 @@ function loadConfigFromFile(configPath, format) {
             const content = readFileSync(configPath, 'utf8')
             const data = JSON.parse(content)
             const rules = data.rules || data
-            // 支持新格式: { "IP": "domain1 domain2" } 或旧格式: { "pattern": "target" }
             const result = {}
             for (const [key, value] of Object.entries(rules)) {
-                if (typeof value === 'string') {
-                    // 新格式: IP -> "domain1 domain2"
-                    const domains = value.split(/\s+/).filter(Boolean)
-                    for (const domain of domains) {
-                        result[domain] = key
-                    }
-                } else if (typeof value === 'object' && Array.isArray(value)) {
-                    // 旧数组格式: { "IP": ["domain1", "domain2"] }
+                if (Array.isArray(value)) {
+                    // 新格式: { "IP": ["domain1", "domain2"] }
                     for (const domain of value) {
                         result[domain] = key
+                    }
+                } else if (typeof value === 'string') {
+                    const trimmedValue = value.trim()
+                    if (IP_PATTERN.test(trimmedValue) || URL_PATTERN.test(trimmedValue) || FILE_PATTERN.test(trimmedValue)) {
+                        // 旧格式: { "pattern": "target" }, value 是 IP/URL/file 目标
+                        result[key] = value
+                    } else {
+                        // 新格式: { "IP": "domain1 domain2" }, value 是域名列表
+                        const domains = trimmedValue.split(/\s+/).filter(Boolean)
+                        for (const domain of domains) {
+                            result[domain] = key
+                        }
                     }
                 }
             }
