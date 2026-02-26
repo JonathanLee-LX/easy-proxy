@@ -1,17 +1,34 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.HookDispatcher = exports.PluginManager = void 0;
-exports.validateManifest = validateManifest;
-exports.runWithTimeout = runWithTimeout;
+import { 
+    Plugin, 
+    PluginManifest, 
+    PluginState, 
+    PluginContext,
+    PluginManagerOptions,
+    HookContext,
+    ResponseContext,
+    HookDispatcherOptions,
+    HookDispatchOptions,
+    HookDispatchResult,
+    PluginStats,
+    Logger
+} from './types';
+
 const DEFAULT_HOOK_TIMEOUT_MS = 10;
-class PluginManager {
-    constructor(options = {}) {
+
+export class PluginManager {
+    private plugins: Map<string, Plugin>;
+    private pluginStates: Map<string, PluginState>;
+    private logger: Logger;
+    private manifestValidator: (manifest: PluginManifest) => void;
+
+    constructor(options: PluginManagerOptions = {}) {
         this.plugins = new Map();
         this.pluginStates = new Map();
         this.logger = options.logger || console;
         this.manifestValidator = options.manifestValidator || validateManifest;
     }
-    register(plugin) {
+
+    register(plugin: Plugin): void {
         this._assertPluginShape(plugin);
         this.manifestValidator(plugin.manifest);
         if (this.plugins.has(plugin.manifest.id)) {
@@ -20,13 +37,16 @@ class PluginManager {
         this.plugins.set(plugin.manifest.id, plugin);
         this.pluginStates.set(plugin.manifest.id, 'registered');
     }
-    getAll() {
+
+    getAll(): Plugin[] {
         return Array.from(this.plugins.values());
     }
-    getState(pluginId) {
+
+    getState(pluginId: string): PluginState {
         return this.pluginStates.get(pluginId) || 'unknown';
     }
-    async setup(contextFactory) {
+
+    async setup(contextFactory: (manifest: PluginManifest) => PluginContext): Promise<void> {
         for (const plugin of this.getAll()) {
             const pluginContext = contextFactory(plugin.manifest);
             await this._safeLifecycleCall(plugin, 'setup', pluginContext);
@@ -35,7 +55,8 @@ class PluginManager {
             }
         }
     }
-    async start() {
+
+    async start(): Promise<void> {
         for (const plugin of this.getAll()) {
             await this._safeLifecycleCall(plugin, 'start');
             if (this.getState(plugin.manifest.id) !== 'disabled') {
@@ -43,7 +64,8 @@ class PluginManager {
             }
         }
     }
-    async stop() {
+
+    async stop(): Promise<void> {
         for (const plugin of this.getAll()) {
             await this._safeLifecycleCall(plugin, 'stop');
             if (this.getState(plugin.manifest.id) !== 'disabled') {
@@ -51,45 +73,61 @@ class PluginManager {
             }
         }
     }
-    async dispose() {
+
+    async dispose(): Promise<void> {
         for (const plugin of this.getAll()) {
             await this._safeLifecycleCall(plugin, 'dispose');
             this.pluginStates.set(plugin.manifest.id, 'disposed');
         }
     }
-    async _safeLifecycleCall(plugin, methodName, ...args) {
+
+    private async _safeLifecycleCall(
+        plugin: Plugin, 
+        methodName: keyof Plugin, 
+        ...args: any[]
+    ): Promise<void> {
         const fn = plugin[methodName];
-        if (typeof fn !== 'function')
-            return;
+        if (typeof fn !== 'function') return;
         try {
-            await fn.apply(plugin, args);
-        }
-        catch (error) {
+            await (fn as Function).apply(plugin, args);
+        } catch (error: any) {
             this.pluginStates.set(plugin.manifest.id, 'disabled');
-            this.logger.error(`[plugin-runtime] ${plugin.manifest.id}.${String(methodName)} failed:`, error && error.message ? error.message : error);
+            this.logger.error(
+                `[plugin-runtime] ${plugin.manifest.id}.${String(methodName)} failed:`,
+                error && error.message ? error.message : error
+            );
         }
     }
-    _assertPluginShape(plugin) {
-        if (!plugin || typeof plugin !== 'object')
-            throw new Error('Plugin must be an object');
-        if (!plugin.manifest || typeof plugin.manifest !== 'object')
-            throw new Error('Plugin manifest is required');
-        if (typeof plugin.setup !== 'function')
-            throw new Error('Plugin setup() is required');
+
+    private _assertPluginShape(plugin: any): asserts plugin is Plugin {
+        if (!plugin || typeof plugin !== 'object') throw new Error('Plugin must be an object');
+        if (!plugin.manifest || typeof plugin.manifest !== 'object') throw new Error('Plugin manifest is required');
+        if (typeof plugin.setup !== 'function') throw new Error('Plugin setup() is required');
     }
 }
-exports.PluginManager = PluginManager;
-class HookDispatcher {
-    constructor(pluginManager, options = {}) {
+
+export class HookDispatcher {
+    private pluginManager: PluginManager;
+    private logger: Logger;
+    private defaultTimeoutMs: number;
+    private pluginHookStats: Map<string, PluginStats>;
+
+    constructor(pluginManager: PluginManager, options: HookDispatcherOptions = {}) {
         this.pluginManager = pluginManager;
         this.logger = options.logger || console;
         this.defaultTimeoutMs = options.defaultTimeoutMs || DEFAULT_HOOK_TIMEOUT_MS;
         this.pluginHookStats = new Map();
     }
-    async dispatch(hookName, hookContext, options = {}) {
+
+    async dispatch(
+        hookName: string, 
+        hookContext: HookContext | ResponseContext, 
+        options: HookDispatchOptions = {}
+    ): Promise<HookDispatchResult[]> {
         const timeoutMs = options.timeoutMs || this.defaultTimeoutMs;
         const plugins = this._getOrderedPluginsForHook(hookName);
-        const results = [];
+        const results: HookDispatchResult[] = [];
+        
         for (const plugin of plugins) {
             const pluginId = plugin.manifest.id;
             if (this.pluginManager.getState(pluginId) === 'disabled') {
@@ -97,15 +135,18 @@ class HookDispatcher {
                 continue;
             }
             const hookFn = plugin[hookName];
-            if (typeof hookFn !== 'function')
-                continue;
+            if (typeof hookFn !== 'function') continue;
+            
             const start = Date.now();
             try {
-                await runWithTimeout(Promise.resolve(hookFn.call(plugin, hookContext)), timeoutMs, `${pluginId}.${hookName}`);
+                await runWithTimeout(
+                    Promise.resolve(hookFn.call(plugin, hookContext)),
+                    timeoutMs,
+                    `${pluginId}.${hookName}`
+                );
                 this._recordHookStat(pluginId, hookName, 'ok', Date.now() - start);
                 results.push({ pluginId, status: 'ok', duration: Date.now() - start });
-            }
-            catch (error) {
+            } catch (error: any) {
                 const isTimeout = error && error.code === 'PLUGIN_HOOK_TIMEOUT';
                 const status = isTimeout ? 'timeout' : 'error';
                 this._recordHookStat(pluginId, hookName, status, Date.now() - start, error);
@@ -115,13 +156,17 @@ class HookDispatcher {
                     duration: Date.now() - start,
                     error: error && error.message ? error.message : String(error),
                 });
-                this.logger.error(`[plugin-runtime] hook ${pluginId}.${hookName} failed:`, error && error.message ? error.message : error);
+                this.logger.error(
+                    `[plugin-runtime] hook ${pluginId}.${hookName} failed:`,
+                    error && error.message ? error.message : error
+                );
             }
         }
         return results;
     }
-    getPluginStats() {
-        const out = {};
+
+    getPluginStats(): Record<string, PluginStats> {
+        const out: Record<string, PluginStats> = {};
         for (const [pluginId, value] of this.pluginHookStats.entries()) {
             out[pluginId] = {
                 total: value.total,
@@ -135,19 +180,26 @@ class HookDispatcher {
         }
         return out;
     }
-    _getOrderedPluginsForHook(hookName) {
+
+    private _getOrderedPluginsForHook(hookName: string): Plugin[] {
         return this.pluginManager
             .getAll()
             .filter((plugin) => Array.isArray(plugin.manifest.hooks) && plugin.manifest.hooks.includes(hookName))
             .sort((a, b) => {
-            const pa = typeof a.manifest.priority === 'number' ? a.manifest.priority : 100;
-            const pb = typeof b.manifest.priority === 'number' ? b.manifest.priority : 100;
-            if (pa !== pb)
-                return pa - pb;
-            return a.manifest.id.localeCompare(b.manifest.id);
-        });
+                const pa = typeof a.manifest.priority === 'number' ? a.manifest.priority : 100;
+                const pb = typeof b.manifest.priority === 'number' ? b.manifest.priority : 100;
+                if (pa !== pb) return pa - pb;
+                return a.manifest.id.localeCompare(b.manifest.id);
+            });
     }
-    _recordHookStat(pluginId, hookName, status, duration, error) {
+
+    private _recordHookStat(
+        pluginId: string, 
+        hookName: string, 
+        status: 'ok' | 'error' | 'timeout', 
+        duration: number, 
+        error?: Error
+    ): void {
         const current = this.pluginHookStats.get(pluginId) || {
             total: 0,
             ok: 0,
@@ -165,8 +217,8 @@ class HookDispatcher {
         this.pluginHookStats.set(pluginId, current);
     }
 }
-exports.HookDispatcher = HookDispatcher;
-function validateManifest(manifest) {
+
+export function validateManifest(manifest: PluginManifest): void {
     if (!manifest.id || typeof manifest.id !== 'string') {
         throw new Error('manifest.id is required');
     }
@@ -183,22 +235,26 @@ function validateManifest(manifest) {
         throw new Error('manifest.hooks must be an array');
     }
 }
-function runWithTimeout(promise, timeoutMs, label) {
+
+export function runWithTimeout<T>(
+    promise: Promise<T>, 
+    timeoutMs: number, 
+    label: string
+): Promise<T> {
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
-            const error = new Error(`Timeout in ${label} after ${timeoutMs}ms`);
+            const error: any = new Error(`Timeout in ${label} after ${timeoutMs}ms`);
             error.code = 'PLUGIN_HOOK_TIMEOUT';
             reject(error);
         }, timeoutMs);
         promise
             .then((result) => {
-            clearTimeout(timer);
-            resolve(result);
-        })
+                clearTimeout(timer);
+                resolve(result);
+            })
             .catch((error) => {
-            clearTimeout(timer);
-            reject(error);
-        });
+                clearTimeout(timer);
+                reject(error);
+            });
     });
 }
-//# sourceMappingURL=plugin-runtime.js.map

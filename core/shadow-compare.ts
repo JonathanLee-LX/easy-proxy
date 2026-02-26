@@ -1,10 +1,32 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createShadowCompareTracker = createShadowCompareTracker;
-function createShadowCompareTracker(options = {}) {
+import { 
+    ShadowCompareEntry, 
+    ShadowCompareStats, 
+    ShadowCompareTrackerOptions,
+    ShadowDiffItem,
+    ShadowSample
+} from './types';
+
+interface ShadowCompareState {
+    total: number;
+    diff: number;
+    same: number;
+    samples: ShadowSample[];
+    diffMap: Map<string, ShadowDiffItem>;
+    lastUpdatedAt: number | null;
+}
+
+export interface ShadowCompareTracker {
+    record(entry: ShadowCompareEntry): boolean;
+    getStats(): ShadowCompareStats;
+    reset(): void;
+}
+
+export function createShadowCompareTracker(
+    options: ShadowCompareTrackerOptions = {}
+): ShadowCompareTracker {
     const maxSamples = typeof options.maxSamples === 'number' ? options.maxSamples : 20;
     const maxTopDiffs = typeof options.maxTopDiffs === 'number' ? options.maxTopDiffs : 10;
-    const state = {
+    const state: ShadowCompareState = {
         total: 0,
         diff: 0,
         same: 0,
@@ -12,15 +34,18 @@ function createShadowCompareTracker(options = {}) {
         diffMap: new Map(),
         lastUpdatedAt: null,
     };
+
     return {
-        record(entry) {
+        record(entry: ShadowCompareEntry): boolean {
             const baseTarget = entry.baseTarget || '';
             const observedTarget = entry.observedTarget || '';
             const source = entry.source || '';
             const method = entry.method || '';
             const isDiff = baseTarget !== observedTarget;
+            
             state.total += 1;
             state.lastUpdatedAt = Date.now();
+            
             if (isDiff) {
                 state.diff += 1;
                 state.samples.push({
@@ -30,6 +55,7 @@ function createShadowCompareTracker(options = {}) {
                     observedTarget,
                     ts: Date.now(),
                 });
+                
                 const diffKey = `${baseTarget} => ${observedTarget}`;
                 const existing = state.diffMap.get(diffKey) || {
                     baseTarget,
@@ -42,23 +68,24 @@ function createShadowCompareTracker(options = {}) {
                 existing.lastSeenAt = Date.now();
                 existing.latestSource = source;
                 state.diffMap.set(diffKey, existing);
+                
                 if (state.samples.length > maxSamples) {
                     state.samples.shift();
                 }
-            }
-            else {
+            } else {
                 state.same += 1;
             }
             return isDiff;
         },
-        getStats() {
+        
+        getStats(): ShadowCompareStats {
             const topDiffs = Array.from(state.diffMap.values())
                 .sort((a, b) => {
-                if (b.count !== a.count)
-                    return b.count - a.count;
-                return b.lastSeenAt - a.lastSeenAt;
-            })
+                    if (b.count !== a.count) return b.count - a.count;
+                    return b.lastSeenAt - a.lastSeenAt;
+                })
                 .slice(0, maxTopDiffs);
+            
             return {
                 total: state.total,
                 diff: state.diff,
@@ -70,7 +97,8 @@ function createShadowCompareTracker(options = {}) {
                 lastUpdatedAt: state.lastUpdatedAt,
             };
         },
-        reset() {
+        
+        reset(): void {
             state.total = 0;
             state.diff = 0;
             state.same = 0;
@@ -80,4 +108,3 @@ function createShadowCompareTracker(options = {}) {
         },
     };
 }
-//# sourceMappingURL=shadow-compare.js.map

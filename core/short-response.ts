@@ -1,8 +1,7 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.normalizeShortResponse = normalizeShortResponse;
-exports.sendShortResponse = sendShortResponse;
-function normalizeShortResponse(response) {
+import { Response } from './types';
+import * as http from 'http';
+
+export function normalizeShortResponse(response?: Partial<Response> | null): Response {
     const res = response || {};
     return {
         statusCode: res.statusCode || 200,
@@ -10,9 +9,12 @@ function normalizeShortResponse(response) {
         body: res.body || '',
     };
 }
-function sendShortResponse(res, response) {
+
+export function sendShortResponse(
+    res: http.ServerResponse, 
+    response: Partial<Response> | null
+): void {
     const normalized = normalizeShortResponse(response);
     res.writeHead(normalized.statusCode, normalized.headers);
     res.end(normalized.body);
 }
-//# sourceMappingURL=short-response.js.map

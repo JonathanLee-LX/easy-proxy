@@ -1,16 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.bootstrapPlugins = bootstrapPlugins;
 async function bootstrapPlugins(options) {
-    const pluginManager = options.pluginManager
-    const plugins = Array.isArray(options.plugins) ? options.plugins : []
-    const contextFactory = options.contextFactory || ((manifest) => ({ manifest }))
-
+    const pluginManager = options.pluginManager;
+    const plugins = Array.isArray(options.plugins) ? options.plugins : [];
+    const contextFactory = options.contextFactory || ((manifest) => ({ manifest }));
     for (const plugin of plugins) {
-        pluginManager.register(plugin)
+        pluginManager.register(plugin);
     }
-    await pluginManager.setup(contextFactory)
-    await pluginManager.start()
+    await pluginManager.setup(contextFactory);
+    await pluginManager.start();
 }
-
-module.exports = {
-    bootstrapPlugins,
-}
-
+//# sourceMappingURL=plugin-bootstrap.js.map

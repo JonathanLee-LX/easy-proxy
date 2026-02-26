@@ -1,0 +1,336 @@
+// Core type definitions for the plugin system
+
+export interface Logger {
+    log(...args: any[]): void;
+    error(...args: any[]): void;
+    warn(...args: any[]): void;
+    info(...args: any[]): void;
+}
+
+export interface PluginManifest {
+    id: string;
+    name?: string;
+    version: string;
+    apiVersion: string;
+    permissions: string[];
+    hooks: string[];
+    priority?: number;
+}
+
+export interface Plugin {
+    manifest: PluginManifest;
+    setup(context: PluginContext): void | Promise<void>;
+    start?(): void | Promise<void>;
+    stop?(): void | Promise<void>;
+    dispose?(): void | Promise<void>;
+    onRequestStart?(context: HookContext): void | Promise<void>;
+    onBeforeProxy?(context: HookContext): void | Promise<void>;
+    onBeforeResponse?(context: ResponseContext): void | Promise<void>;
+    onAfterResponse?(context: ResponseContext): void | Promise<void>;
+    [hookName: string]: any;
+}
+
+export interface PluginContext {
+    manifest: PluginManifest;
+    [key: string]: any;
+}
+
+export type PluginState = 'registered' | 'ready' | 'running' | 'stopped' | 'disposed' | 'disabled' | 'unknown';
+
+export interface Request {
+    method?: string;
+    url?: string;
+    headers?: Record<string, string | string[]>;
+    body?: any;
+}
+
+export interface Response {
+    statusCode: number;
+    headers: Record<string, string | string[]>;
+    body: string | Buffer;
+}
+
+export interface HookContext {
+    request: Request;
+    target: string;
+    meta: Record<string, any>;
+    shortCircuited: boolean;
+    shortCircuitResponse: Response | null;
+    setTarget(nextTarget: string): void;
+    respond(response: Response): void;
+}
+
+export interface ResponseContext {
+    request: Request;
+    target: string;
+    meta: Record<string, any>;
+    response: Response;
+}
+
+export interface PipelineDecision {
+    target: string;
+    observedTarget: string;
+    shortCircuited: boolean;
+    response: Response | null;
+    meta: Record<string, any>;
+}
+
+export interface PipelineResult {
+    shortCircuited: boolean;
+    response: Response;
+    target: string;
+    meta: Record<string, any>;
+}
+
+export type PluginMode = 'off' | 'shadow' | 'on';
+
+export interface PipelineOptions {
+    pluginManager: any;
+    dispatcher: any;
+    logger?: Logger;
+    mode?: string;
+}
+
+export interface Pipeline {
+    mode: PluginMode;
+    evaluateRequest(request: Request, initialTarget: string): Promise<PipelineDecision>;
+    execute(input: PipelineExecuteInput): Promise<PipelineResult>;
+    pluginManager: any;
+}
+
+export interface PipelineExecuteInput {
+    request?: Request;
+    initialTarget?: string;
+    executeUpstream(target: string, meta: Record<string, any>): Promise<any>;
+}
+
+export interface HookDispatchResult {
+    pluginId: string;
+    status: 'ok' | 'error' | 'timeout' | 'skipped-disabled';
+    duration: number;
+    error?: string;
+}
+
+export interface PluginStats {
+    total: number;
+    ok: number;
+    error: number;
+    timeout: number;
+    lastHook: string | null;
+    lastDuration: number | null;
+    lastError: string | null;
+}
+
+export interface PluginManagerOptions {
+    logger?: Logger;
+    manifestValidator?: (manifest: PluginManifest) => void;
+}
+
+export interface HookDispatcherOptions {
+    logger?: Logger;
+    defaultTimeoutMs?: number;
+}
+
+export interface HookDispatchOptions {
+    timeoutMs?: number;
+}
+
+export interface ShadowCompareEntry {
+    baseTarget: string;
+    observedTarget: string;
+    source: string;
+    method: string;
+}
+
+export interface ShadowDiffItem {
+    baseTarget: string;
+    observedTarget: string;
+    count: number;
+    lastSeenAt: number;
+    latestSource: string;
+}
+
+export interface ShadowSample {
+    source: string;
+    method: string;
+    baseTarget: string;
+    observedTarget: string;
+    ts: number;
+}
+
+export interface ShadowCompareStats {
+    total: number;
+    diff: number;
+    same: number;
+    diffRate: number;
+    uniqueDiffPairs: number;
+    topDiffs: ShadowDiffItem[];
+    samples: ShadowSample[];
+    lastUpdatedAt: number | null;
+}
+
+export interface ShadowCompareTrackerOptions {
+    maxSamples?: number;
+    maxTopDiffs?: number;
+}
+
+export interface ReadinessResult {
+    ready: boolean;
+    reason: string;
+    total: number;
+    minSamples: number;
+    diffRate: number;
+    maxDiffRate: number;
+}
+
+export interface ReadinessOptions {
+    minSamples?: number;
+    maxDiffRate?: number;
+}
+
+export interface ReadinessAdviceInput {
+    mode?: string;
+    readiness?: ReadinessResult;
+    allowlist?: string[];
+    onModeGate?: any;
+}
+
+export interface ReadinessAdvice {
+    level: string;
+    suggestedMode: string;
+    message: string;
+    nextSteps: string[];
+}
+
+export interface OnModeGateOptions {
+    mode?: string;
+    allowlist?: Set<string>;
+}
+
+export interface OnModeGateStats {
+    checked: number;
+    applied: number;
+    skippedByAllowlist: number;
+    skippedByMode: number;
+    invalidSource: number;
+}
+
+export interface OnModeGate {
+    shouldApply(source: string): boolean;
+    getStats(): OnModeGateStats;
+    reset(): void;
+}
+
+export interface MockGateOptions {
+    enabled: boolean;
+    mode: string;
+    source: string;
+    rule: any;
+    shouldApplyOn(source: string): boolean;
+}
+
+export interface PipelineGateOptions {
+    requestPipeline: Pipeline;
+    onModeGate: OnModeGate;
+    enableBuiltinMockPlugin: boolean;
+}
+
+export interface PipelineGate {
+    shouldApplyPipelineOnForSource(source: string): boolean;
+    canUsePipelineExecuteForSource(source: string): boolean;
+    shouldUsePluginMockForRequest(source: string, rule: any): boolean;
+}
+
+export interface RouteDecisionOptions {
+    source: string;
+    method: string;
+    headers: Record<string, string | string[]>;
+    reqBody: any;
+    legacyTarget: string;
+    requestPipeline: Pipeline;
+    canUsePipelineExecuteForSource(source: string): boolean;
+    observeShadowDecision?(method: string, source: string, target: string, observedTarget: string): void;
+    fallbackResolve(): any;
+}
+
+export interface RouteDecisionResult {
+    target: string;
+    shortCircuited: boolean;
+    response: Response | null;
+}
+
+export interface PluginHealthInput {
+    pluginStats?: Record<string, PluginStats>;
+    pluginStates?: Record<string, PluginState>;
+    plugins?: PluginManifest[];
+}
+
+export interface PluginHealthItem {
+    id: string;
+    name?: string;
+    version: string;
+    state: PluginState;
+    health: 'healthy' | 'degraded' | 'disabled' | 'inactive';
+    errorRate: number;
+    stats: PluginStats | null;
+}
+
+export interface PluginHealthCounts {
+    healthy: number;
+    degraded: number;
+    disabled: number;
+    inactive: number;
+}
+
+export interface PluginHealth {
+    overall: 'healthy' | 'degraded';
+    total: number;
+    counts: PluginHealthCounts;
+    plugins: PluginHealthItem[];
+}
+
+export interface RefactorConfig {
+    pluginMode: PluginMode;
+    shadowWarnMinSamples: number;
+    shadowWarnDiffRate: number;
+    pluginOnHosts: Set<string>;
+    enableBuiltinRouter: boolean;
+    enableBuiltinLogger: boolean;
+    enableBuiltinMock: boolean;
+}
+
+export interface RefactorConfigDeps {
+    normalizeMode(mode: string): PluginMode;
+    parseHostAllowlist(text: string): Set<string>;
+}
+
+export interface RefactorStatusInput {
+    runtime?: any;
+    mode?: string;
+    allowlist?: string[];
+    readiness?: ReadinessResult | null;
+    advice?: ReadinessAdvice | null;
+    shadowStats?: ShadowCompareStats | null;
+    onModeGate?: OnModeGateStats | null;
+    plugins?: PluginManifest[];
+    loggerSummary?: any;
+}
+
+export interface RefactorStatus {
+    generatedAt: number;
+    runtime: any;
+    mode: string;
+    allowlist: string[];
+    readiness: ReadinessResult | null;
+    advice: ReadinessAdvice | null;
+    shadow: ShadowCompareStats | null;
+    onModeGate: OnModeGateStats | null;
+    plugins: PluginManifest[];
+    loggerSummary: any;
+}
+
+export interface BootstrapPluginsOptions {
+    pluginManager: any;
+    plugins?: Plugin[];
+    contextFactory?(manifest: PluginManifest): PluginContext;
+}

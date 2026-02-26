@@ -1,35 +1,19 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.decideRoute = decideRoute;
 async function decideRoute(options) {
-    const {
-        source,
-        method,
-        headers,
-        reqBody,
-        legacyTarget,
-        requestPipeline,
-        canUsePipelineExecuteForSource,
-        observeShadowDecision,
-        fallbackResolve,
-    } = options
-
+    const { source, method, headers, reqBody, legacyTarget, requestPipeline, canUsePipelineExecuteForSource, observeShadowDecision, fallbackResolve, } = options;
     if (canUsePipelineExecuteForSource(source)) {
-        const decision = await requestPipeline.evaluateRequest(
-            { method, url: source, headers, body: reqBody },
-            requestPipeline.mode === 'on' ? source : legacyTarget
-        )
+        const decision = await requestPipeline.evaluateRequest({ method, url: source, headers, body: reqBody }, requestPipeline.mode === 'on' ? source : legacyTarget);
         if (requestPipeline.mode === 'shadow' && typeof observeShadowDecision === 'function') {
-            observeShadowDecision(method, source, decision.target, decision.observedTarget)
+            observeShadowDecision(method, source, decision.target, decision.observedTarget);
         }
         return {
             target: decision.target,
             shortCircuited: !!decision.shortCircuited,
             response: decision.response || null,
-        }
+        };
     }
-
-    return fallbackResolve()
+    return fallbackResolve();
 }
-
-module.exports = {
-    decideRoute,
-}
-
+//# sourceMappingURL=route-decision.js.map

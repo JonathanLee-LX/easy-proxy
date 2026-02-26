@@ -1,23 +1,23 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.createPipelineGate = createPipelineGate;
-const mock_gate_1 = require("./mock-gate");
-function createPipelineGate(options) {
+import { shouldUsePluginMock } from './mock-gate';
+import { PipelineGate, PipelineGateOptions } from './types';
+
+export function createPipelineGate(options: PipelineGateOptions): PipelineGate {
     const requestPipeline = options.requestPipeline;
     const onModeGate = options.onModeGate;
     const enableBuiltinMockPlugin = !!options.enableBuiltinMockPlugin;
-    function shouldApplyPipelineOnForSource(source) {
+
+    function shouldApplyPipelineOnForSource(source: string): boolean {
         return onModeGate.shouldApply(source);
     }
-    function canUsePipelineExecuteForSource(source) {
-        if (requestPipeline.mode === 'off')
-            return false;
-        if (requestPipeline.mode === 'shadow')
-            return true;
+
+    function canUsePipelineExecuteForSource(source: string): boolean {
+        if (requestPipeline.mode === 'off') return false;
+        if (requestPipeline.mode === 'shadow') return true;
         return shouldApplyPipelineOnForSource(source);
     }
-    function shouldUsePluginMockForRequest(source, rule) {
-        return (0, mock_gate_1.shouldUsePluginMock)({
+
+    function shouldUsePluginMockForRequest(source: string, rule: any): boolean {
+        return shouldUsePluginMock({
             enabled: enableBuiltinMockPlugin,
             mode: requestPipeline.mode,
             source,
@@ -25,10 +25,10 @@ function createPipelineGate(options) {
             shouldApplyOn: shouldApplyPipelineOnForSource,
         });
     }
+
     return {
         shouldApplyPipelineOnForSource,
         canUsePipelineExecuteForSource,
         shouldUsePluginMockForRequest,
     };
 }
-//# sourceMappingURL=pipeline-gate.js.map

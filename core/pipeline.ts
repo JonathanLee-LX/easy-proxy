@@ -1,18 +1,28 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.SUPPORTED_MODES = void 0;
-exports.createPipeline = createPipeline;
-exports.normalizeMode = normalizeMode;
-const SUPPORTED_MODES = new Set(['off', 'shadow', 'on']);
-exports.SUPPORTED_MODES = SUPPORTED_MODES;
-function createPipeline(options) {
+import { 
+    Pipeline, 
+    PipelineOptions, 
+    PipelineDecision, 
+    PipelineResult,
+    PipelineExecuteInput,
+    HookContext,
+    ResponseContext,
+    Request,
+    Response,
+    PluginMode,
+    Logger
+} from './types';
+
+const SUPPORTED_MODES = new Set<string>(['off', 'shadow', 'on']);
+
+export function createPipeline(options: PipelineOptions): Pipeline {
     const pluginManager = options.pluginManager;
     const dispatcher = options.dispatcher;
     const logger = options.logger || console;
     const mode = normalizeMode(options.mode);
+
     return {
         mode,
-        async evaluateRequest(request, initialTarget) {
+        async evaluateRequest(request: Request, initialTarget: string): Promise<PipelineDecision> {
             const hookContext = createHookContext(request || {}, initialTarget);
             if (mode === 'off') {
                 return {
@@ -55,20 +65,24 @@ function createPipeline(options) {
                 meta: hookContext.meta,
             };
         },
-        async execute(input) {
+        async execute(input: PipelineExecuteInput): Promise<PipelineResult> {
             const request = input.request || {};
             const initialTarget = input.initialTarget || request.url || '';
             if (mode === 'off') {
                 return input.executeUpstream(initialTarget, {});
             }
             const decision = await this.evaluateRequest(request, initialTarget);
+
             if (decision.shortCircuited) {
                 const shortCircuitContext = {
                     request,
                     target: decision.target,
                     meta: decision.meta,
                 };
-                const responseContext = createResponseContext(shortCircuitContext, decision.response);
+                const responseContext = createResponseContext(
+                    shortCircuitContext, 
+                    decision.response!
+                );
                 await safeDispatch(dispatcher, logger, 'onBeforeResponse', responseContext);
                 await safeDispatch(dispatcher, logger, 'onAfterResponse', responseContext);
                 return {
@@ -78,8 +92,12 @@ function createPipeline(options) {
                     meta: decision.meta,
                 };
             }
+
             const upstream = await input.executeUpstream(decision.target, decision.meta);
-            const responseContext = createResponseContext({ request, target: decision.target, meta: decision.meta }, upstream.response || upstream);
+            const responseContext = createResponseContext(
+                { request, target: decision.target, meta: decision.meta },
+                upstream.response || upstream
+            );
             await safeDispatch(dispatcher, logger, 'onBeforeResponse', responseContext);
             await safeDispatch(dispatcher, logger, 'onAfterResponse', responseContext);
             return {
@@ -93,23 +111,28 @@ function createPipeline(options) {
         pluginManager,
     };
 }
-function createHookContext(request, target) {
+
+function createHookContext(request: Request, target: string): HookContext {
     return {
         request,
         target,
         meta: {},
         shortCircuited: false,
         shortCircuitResponse: null,
-        setTarget(nextTarget) {
+        setTarget(nextTarget: string): void {
             this.target = nextTarget;
         },
-        respond(response) {
+        respond(response: Response): void {
             this.shortCircuited = true;
             this.shortCircuitResponse = response;
         },
     };
 }
-function createResponseContext(requestContext, response) {
+
+function createResponseContext(
+    requestContext: { request: Request; target: string; meta: Record<string, any> }, 
+    response: Partial<Response>
+): ResponseContext {
     return {
         request: requestContext.request,
         target: requestContext.target,
@@ -121,17 +144,27 @@ function createResponseContext(requestContext, response) {
         },
     };
 }
-async function safeDispatch(dispatcher, logger, hookName, context) {
+
+async function safeDispatch(
+    dispatcher: any, 
+    logger: Logger, 
+    hookName: string, 
+    context: HookContext | ResponseContext
+): Promise<any[]> {
     try {
         return await dispatcher.dispatch(hookName, context);
-    }
-    catch (error) {
-        logger.error(`[pipeline] dispatch ${hookName} failed:`, error && error.message ? error.message : error);
+    } catch (error: any) {
+        logger.error(
+            `[pipeline] dispatch ${hookName} failed:`,
+            error && error.message ? error.message : error
+        );
         return [];
     }
 }
-function normalizeMode(mode) {
+
+export function normalizeMode(mode?: string): PluginMode {
     const normalized = (mode || 'off').toLowerCase();
-    return SUPPORTED_MODES.has(normalized) ? normalized : 'off';
+    return SUPPORTED_MODES.has(normalized) ? (normalized as PluginMode) : 'off';
 }
-//# sourceMappingURL=pipeline.js.map
+
+export { SUPPORTED_MODES };

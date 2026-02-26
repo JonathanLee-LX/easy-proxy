@@ -1,7 +1,6 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.buildRefactorStatus = buildRefactorStatus;
-function buildRefactorStatus(input = {}) {
+import { RefactorStatus, RefactorStatusInput } from './types';
+
+export function buildRefactorStatus(input: RefactorStatusInput = {}): RefactorStatus {
     const now = Date.now();
     return {
         generatedAt: now,
@@ -16,4 +15,3 @@ function buildRefactorStatus(input = {}) {
         loggerSummary: input.loggerSummary || null,
     };
 }
-//# sourceMappingURL=refactor-status.js.map

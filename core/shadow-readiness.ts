@@ -1,12 +1,20 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.evaluateShadowReadiness = evaluateShadowReadiness;
-exports.buildReadinessAdvice = buildReadinessAdvice;
-function evaluateShadowReadiness(stats, options = {}) {
+import { 
+    ReadinessResult, 
+    ReadinessOptions, 
+    ReadinessAdvice, 
+    ReadinessAdviceInput,
+    ShadowCompareStats 
+} from './types';
+
+export function evaluateShadowReadiness(
+    stats: ShadowCompareStats | null, 
+    options: ReadinessOptions = {}
+): ReadinessResult {
     const minSamples = typeof options.minSamples === 'number' ? options.minSamples : 200;
     const maxDiffRate = typeof options.maxDiffRate === 'number' ? options.maxDiffRate : 0.05;
     const total = Number(stats && stats.total ? stats.total : 0);
     const diffRate = Number(stats && typeof stats.diffRate === 'number' ? stats.diffRate : 0);
+
     if (total < minSamples) {
         return {
             ready: false,
@@ -36,11 +44,13 @@ function evaluateShadowReadiness(stats, options = {}) {
         maxDiffRate,
     };
 }
-function buildReadinessAdvice(input = {}) {
+
+export function buildReadinessAdvice(input: ReadinessAdviceInput = {}): ReadinessAdvice {
     const mode = input.mode || 'off';
     const readiness = input.readiness || { ready: false, reason: 'unknown', total: 0, minSamples: 0, diffRate: 0, maxDiffRate: 0 };
     const allowlist = Array.isArray(input.allowlist) ? input.allowlist : [];
     const onModeGate = input.onModeGate || {};
+
     if (mode === 'off') {
         return {
             level: 'info',
@@ -52,6 +62,7 @@ function buildReadinessAdvice(input = {}) {
             ],
         };
     }
+
     if (mode === 'shadow' && !readiness.ready) {
         if (readiness.reason === 'insufficient_samples') {
             return {
@@ -76,6 +87,7 @@ function buildReadinessAdvice(input = {}) {
             };
         }
     }
+
     if (mode === 'shadow' && readiness.ready) {
         return {
             level: 'success',
@@ -94,6 +106,7 @@ function buildReadinessAdvice(input = {}) {
                 ],
         };
     }
+
     if (mode === 'on') {
         const applied = Number(onModeGate.applied || 0);
         const skipped = Number(onModeGate.skippedByAllowlist || 0);
@@ -108,6 +121,7 @@ function buildReadinessAdvice(input = {}) {
             ],
         };
     }
+
     return {
         level: 'info',
         suggestedMode: mode,
@@ -115,4 +129,3 @@ function buildReadinessAdvice(input = {}) {
         nextSteps: [],
     };
 }
-//# sourceMappingURL=shadow-readiness.js.map

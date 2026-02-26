@@ -1,9 +1,7 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.parseHostAllowlist = parseHostAllowlist;
-exports.createOnModeGate = createOnModeGate;
-function parseHostAllowlist(text) {
-    const set = new Set();
+import { OnModeGate, OnModeGateOptions, OnModeGateStats } from './types';
+
+export function parseHostAllowlist(text: string): Set<string> {
+    const set = new Set<string>();
     String(text || '')
         .split(',')
         .map((item) => item.trim().toLowerCase())
@@ -11,18 +9,20 @@ function parseHostAllowlist(text) {
         .forEach((host) => set.add(host));
     return set;
 }
-function createOnModeGate(options = {}) {
+
+export function createOnModeGate(options: OnModeGateOptions = {}): OnModeGate {
     const mode = options.mode || 'off';
-    const allowlist = options.allowlist || new Set();
-    const stats = {
+    const allowlist = options.allowlist || new Set<string>();
+    const stats: OnModeGateStats = {
         checked: 0,
         applied: 0,
         skippedByAllowlist: 0,
         skippedByMode: 0,
         invalidSource: 0,
     };
+
     return {
-        shouldApply(source) {
+        shouldApply(source: string): boolean {
             stats.checked += 1;
             if (mode !== 'on') {
                 stats.skippedByMode += 1;
@@ -40,16 +40,15 @@ function createOnModeGate(options = {}) {
                 }
                 stats.skippedByAllowlist += 1;
                 return false;
-            }
-            catch (_) {
+            } catch (_) {
                 stats.invalidSource += 1;
                 return false;
             }
         },
-        getStats() {
+        getStats(): OnModeGateStats {
             return { ...stats };
         },
-        reset() {
+        reset(): void {
             stats.checked = 0;
             stats.applied = 0;
             stats.skippedByAllowlist = 0;
@@ -58,4 +57,3 @@ function createOnModeGate(options = {}) {
         },
     };
 }
-//# sourceMappingURL=on-mode-gate.js.map
