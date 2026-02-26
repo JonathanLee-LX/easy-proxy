@@ -1,5 +1,70 @@
 import { useMemo, useState } from 'react'
-import type { ProxyRecord } from '@/types'
+import type { ProxyRecord, ResourceType } from '@/types'
+
+/**
+ * Determine resource type based on URL and method
+ */
+function getResourceType(record: ProxyRecord): ResourceType {
+  const url = record.source.toLowerCase()
+  const method = record.method.toUpperCase()
+  
+  // WebSocket
+  if (url.startsWith('ws://') || url.startsWith('wss://')) {
+    return 'websocket'
+  }
+  
+  // XHR/Fetch - typically JSON/API calls or non-GET methods
+  if (method !== 'GET' || url.includes('/api/') || url.includes('.json')) {
+    return 'fetch'
+  }
+  
+  // Get file extension
+  const urlWithoutQuery = url.split('?')[0]
+  const extension = urlWithoutQuery.split('.').pop() || ''
+  
+  // Document
+  if (['html', 'htm', 'php', 'asp', 'aspx', 'jsp'].includes(extension) || 
+      (!extension && method === 'GET')) {
+    return 'doc'
+  }
+  
+  // CSS
+  if (extension === 'css') {
+    return 'css'
+  }
+  
+  // JavaScript
+  if (['js', 'mjs', 'jsx', 'ts', 'tsx'].includes(extension)) {
+    return 'js'
+  }
+  
+  // Font
+  if (['woff', 'woff2', 'ttf', 'otf', 'eot'].includes(extension)) {
+    return 'font'
+  }
+  
+  // Image
+  if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp'].includes(extension)) {
+    return 'img'
+  }
+  
+  // Media
+  if (['mp4', 'webm', 'ogg', 'mp3', 'wav', 'flac', 'aac', 'm4a'].includes(extension)) {
+    return 'media'
+  }
+  
+  // Manifest
+  if (['manifest', 'webmanifest'].includes(extension)) {
+    return 'manifest'
+  }
+  
+  // WASM
+  if (extension === 'wasm') {
+    return 'wasm'
+  }
+  
+  return 'other'
+}
 
 /**
  * Chrome DevTools style fuzzy filter for proxy records.
@@ -10,17 +75,26 @@ import type { ProxyRecord } from '@/types'
  * - domain:example.com: filter by domain
  * - -keyword: negative filter (exclude)
  * - Multiple terms separated by space (AND logic)
+ * - Resource type filter: 'all', 'fetch', 'doc', 'css', 'js', 'font', 'img', 'media', 'manifest', 'websocket', 'wasm', 'other'
  */
 export function useFuzzyFilter(records: ProxyRecord[]) {
   const [filterText, setFilterText] = useState('')
+  const [resourceTypeFilter, setResourceTypeFilter] = useState<ResourceType>('all')
 
   const filteredRecords = useMemo(() => {
+    // First filter by resource type
+    let result = records
+    if (resourceTypeFilter !== 'all') {
+      result = result.filter((record) => getResourceType(record) === resourceTypeFilter)
+    }
+    
+    // Then filter by text
     const raw = filterText.trim()
-    if (!raw) return records
+    if (!raw) return result
 
     const terms = raw.split(/\s+/).filter(Boolean)
 
-    return records.filter((record) => {
+    return result.filter((record) => {
       return terms.every((term) => {
         const isNegative = term.startsWith('-') && term.length > 1
         const cleanTerm = isNegative ? term.slice(1) : term
@@ -65,9 +139,9 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
         return isNegative ? !matches : matches
       })
     })
-  }, [records, filterText])
+  }, [records, filterText, resourceTypeFilter])
 
-  return { filterText, setFilterText, filteredRecords }
+  return { filterText, setFilterText, resourceTypeFilter, setResourceTypeFilter, filteredRecords }
 }
 
 function fuzzyMatch(needle: string, haystack: string): boolean {
