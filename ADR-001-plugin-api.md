@@ -253,3 +253,8 @@ type Permission =
 - 编写 `builtin-logger` 参考实现。
 - 补充 ADR-002（权限与隔离）和 ADR-003（迁移与回滚）。
 
+## 9. 相关文档
+
+- [插件系统完整开发指南](./PLUGIN_SYSTEM_GUIDE.md) - 详细的插件开发教程，包含接口说明、示例代码和最佳实践
+- [插件架构设计](./RFC_PLUGIN_ARCHITECTURE.md) - 插件系统的整体架构设计
+
