@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import type { ProxyRecord } from '@/types'
+import type { ProxyRecord, ResourceType } from '@/types'
+import { getResourceType } from '@/utils/resource-type'
 
 /**
  * Chrome DevTools style fuzzy filter for proxy records.
@@ -10,17 +11,26 @@ import type { ProxyRecord } from '@/types'
  * - domain:example.com: filter by domain
  * - -keyword: negative filter (exclude)
  * - Multiple terms separated by space (AND logic)
+ * - Resource type filter: 'all', 'fetch', 'doc', 'css', 'js', 'font', 'img', 'media', 'manifest', 'websocket', 'wasm', 'other'
  */
 export function useFuzzyFilter(records: ProxyRecord[]) {
   const [filterText, setFilterText] = useState('')
+  const [resourceTypeFilter, setResourceTypeFilter] = useState<ResourceType>('all')
 
   const filteredRecords = useMemo(() => {
+    // First filter by resource type
+    let result = records
+    if (resourceTypeFilter !== 'all') {
+      result = result.filter((record) => getResourceType(record) === resourceTypeFilter)
+    }
+    
+    // Then filter by text
     const raw = filterText.trim()
-    if (!raw) return records
+    if (!raw) return result
 
     const terms = raw.split(/\s+/).filter(Boolean)
 
-    return records.filter((record) => {
+    return result.filter((record) => {
       return terms.every((term) => {
         const isNegative = term.startsWith('-') && term.length > 1
         const cleanTerm = isNegative ? term.slice(1) : term
@@ -65,9 +75,9 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
         return isNegative ? !matches : matches
       })
     })
-  }, [records, filterText])
+  }, [records, filterText, resourceTypeFilter])
 
-  return { filterText, setFilterText, filteredRecords }
+  return { filterText, setFilterText, resourceTypeFilter, setResourceTypeFilter, filteredRecords }
 }
 
 function fuzzyMatch(needle: string, haystack: string): boolean {

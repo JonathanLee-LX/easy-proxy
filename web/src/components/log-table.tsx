@@ -93,32 +93,33 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
   }, [timeSortOrder])
 
   return (
-    <ScrollArea className="h-[calc(100vh-12rem)]" ref={scrollRef}>
-      <div className="min-w-full">
-        {/* Header */}
-        <div className="flex bg-muted/50 text-xs font-medium border-b">
-          <div className="w-16 py-2 px-2">方法</div>
-          <div className="w-14 py-2 px-2">状态</div>
-          <div className="flex-1 py-2 px-2 min-w-[200px]">源地址</div>
-          <div className="flex-1 py-2 px-2 min-w-[200px]">目标地址</div>
-          <div className="w-14 py-2 px-2">协议</div>
-          <div className="w-16 py-2 px-2">耗时</div>
-          <div className="w-28 py-2 px-2 flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setTimeSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
-              className="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
-              title={timeSortOrder === 'desc' ? '倒序（新→旧），点击切换为正序' : '正序（旧→新），点击切换为倒序'}
-            >
-              时间
-              {timeSortOrder === 'desc' ? (
-                <ArrowDown className="h-3 w-3" />
-              ) : (
-                <ArrowUp className="h-3 w-3" />
-              )}
-            </button>
-          </div>
+    <div className="relative">
+      {/* Header - Sticky */}
+      <div className="sticky top-0 z-10 flex bg-muted/50 text-xs font-medium border-b backdrop-blur supports-[backdrop-filter]:bg-muted/95">
+        <div className="w-16 py-2 px-2">方法</div>
+        <div className="w-14 py-2 px-2">状态</div>
+        <div className="flex-1 py-2 px-2 min-w-[200px]">源地址</div>
+        <div className="flex-1 py-2 px-2 min-w-[200px]">目标地址</div>
+        <div className="w-14 py-2 px-2">协议</div>
+        <div className="w-16 py-2 px-2">耗时</div>
+        <div className="w-28 py-2 px-2 flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setTimeSortOrder((o) => (o === 'desc' ? 'asc' : 'desc'))}
+            className="inline-flex items-center gap-1 hover:text-foreground transition-colors cursor-pointer"
+            title={timeSortOrder === 'desc' ? '倒序（新→旧），点击切换为正序' : '正序（旧→新），点击切换为倒序'}
+          >
+            时间
+            {timeSortOrder === 'desc' ? (
+              <ArrowDown className="h-3 w-3" />
+            ) : (
+              <ArrowUp className="h-3 w-3" />
+            )}
+          </button>
         </div>
+      </div>
+      <ScrollArea className="h-[calc(100vh-16rem)]" ref={scrollRef}>
+      <div className="min-w-full">
 
         {/* Virtual List */}
         <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
@@ -191,6 +192,7 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
           )}
         </div>
       </div>
-    </ScrollArea>
+      </ScrollArea>
+    </div>
   )
 }

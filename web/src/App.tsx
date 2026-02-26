@@ -16,7 +16,7 @@ import type { MockRule } from '@/types'
 function App() {
   const store = useProxyStore()
   const { theme, toggleTheme } = useTheme()
-  const { filterText, setFilterText, filteredRecords } = useFuzzyFilter(store.records)
+  const { filterText, setFilterText, resourceTypeFilter, setResourceTypeFilter, filteredRecords } = useFuzzyFilter(store.records)
   const [recording, setRecording] = useState(true)
   const [autoScroll, setAutoScroll] = useState(true)
   const [activeTab, setActiveTab] = useState('logs')
@@ -114,6 +114,8 @@ function App() {
                 <LogFilter
                   filterText={filterText}
                   setFilterText={setFilterText}
+                  resourceTypeFilter={resourceTypeFilter}
+                  setResourceTypeFilter={setResourceTypeFilter}
                   totalCount={store.records.length}
                   filteredCount={filteredRecords.length}
                   onClear={store.clearRecords}

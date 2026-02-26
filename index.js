@@ -1688,14 +1688,9 @@ process.on('uncaughtException', function (err) {
 });
 
 function logRuleMap() {
-    const ruleArr = Object.entries(ruleMap).reduce((arr, [r, t]) => {
-        arr.push({
-            rule: r,
-            target: t
-        })
-        return arr
-    }, [])
-    console.table(ruleArr)
+    const ruleCount = Object.keys(ruleMap).length
+    const configFile = currentConfig ? currentConfig.path : '未知'
+    console.log(chalk.green(`已加载配置文件: ${configFile} (${ruleCount} 条规则)`))
 }
 
 function observeShadowDecision(method, source, baseTarget, observedTarget) {

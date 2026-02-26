@@ -1,3 +1,17 @@
+export type ResourceType = 
+  | 'all'
+  | 'fetch'
+  | 'doc'
+  | 'css'
+  | 'js'
+  | 'font'
+  | 'img'
+  | 'media'
+  | 'manifest'
+  | 'websocket'
+  | 'wasm'
+  | 'other'
+
 export interface ProxyRecord {
   id?: number
   method: string
