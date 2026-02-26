@@ -1,4 +1,4 @@
-const { resolveTargetUrl, parseEprc } = require('../helpers')
+const { resolveTargetUrl, parseEprc } = require('../dist/helpers')
 const assert = require('assert')
 
 describe('Test resolveTargetUrl function.', function () {

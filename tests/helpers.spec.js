@@ -79,7 +79,7 @@ describe('helpers.resolveTargetUrl', () => {
 describe('helpers.getFreePort', () => {
   it('supports base port larger than 9999', () => {
     const script = `
-      const { getFreePort } = require('./helpers')
+      const { getFreePort } = require('./dist/helpers')
       getFreePort().then((port) => {
         process.stdout.write(String(port))
       }).catch((err) => {
