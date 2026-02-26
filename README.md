@@ -76,11 +76,15 @@
 }
 ```
 
+## 文档
+
+查看 [文档索引](./DOCS_INDEX.md) 了解所有可用文档。
+
 ## 插件开发
 
 Easy Proxy 提供了强大的插件系统，允许开发者扩展代理功能。详细的插件开发指南请参考：
 
-- [插件系统完整开发指南](./PLUGIN_SYSTEM_GUIDE.md) - 包含插件接口、Hook 协议、示例代码和最佳实践
+- [插件系统完整开发指南](./PLUGIN_SYSTEM_GUIDE.md) ⭐ - 包含插件接口、Hook 协议、示例代码和最佳实践
 - [插件架构设计文档](./RFC_PLUGIN_ARCHITECTURE.md) - 插件系统的架构设计和实施方案
 - [插件 API 决策文档](./ADR-001-plugin-api.md) - 插件 API 与 Hook 协议定版
 
