@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Save, Trash2, Layers } from 'lucide-react'
+import { Plus, Save, Trash2, Layers, Filter, X } from 'lucide-react'
 import type { RuleItem, RuleSet } from '@/types'
 
 interface RuleConfigProps {
@@ -37,6 +37,11 @@ export function RuleConfig(props: RuleConfigProps) {
   const [mergeByTarget, setMergeByTarget] = useState(false)
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null)
   const highlightRowRef = useRef<HTMLTableRowElement | null>(null)
+  
+  // 筛选相关状态
+  const [showFilters, setShowFilters] = useState(false)
+  const [ruleFilter, setRuleFilter] = useState('')
+  const [targetFilter, setTargetFilter] = useState('')
 
   useEffect(() => {
     fetchRules()
@@ -96,23 +101,52 @@ export function RuleConfig(props: RuleConfigProps) {
     enabledState: boolean | 'indeterminate'
   }
 
+  // 筛选后的规则列表
+  const filteredRules = useMemo(() => {
+    if (!ruleFilter && !targetFilter) {
+      return rules
+    }
+    
+    const lowerRuleFilter = ruleFilter.toLowerCase()
+    const lowerTargetFilter = targetFilter.toLowerCase()
+    
+    return rules.filter((item) => {
+      const matchesRule = !ruleFilter || item.rule.toLowerCase().includes(lowerRuleFilter)
+      const matchesTarget = !targetFilter || item.target.toLowerCase().includes(lowerTargetFilter)
+      return matchesRule && matchesTarget
+    })
+  }, [rules, ruleFilter, targetFilter])
+
+  // 获取所有唯一的目标列表（用于下拉筛选）
+  const uniqueTargets = useMemo(() => {
+    const targets = new Set<string>()
+    rules.forEach((item) => {
+      if (item.target.trim()) {
+        targets.add(item.target.trim())
+      }
+    })
+    return Array.from(targets).sort()
+  }, [rules])
+
   const groupedRules = useMemo<RuleGroup[]>(() => {
     const groups = new Map<string, RuleGroup>()
-    rules.forEach((item, index) => {
+    filteredRules.forEach((item) => {
+      // 需要使用原始索引
+      const originalIndex = rules.indexOf(item)
       const normalizedTarget = item.target.trim()
-      const key = normalizedTarget === '' ? `__EMPTY__${index}` : normalizedTarget
+      const key = normalizedTarget === '' ? `__EMPTY__${originalIndex}` : normalizedTarget
       const existing = groups.get(key)
       if (!existing) {
         groups.set(key, {
           key,
           target: item.target,
-          indices: [index],
+          indices: [originalIndex],
           rules: [item.rule],
           enabledState: item.enabled,
         })
         return
       }
-      existing.indices.push(index)
+      existing.indices.push(originalIndex)
       existing.rules.push(item.rule)
     })
 
@@ -124,7 +158,7 @@ export function RuleConfig(props: RuleConfigProps) {
       else enabledState = 'indeterminate'
       return { ...group, enabledState }
     })
-  }, [rules])
+  }, [filteredRules, rules])
 
   const toggleGroup = useCallback(
     (indices: number[], enabledState: boolean | 'indeterminate') => {
@@ -199,6 +233,15 @@ export function RuleConfig(props: RuleConfigProps) {
         <h3 className="text-sm font-medium text-muted-foreground">代理规则配置</h3>
         <div className="flex items-center gap-2">
           <Button
+            variant={showFilters ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowFilters((v) => !v)}
+            title="显示/隐藏筛选器"
+          >
+            <Filter className="h-4 w-4 mr-1" />
+            筛选
+          </Button>
+          <Button
             variant={mergeByTarget ? 'default' : 'outline'}
             size="sm"
             onClick={() => setMergeByTarget((v) => !v)}
@@ -227,6 +270,76 @@ export function RuleConfig(props: RuleConfigProps) {
           )}
         </div>
       </div>
+      
+      {showFilters && (
+        <div className="flex items-center gap-2 p-4 bg-muted/50 rounded-md">
+          <div className="flex-1 space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">筛选规则</label>
+            <div className="relative">
+              <Input
+                value={ruleFilter}
+                onChange={(e) => setRuleFilter(e.target.value)}
+                placeholder="输入规则名称进行筛选..."
+                className="h-9"
+              />
+              {ruleFilter && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                  onClick={() => setRuleFilter('')}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="flex-1 space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">筛选目标</label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  value={targetFilter}
+                  onChange={(e) => setTargetFilter(e.target.value)}
+                  placeholder="输入目标地址进行筛选..."
+                  className="h-9"
+                  list="target-list"
+                />
+                <datalist id="target-list">
+                  {uniqueTargets.map((target) => (
+                    <option key={target} value={target} />
+                  ))}
+                </datalist>
+                {targetFilter && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                    onClick={() => setTargetFilter('')}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+          {(ruleFilter || targetFilter) && (
+            <div className="self-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setRuleFilter('')
+                  setTargetFilter('')
+                }}
+                className="h-9"
+              >
+                清除筛选
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -242,6 +355,12 @@ export function RuleConfig(props: RuleConfigProps) {
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                   暂无规则，点击"添加规则"开始配置
+                </TableCell>
+              </TableRow>
+            ) : filteredRules.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                  没有匹配的规则，请调整筛选条件
                 </TableCell>
               </TableRow>
             ) : (
@@ -286,50 +405,59 @@ export function RuleConfig(props: RuleConfigProps) {
                       </TableCell>
                     </TableRow>
                   ))
-                : rules.map((item, index) => (
-                    <TableRow
-                      key={index}
-                      ref={highlightIndex === index ? highlightRowRef : undefined}
-                      className={highlightIndex === index ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
-                    >
-                      <TableCell>
-                        <Checkbox
-                          checked={item.enabled}
-                          onCheckedChange={() => toggleRule(index)}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={item.rule}
-                          onChange={(e) => updateRule(index, 'rule', e.target.value)}
-                          placeholder="example.com"
-                          className="h-8"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={item.target}
-                          onChange={(e) => updateRule(index, 'target', e.target.value)}
-                          placeholder="127.0.0.1:3000"
-                          className="h-8"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteRule(index)}
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                : filteredRules.map((item) => {
+                    const index = rules.indexOf(item)
+                    return (
+                      <TableRow
+                        key={index}
+                        ref={highlightIndex === index ? highlightRowRef : undefined}
+                        className={highlightIndex === index ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
+                      >
+                        <TableCell>
+                          <Checkbox
+                            checked={item.enabled}
+                            onCheckedChange={() => toggleRule(index)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={item.rule}
+                            onChange={(e) => updateRule(index, 'rule', e.target.value)}
+                            placeholder="example.com"
+                            className="h-8"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={item.target}
+                            onChange={(e) => updateRule(index, 'target', e.target.value)}
+                            placeholder="127.0.0.1:3000"
+                            className="h-8"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteRule(index)}
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
             )}
           </TableBody>
         </Table>
       </div>
+      
+      {(ruleFilter || targetFilter) && filteredRules.length > 0 && (
+        <div className="text-sm text-muted-foreground">
+          显示 {filteredRules.length} / {rules.length} 条规则
+        </div>
+      )}
     </div>
   )
 }
