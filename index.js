@@ -801,7 +801,7 @@ const proxyServer = http.createServer((req, res) => {
                 req.on('data', chunk => { text += chunk })
                 req.on('end', () => {
                     try {
-                        const { parseEprc } = require('./helpers')
+                        const { parseEprc } = require('./dist/helpers')
                         const newRuleMap = parseEprc(text)
                         if (currentConfig.format === 'json') {
                             // 对于JSON格式，需要保留完整的规则信息（包括禁用的规则）
@@ -861,7 +861,30 @@ const proxyServer = http.createServer((req, res) => {
                 })
             } else {
                 res.setHeader('Content-Type', 'text/plain; charset=utf-8')
-                res.write(ruleMapToEprcText(ruleMap))
+                // 读取完整的配置文件内容（包括禁用的规则）
+                if (currentConfig && fs.existsSync(currentConfig.path)) {
+                    const content = fs.readFileSync(currentConfig.path, 'utf8')
+                    // 对于JSON格式，需要转换为EPRC格式
+                    if (currentConfig.format === 'json') {
+                        try {
+                            const json = JSON.parse(content)
+                            const rulesObj = json.rules || {}
+                            const lines = []
+                            for (const [rule, target] of Object.entries(rulesObj)) {
+                                const prefix = rule.startsWith('//') ? '//' : ''
+                                const cleanRule = rule.replace(/^\/\//, '')
+                                lines.push(`${prefix}${cleanRule} ${target}`)
+                            }
+                            res.write(lines.join('\n'))
+                        } catch (err) {
+                            res.write(ruleMapToEprcText(ruleMap))
+                        }
+                    } else {
+                        res.write(content)
+                    }
+                } else {
+                    res.write(ruleMapToEprcText(ruleMap))
+                }
                 res.end()
             }
         } else if (req.url.startsWith('/api/logs')) {
