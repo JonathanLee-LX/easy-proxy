@@ -96,4 +96,88 @@ describe('helpers.getFreePort', () => {
   })
 })
 
+describe('helpers.parseEprc - disabled rules support', () => {
+  it('should ignore rules with // prefix', () => {
+    const content = `
+rule1 target1
+//rule2 target2
+rule3 target3
+    `.trim()
+    const map = parseEprc(content)
+    assert.strictEqual(map['rule1'], 'target1')
+    assert.strictEqual(map['rule2'], undefined)
+    assert.strictEqual(map['rule3'], 'target3')
+  })
+
+  it('should handle mixed enabled and disabled rules', () => {
+    const content = `
+127.0.0.1:3000 enabled1.com enabled2.com
+//127.0.0.1:3000 disabled.com
+192.168.1.1 active.com
+    `.trim()
+    const map = parseEprc(content)
+    assert.strictEqual(map['enabled1.com'], '127.0.0.1:3000')
+    assert.strictEqual(map['enabled2.com'], '127.0.0.1:3000')
+    assert.strictEqual(map['disabled.com'], undefined)
+    assert.strictEqual(map['active.com'], '192.168.1.1')
+  })
+
+  it('should handle disabled rules with multiple domains', () => {
+    const content = '//127.0.0.1:8000 api.example.com web.example.com'
+    const map = parseEprc(content)
+    assert.strictEqual(map['api.example.com'], undefined)
+    assert.strictEqual(map['web.example.com'], undefined)
+  })
+
+  it('should handle empty content', () => {
+    const map = parseEprc('')
+    assert.strictEqual(Object.keys(map).length, 0)
+  })
+
+  it('should handle only disabled rules', () => {
+    const content = `
+//rule1 target1
+//rule2 target2
+    `.trim()
+    const map = parseEprc(content)
+    assert.strictEqual(Object.keys(map).length, 0)
+    assert.strictEqual(map['rule1'], undefined)
+    assert.strictEqual(map['rule2'], undefined)
+  })
+})
+
+describe('helpers.ruleMapToEprcText - preserves rule format', () => {
+  it('should format rules with target first for IP addresses', () => {
+    const text = ruleMapToEprcText({
+      'example.com': '127.0.0.1:3000',
+      'api.example.com': '127.0.0.1:3000',
+    })
+    assert.ok(text.includes('127.0.0.1:3000'))
+    assert.ok(text.includes('example.com'))
+    assert.ok(text.includes('api.example.com'))
+  })
+
+  it('should format rules with target first for URLs', () => {
+    const text = ruleMapToEprcText({
+      'api.com': 'https://localhost:8000',
+      'web.com': 'https://localhost:8000',
+    })
+    assert.ok(text.includes('https://localhost:8000'))
+    assert.ok(text.includes('api.com'))
+    assert.ok(text.includes('web.com'))
+  })
+
+  it('should handle single rule', () => {
+    const text = ruleMapToEprcText({
+      'single.com': '192.168.1.1',
+    })
+    assert.strictEqual(text.trim(), '192.168.1.1 single.com')
+  })
+
+  it('should handle empty rule map', () => {
+    const text = ruleMapToEprcText({})
+    assert.strictEqual(text, '')
+  })
+})
+
 export {};
