@@ -804,7 +804,45 @@ const proxyServer = http.createServer((req, res) => {
                         const { parseEprc } = require('./helpers')
                         const newRuleMap = parseEprc(text)
                         if (currentConfig.format === 'json') {
-                            const content = JSON.stringify({ rules: newRuleMap }, null, 2)
+                            // 对于JSON格式，需要保留完整的规则信息（包括禁用的规则）
+                            // 解析带有启用/禁用状态的规则
+                            const rulesWithStatus = text.split(/\r?\n/).filter(line => line.trim()).map(line => {
+                                let enabled = true
+                                let trimmedLine = line.trim()
+                                if (trimmedLine.startsWith('//')) {
+                                    enabled = false
+                                    trimmedLine = trimmedLine.replace(/^\/\//, '').trim()
+                                }
+                                return { line: trimmedLine, enabled }
+                            })
+                            
+                            // 构建包含启用状态的JSON结构
+                            const rulesObj = {}
+                            rulesWithStatus.forEach(({ line, enabled }) => {
+                                const parts = line.split(/\s+/).filter(Boolean)
+                                if (parts.length < 2) return
+                                
+                                const IP_PATTERN = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/
+                                const URL_PATTERN = /^https?:\/\//
+                                const isTargetFirst = IP_PATTERN.test(parts[0]) || URL_PATTERN.test(parts[0])
+                                
+                                if (isTargetFirst) {
+                                    const [target, ...rules] = parts
+                                    rules.forEach(rule => {
+                                        const key = enabled ? rule : `//${rule}`
+                                        rulesObj[key] = target
+                                    })
+                                } else {
+                                    const target = parts[parts.length - 1]
+                                    const rules = parts.slice(0, -1)
+                                    rules.forEach(rule => {
+                                        const key = enabled ? rule : `//${rule}`
+                                        rulesObj[key] = target
+                                    })
+                                }
+                            })
+                            
+                            const content = JSON.stringify({ rules: rulesObj }, null, 2)
                             fs.writeFileSync(currentConfig.path, content, 'utf8')
                         } else {
                             fs.writeFileSync(currentConfig.path, text, 'utf8')
