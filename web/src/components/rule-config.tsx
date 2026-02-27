@@ -10,8 +10,25 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Save, Trash2, Layers, Filter, X } from 'lucide-react'
+import { Plus, Save, Trash2, Layers, Filter, X, GripVertical, ArrowUpToLine } from 'lucide-react'
 import type { RuleItem, RuleSet } from '@/types'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 interface RuleConfigProps {
   rules: RuleItem[]
@@ -28,6 +45,100 @@ interface RuleConfigProps {
   switchRuleSet?: (id: number) => Promise<boolean>
   /** @deprecated 暂未实现 */
   deleteRuleSet?: (id: number) => Promise<boolean>
+}
+
+interface SortableRuleRowProps {
+  id: string
+  item: RuleItem
+  highlighted: boolean
+  highlightRef: React.RefObject<HTMLTableRowElement | null>
+  onToggle: () => void
+  onUpdateRule: (field: 'rule' | 'target', value: string) => void
+  onDelete: () => void
+  onMoveToTop: () => void
+}
+
+function SortableRuleRow({
+  id,
+  item,
+  highlighted,
+  highlightRef,
+  onToggle,
+  onUpdateRule,
+  onDelete,
+  onMoveToTop,
+}: SortableRuleRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <TableRow
+      ref={(node) => {
+        setNodeRef(node)
+        if (highlighted && highlightRef) {
+          highlightRef.current = node
+        }
+      }}
+      style={style}
+      className={highlighted ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
+    >
+      <TableCell className="w-8 cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      </TableCell>
+      <TableCell className="w-12">
+        <Checkbox checked={item.enabled} onCheckedChange={onToggle} />
+      </TableCell>
+      <TableCell>
+        <Input
+          value={item.rule}
+          onChange={(e) => onUpdateRule('rule', e.target.value)}
+          placeholder="example.com"
+          className="h-8"
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          value={item.target}
+          onChange={(e) => onUpdateRule('target', e.target.value)}
+          placeholder="127.0.0.1:3000"
+          className="h-8"
+        />
+      </TableCell>
+      <TableCell className="w-24">
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onMoveToTop}
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+            title="置顶"
+          >
+            <ArrowUpToLine className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onDelete}
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  )
 }
 
 export function RuleConfig(props: RuleConfigProps) {
@@ -69,10 +180,45 @@ export function RuleConfig(props: RuleConfigProps) {
   )
 
   const addRule = useCallback(() => {
-    const nextIndex = rules.length
-    setRules((prev) => [...prev, { enabled: true, rule: '', target: '' }])
-    setHighlightIndex(nextIndex)
-  }, [rules.length, setRules])
+    // 从顶部添加规则
+    setRules((prev) => [{ enabled: true, rule: '', target: '' }, ...prev])
+    setHighlightIndex(0)
+  }, [setRules])
+
+  const moveToTop = useCallback(
+    (index: number) => {
+      setRules((prev) => {
+        const newRules = [...prev]
+        const [item] = newRules.splice(index, 1)
+        newRules.unshift(item)
+        return newRules
+      })
+      setHighlightIndex(0)
+    },
+    [setRules],
+  )
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event
+
+      if (over && active.id !== over.id) {
+        setRules((prev) => {
+          const oldIndex = prev.findIndex((_, i) => `rule-${i}` === active.id)
+          const newIndex = prev.findIndex((_, i) => `rule-${i}` === over.id)
+          return arrayMove(prev, oldIndex, newIndex)
+        })
+      }
+    },
+    [setRules],
+  )
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
 
   useEffect(() => {
     if (highlightIndex == null) return
@@ -344,110 +490,149 @@ export function RuleConfig(props: RuleConfigProps) {
         <Table>
           <TableHeader>
             <TableRow>
+              {!mergeByTarget && !ruleFilter && !targetFilter && (
+                <TableHead className="w-8"></TableHead>
+              )}
               <TableHead className="w-12">启用</TableHead>
               <TableHead>规则</TableHead>
               <TableHead>目标</TableHead>
-              <TableHead className="w-16">操作</TableHead>
+              <TableHead className="w-24">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rules.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                   暂无规则，点击"添加规则"开始配置
                 </TableCell>
               </TableRow>
             ) : filteredRules.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                   没有匹配的规则，请调整筛选条件
                 </TableCell>
               </TableRow>
-            ) : (
-              mergeByTarget
-                ? groupedRules.map((group) => (
-                    <TableRow
-                      key={group.key}
-                      ref={highlightIndex != null && group.indices.includes(highlightIndex) ? highlightRowRef : undefined}
-                      className={highlightIndex != null && group.indices.includes(highlightIndex) ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
+            ) : mergeByTarget ? (
+              groupedRules.map((group) => (
+                <TableRow
+                  key={group.key}
+                  ref={highlightIndex != null && group.indices.includes(highlightIndex) ? highlightRowRef : undefined}
+                  className={highlightIndex != null && group.indices.includes(highlightIndex) ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
+                >
+                  <TableCell>
+                    <Checkbox
+                      checked={group.enabledState}
+                      onCheckedChange={() => toggleGroup(group.indices, group.enabledState)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={group.rules.filter(Boolean).join(' ')}
+                      onChange={(e) => updateGroupRules(group.indices, e.target.value)}
+                      placeholder="example.com api.example.com"
+                      className="h-8"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      value={group.target}
+                      onChange={(e) => updateGroupTarget(group.indices, e.target.value)}
+                      placeholder="127.0.0.1:3000"
+                      className="h-8"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteGroup(group.indices)}
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
                     >
-                      <TableCell>
-                        <Checkbox
-                          checked={group.enabledState}
-                          onCheckedChange={() => toggleGroup(group.indices, group.enabledState)}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={group.rules.filter(Boolean).join(' ')}
-                          onChange={(e) => updateGroupRules(group.indices, e.target.value)}
-                          placeholder="example.com api.example.com"
-                          className="h-8"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          value={group.target}
-                          onChange={(e) => updateGroupTarget(group.indices, e.target.value)}
-                          placeholder="127.0.0.1:3000"
-                          className="h-8"
-                        />
-                      </TableCell>
-                      <TableCell>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : ruleFilter || targetFilter ? (
+              filteredRules.map((item) => {
+                const index = rules.indexOf(item)
+                return (
+                  <TableRow
+                    key={index}
+                    ref={highlightIndex === index ? highlightRowRef : undefined}
+                    className={highlightIndex === index ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
+                  >
+                    <TableCell>
+                      <Checkbox
+                        checked={item.enabled}
+                        onCheckedChange={() => toggleRule(index)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={item.rule}
+                        onChange={(e) => updateRule(index, 'rule', e.target.value)}
+                        placeholder="example.com"
+                        className="h-8"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={item.target}
+                        onChange={(e) => updateRule(index, 'target', e.target.value)}
+                        placeholder="127.0.0.1:3000"
+                        className="h-8"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => deleteGroup(group.indices)}
+                          onClick={() => moveToTop(index)}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+                          title="置顶"
+                        >
+                          <ArrowUpToLine className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteRule(index)}
                           className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                : filteredRules.map((item) => {
-                    const index = rules.indexOf(item)
-                    return (
-                      <TableRow
-                        key={index}
-                        ref={highlightIndex === index ? highlightRowRef : undefined}
-                        className={highlightIndex === index ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
-                      >
-                        <TableCell>
-                          <Checkbox
-                            checked={item.enabled}
-                            onCheckedChange={() => toggleRule(index)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={item.rule}
-                            onChange={(e) => updateRule(index, 'rule', e.target.value)}
-                            placeholder="example.com"
-                            className="h-8"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={item.target}
-                            onChange={(e) => updateRule(index, 'target', e.target.value)}
-                            placeholder="127.0.0.1:3000"
-                            className="h-8"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteRule(index)}
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            ) : (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={rules.map((_, i) => `rule-${i}`)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {rules.map((item, index) => (
+                    <SortableRuleRow
+                      key={`rule-${index}`}
+                      id={`rule-${index}`}
+                      item={item}
+                      highlighted={highlightIndex === index}
+                      highlightRef={highlightRowRef}
+                      onToggle={() => toggleRule(index)}
+                      onUpdateRule={(field, value) => updateRule(index, field, value)}
+                      onDelete={() => deleteRule(index)}
+                      onMoveToTop={() => moveToTop(index)}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
             )}
           </TableBody>
         </Table>
