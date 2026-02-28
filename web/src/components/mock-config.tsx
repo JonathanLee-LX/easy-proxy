@@ -20,6 +20,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Plus, Trash2, Pencil, FileText, Code, ChevronDown, ChevronRight } from 'lucide-react'
 import { JsonTextarea } from '@/components/json-textarea'
+import { formatContent } from '@/lib/formatter'
 import type { MockRule } from '@/types'
 
 interface MockConfigProps {
@@ -61,6 +62,7 @@ export function MockConfig({
   const [headersExpanded, setHeadersExpanded] = useState(false)
   const [headerKey, setHeaderKey] = useState('')
   const [headerValue, setHeaderValue] = useState('')
+  const [formatError, setFormatError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchMocks()
@@ -139,13 +141,17 @@ export function MockConfig({
     setEditForm((prev) => ({ ...prev, [field]: value }))
   }
 
-  // 尝试格式化 body 为 JSON
+  // 自动格式化 body（支持 JSON, HTML, JS, CSS）
   const formatBody = useCallback(() => {
     try {
-      const obj = JSON.parse(editForm.body)
-      updateField('body', JSON.stringify(obj, null, 2))
-    } catch {
-      // keep as is
+      const { formatted, type } = formatContent(editForm.body)
+      updateField('body', formatted)
+      setFormatError(null)
+      // 显示格式化成功的提示（可选）
+      console.log(`已格式化为 ${type}`)
+    } catch (error) {
+      setFormatError(error instanceof Error ? error.message : '格式化失败')
+      setTimeout(() => setFormatError(null), 3000)
     }
   }, [editForm.body])
 
@@ -272,7 +278,7 @@ export function MockConfig({
 
       {/* 编辑面板 */}
       <Sheet open={editOpen} onOpenChange={setEditOpen}>
-        <SheetContent className="w-full sm:max-w-xl p-0 flex flex-col">
+        <SheetContent className="p-0 flex flex-col" resizable={true}>
           <SheetHeader className="px-4 pt-4 pb-2">
             <SheetTitle className="text-base">
               {editId != null ? '编辑 Mock 规则' : '新建 Mock 规则'}
@@ -392,14 +398,20 @@ export function MockConfig({
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-muted-foreground">响应内容 (Body)</label>
-                  <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={formatBody}>
-                    格式化 JSON
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {formatError && (
+                      <span className="text-xs text-red-500">{formatError}</span>
+                    )}
+                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={formatBody}>
+                      <Code className="h-3 w-3 mr-1" />
+                      智能格式化
+                    </Button>
+                  </div>
                 </div>
                 <JsonTextarea
                   value={editForm.body}
                   onChange={(v) => updateField('body', v)}
-                  placeholder='{"code": 0, "data": {...}}'
+                  placeholder='支持 JSON, HTML, JS, CSS 等格式'
                 />
               </div>
             )}
