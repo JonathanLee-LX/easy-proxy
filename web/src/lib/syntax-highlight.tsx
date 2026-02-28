@@ -1,5 +1,29 @@
 import type React from 'react'
 
+// 性能配置
+const MAX_HIGHLIGHT_SIZE = 50 * 1024 // 50KB，超过此大小不进行语法高亮
+const MAX_HIGHLIGHT_LINES = 1000 // 最多高亮 1000 行
+
+/**
+ * 检查内容是否适合进行语法高亮
+ */
+export function shouldHighlight(code: string): boolean {
+  if (!code) return false
+  
+  // 检查大小限制
+  if (code.length > MAX_HIGHLIGHT_SIZE) {
+    return false
+  }
+  
+  // 检查行数限制
+  const lineCount = code.split('\n').length
+  if (lineCount > MAX_HIGHLIGHT_LINES) {
+    return false
+  }
+  
+  return true
+}
+
 /**
  * 检测代码类型
  */
@@ -41,35 +65,48 @@ export function detectLanguage(code: string): 'json' | 'html' | 'css' | 'javascr
 }
 
 /**
- * JSON 语法高亮
+ * JSON 语法高亮（优化版本）
  */
 function highlightJson(json: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = []
-  const tokenRe = /("(?:[^"\\]|\\.)*")\s*:|("(?:[^"\\]|\\.)*")|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b|\b(true|false)\b|\b(null)\b|([{}[\]:,])/g
+  // 简化的正则，避免复杂回溯
+  const tokenRe = /("(?:[^"\\]|\\.)+")\s*:|("(?:[^"\\]|\\.)+")|(-?\d+\.?\d*(?:[eE][+-]?\d+)?)|true|false|null|[{}[\]:,]/g
   let lastIndex = 0
   let match: RegExpExecArray | null
+  let matchCount = 0
+  const MAX_MATCHES = 5000 // 限制最大匹配数，防止性能问题
 
-  while ((match = tokenRe.exec(json)) !== null) {
+  while ((match = tokenRe.exec(json)) !== null && matchCount++ < MAX_MATCHES) {
     if (match.index > lastIndex) {
       nodes.push(json.slice(lastIndex, match.index))
     }
-    const [, key, str, num, bool, nil, punct] = match
-    if (key !== undefined) {
-      nodes.push(<span key={match.index} className="text-purple-600 dark:text-purple-400">{key}</span>)
+    
+    const token = match[0]
+    
+    if (match[1]) {
+      // 对象键
+      nodes.push(<span key={match.index} className="text-purple-600 dark:text-purple-400">{match[1]}</span>)
       nodes.push(':')
-    } else if (str !== undefined) {
-      nodes.push(<span key={match.index} className="text-emerald-600 dark:text-emerald-400">{str}</span>)
-    } else if (num !== undefined) {
-      nodes.push(<span key={match.index} className="text-blue-600 dark:text-blue-400">{num}</span>)
-    } else if (bool !== undefined) {
-      nodes.push(<span key={match.index} className="text-amber-600 dark:text-amber-400">{bool}</span>)
-    } else if (nil !== undefined) {
-      nodes.push(<span key={match.index} className="text-red-400">{nil}</span>)
-    } else if (punct !== undefined) {
-      nodes.push(<span key={match.index} className="text-muted-foreground">{punct}</span>)
+    } else if (match[2]) {
+      // 字符串值
+      nodes.push(<span key={match.index} className="text-emerald-600 dark:text-emerald-400">{match[2]}</span>)
+    } else if (match[3]) {
+      // 数字
+      nodes.push(<span key={match.index} className="text-blue-600 dark:text-blue-400">{match[3]}</span>)
+    } else if (token === 'true' || token === 'false') {
+      // 布尔值
+      nodes.push(<span key={match.index} className="text-amber-600 dark:text-amber-400">{token}</span>)
+    } else if (token === 'null') {
+      // null
+      nodes.push(<span key={match.index} className="text-red-400">{token}</span>)
+    } else {
+      // 标点符号
+      nodes.push(<span key={match.index} className="text-muted-foreground">{token}</span>)
     }
+    
     lastIndex = match.index + match[0].length
   }
+  
   if (lastIndex < json.length) {
     nodes.push(json.slice(lastIndex))
   }
@@ -77,17 +114,19 @@ function highlightJson(json: string): React.ReactNode[] {
 }
 
 /**
- * HTML 语法高亮
+ * HTML 语法高亮（优化版本）
  */
 function highlightHtml(html: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = []
   
-  // 匹配 HTML 标签、注释、文本
-  const tagRe = /<!--[\s\S]*?-->|<\/?([a-z][a-z0-9]*)\b([^>]*)>/gi
+  // 简化的正则，避免贪婪匹配导致的性能问题
+  const tagRe = /<!--[\s\S]{0,500}?-->|<\/?([a-z][\w-]*)\b([^>]{0,500})>/gi
   let match: RegExpExecArray | null
   let currentIndex = 0
+  let matchCount = 0
+  const MAX_MATCHES = 3000
   
-  while ((match = tagRe.exec(html)) !== null) {
+  while ((match = tagRe.exec(html)) !== null && matchCount++ < MAX_MATCHES) {
     // 添加标签前的文本
     if (match.index > currentIndex) {
       const text = html.slice(currentIndex, match.index)
@@ -179,13 +218,13 @@ function highlightAttributes(attrs: string, baseIndex: number): React.ReactNode[
 }
 
 /**
- * CSS 语法高亮
+ * CSS 语法高亮（优化版本）
  */
 function highlightCss(css: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = []
   
-  // 匹配选择器、属性、值、注释
-  const lines = css.split('\n')
+  // 限制行数
+  const lines = css.split('\n').slice(0, MAX_HIGHLIGHT_LINES)
   
   lines.forEach((line, lineIndex) => {
     if (lineIndex > 0) {
@@ -269,18 +308,20 @@ function highlightCssValue(value: string, lineIndex: number): React.ReactNode[] 
 }
 
 /**
- * JavaScript 语法高亮
+ * JavaScript 语法高亮（优化版本）
  */
 function highlightJavaScript(js: string): React.ReactNode[] {
   const nodes: React.ReactNode[] = []
   
-  // 组合所有正则：字符串、注释、关键字、数字
-  const combinedRe = /(["'`])(?:(?=(\\?))\2.)*?\1|\/\/.*$|\/\*[\s\S]*?\*\/|\b(function|const|let|var|if|else|for|while|return|class|import|export|from|default|async|await|try|catch|finally|throw|new|this|super|extends|static|get|set|typeof|instanceof|in|of|void|delete|yield|switch|case|break|continue|do)\b|\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/gm
+  // 简化的正则，限制字符串和注释的长度
+  const combinedRe = /(["'`])(?:[^"'`\\]|\\.){0,200}?\1|\/\/[^\n]{0,200}|\/\*[\s\S]{0,500}?\*\/|\b(function|const|let|var|if|else|for|while|return|class|import|export|from|default|async|await|try|catch|finally|throw|new|this|super|extends|static|get|set|typeof|instanceof|in|of|void|delete|yield|switch|case|break|continue|do)\b|(\d+\.?\d*(?:[eE][+-]?\d+)?)/gm
   
   let lastIndex = 0
   let match: RegExpExecArray | null
+  let matchCount = 0
+  const MAX_MATCHES = 3000
   
-  while ((match = combinedRe.exec(js)) !== null) {
+  while ((match = combinedRe.exec(js)) !== null && matchCount++ < MAX_MATCHES) {
     if (match.index > lastIndex) {
       nodes.push(js.slice(lastIndex, match.index))
     }
@@ -293,12 +334,12 @@ function highlightJavaScript(js: string): React.ReactNode[] {
     } else if (fullMatch.startsWith('//') || fullMatch.startsWith('/*')) {
       // 注释
       nodes.push(<span key={match.index} className="text-gray-500 dark:text-gray-400 italic">{fullMatch}</span>)
-    } else if (match[3]) {
+    } else if (match[2]) {
       // 关键字
-      nodes.push(<span key={match.index} className="text-purple-600 dark:text-purple-400 font-semibold">{match[3]}</span>)
-    } else if (match[4]) {
+      nodes.push(<span key={match.index} className="text-purple-600 dark:text-purple-400 font-semibold">{match[2]}</span>)
+    } else if (match[3]) {
       // 数字
-      nodes.push(<span key={match.index} className="text-amber-600 dark:text-amber-400">{match[4]}</span>)
+      nodes.push(<span key={match.index} className="text-amber-600 dark:text-amber-400">{match[3]}</span>)
     } else {
       nodes.push(fullMatch)
     }
@@ -314,24 +355,44 @@ function highlightJavaScript(js: string): React.ReactNode[] {
 }
 
 /**
- * 根据语言类型进行语法高亮
+ * 根据语言类型进行语法高亮（带性能优化）
  */
 export function highlightCode(code: string, language?: 'json' | 'html' | 'css' | 'javascript' | 'text'): React.ReactNode[] {
+  // 性能检查：内容过大或过长则不高亮
+  if (!shouldHighlight(code)) {
+    return [code]
+  }
+  
   const lang = language || detectLanguage(code)
   
   try {
+    const startTime = performance.now()
+    let result: React.ReactNode[]
+    
     switch (lang) {
       case 'json':
-        return highlightJson(code)
+        result = highlightJson(code)
+        break
       case 'html':
-        return highlightHtml(code)
+        result = highlightHtml(code)
+        break
       case 'css':
-        return highlightCss(code)
+        result = highlightCss(code)
+        break
       case 'javascript':
-        return highlightJavaScript(code)
+        result = highlightJavaScript(code)
+        break
       default:
         return [code]
     }
+    
+    const duration = performance.now() - startTime
+    // 如果高亮耗时超过 100ms，输出警告
+    if (duration > 100) {
+      console.warn(`Syntax highlighting took ${duration.toFixed(2)}ms for ${code.length} chars`)
+    }
+    
+    return result
   } catch (error) {
     // 如果高亮失败，返回原始代码
     console.error('Syntax highlighting error:', error)
