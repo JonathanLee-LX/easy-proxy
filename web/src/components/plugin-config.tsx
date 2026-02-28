@@ -10,8 +10,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Play, Square, Loader2, Shield, ShieldAlert } from 'lucide-react'
+import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw } from 'lucide-react'
 import type { Plugin } from '@/types'
+import { PluginGenerator } from './plugin-generator'
 
 interface PluginConfigProps {
   // 插件列表相关
@@ -43,11 +44,46 @@ export function PluginConfig({
   const [loading, setLoading] = useState(false)
   const [thirdPartyPath, setThirdPartyPath] = useState('')
   const [loadingThirdParty, setLoadingThirdParty] = useState(false)
+  const [generatorOpen, setGeneratorOpen] = useState(false)
+  const [customPlugins, setCustomPlugins] = useState<any[]>([])
 
   useEffect(() => {
     fetchPlugins()
     fetchThirdPartyPlugins()
+    fetchCustomPlugins()
   }, [fetchPlugins, fetchThirdPartyPlugins])
+
+  const fetchCustomPlugins = async () => {
+    try {
+      const res = await fetch('/api/plugins/custom')
+      const data = await res.json()
+      setCustomPlugins(data.plugins || [])
+    } catch (error) {
+      console.error('加载自定义插件失败:', error)
+    }
+  }
+
+  const handleDeleteCustomPlugin = async (filename: string) => {
+    if (!confirm(`确定要删除插件 ${filename} 吗？`)) {
+      return
+    }
+    
+    try {
+      const res = await fetch(`/api/plugins/custom/${encodeURIComponent(filename)}`, {
+        method: 'DELETE'
+      })
+      
+      if (res.ok) {
+        await fetchCustomPlugins()
+      } else {
+        const error = await res.json()
+        alert(error.error || '删除失败')
+      }
+    } catch (error) {
+      console.error('删除插件失败:', error)
+      alert('删除失败')
+    }
+  }
 
   const handleStartPlugin = async (id: string) => {
     setLoading(true)
@@ -165,6 +201,70 @@ export function PluginConfig({
         </div>
       </div>
 
+      {/* Custom AI Plugins */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-medium">自定义插件</h3>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchCustomPlugins}
+              disabled={loading}
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              刷新
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setGeneratorOpen(true)}
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              AI 生成插件
+            </Button>
+          </div>
+        </div>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>文件名</TableHead>
+                <TableHead>修改时间</TableHead>
+                <TableHead className="w-24">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {customPlugins.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                    暂无自定义插件，点击上方按钮使用 AI 生成插件
+                  </TableCell>
+                </TableRow>
+              ) : (
+                customPlugins.map((plugin) => (
+                  <TableRow key={plugin.filename}>
+                    <TableCell className="font-medium font-mono text-sm">{plugin.filename}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {new Date(plugin.modified).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteCustomPlugin(plugin.filename)}
+                        className="text-destructive"
+                      >
+                        删除
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
       {/* Third-party Plugins */}
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -236,6 +336,13 @@ export function PluginConfig({
           </Table>
         </div>
       </div>
+
+      {/* Plugin Generator Dialog */}
+      <PluginGenerator
+        open={generatorOpen}
+        onOpenChange={setGeneratorOpen}
+        onPluginSaved={fetchCustomPlugins}
+      />
     </div>
   )
 }

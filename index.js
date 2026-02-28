@@ -1108,6 +1108,121 @@ const proxyServer = http.createServer((req, res) => {
             return
         }
 
+        // API: 生成插件代码
+        if (req.url === '/api/plugins/generate' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let body = ''
+            req.on('data', chunk => { body += chunk })
+            req.on('end', async () => {
+                try {
+                    const data = JSON.parse(body)
+                    const { generatePlugin } = require('./dist/core/plugin-generator')
+                    const result = await generatePlugin(data.requirement, data.aiConfig)
+                    res.write(JSON.stringify({ status: 'success', plugin: result }))
+                } catch (error) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: error.message }))
+                }
+                res.end()
+            })
+            return
+        }
+
+        // API: 保存插件到配置目录
+        if (req.url === '/api/plugins/save' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let body = ''
+            req.on('data', chunk => { body += chunk })
+            req.on('end', () => {
+                try {
+                    const data = JSON.parse(body)
+                    const pluginsDir = path.resolve(epDir, 'plugins')
+                    
+                    // 创建 plugins 目录
+                    if (!fs.existsSync(pluginsDir)) {
+                        fs.mkdirSync(pluginsDir, { recursive: true })
+                    }
+                    
+                    const filePath = path.resolve(pluginsDir, data.filename)
+                    fs.writeFileSync(filePath, data.code, 'utf8')
+                    
+                    res.write(JSON.stringify({ 
+                        status: 'success', 
+                        message: '插件已保存',
+                        path: filePath
+                    }))
+                } catch (error) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: error.message }))
+                }
+                res.end()
+            })
+            return
+        }
+
+        // API: 列出自定义插件
+        if (req.url === '/api/plugins/custom' && req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+                const pluginsDir = path.resolve(epDir, 'plugins')
+                
+                if (!fs.existsSync(pluginsDir)) {
+                    res.write(JSON.stringify({ plugins: [] }))
+                    res.end()
+                    return
+                }
+                
+                const files = fs.readdirSync(pluginsDir)
+                    .filter(file => file.endsWith('.ts') || file.endsWith('.js'))
+                    .map(file => ({
+                        filename: file,
+                        path: path.resolve(pluginsDir, file),
+                        modified: fs.statSync(path.resolve(pluginsDir, file)).mtime
+                    }))
+                
+                res.write(JSON.stringify({ plugins: files }))
+            } catch (error) {
+                res.statusCode = 500
+                res.write(JSON.stringify({ error: error.message }))
+            }
+            res.end()
+            return
+        }
+
+        // API: 删除自定义插件
+        if (req.url.startsWith('/api/plugins/custom/') && req.method === 'DELETE') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+                const filename = decodeURIComponent(req.url.replace('/api/plugins/custom/', ''))
+                const pluginsDir = path.resolve(epDir, 'plugins')
+                const filePath = path.resolve(pluginsDir, filename)
+                
+                // 安全检查：确保文件在 plugins 目录内
+                if (!filePath.startsWith(pluginsDir)) {
+                    res.statusCode = 403
+                    res.write(JSON.stringify({ error: '非法的文件路径' }))
+                    res.end()
+                    return
+                }
+                
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath)
+                    res.write(JSON.stringify({ 
+                        status: 'success', 
+                        message: '插件已删除' 
+                    }))
+                } else {
+                    res.statusCode = 404
+                    res.write(JSON.stringify({ error: '插件文件不存在' }))
+                }
+            } catch (error) {
+                res.statusCode = 500
+                res.write(JSON.stringify({ error: error.message }))
+            }
+            res.end()
+            return
+        }
+
         if(req.url.startsWith('/api/rules')) {
             const method = req.method.toLocaleLowerCase()
             if(method === 'put') {
@@ -2170,9 +2285,27 @@ async function bootstrapBuiltinPlugins() {
         getRuleMap: () => ruleMap,
         loggerPlugin: builtinLoggerPlugin,
     })
+    
+    // 加载自定义插件
+    const customPluginsDir = path.resolve(epDir, 'plugins')
+    let customPlugins = []
+    try {
+        const { loadCustomPlugins } = require('./dist/core/custom-plugin-loader')
+        customPlugins = await loadCustomPlugins({
+            pluginsDir: customPluginsDir,
+            logger: console,
+        })
+        console.log(chalk.green(`已加载 ${customPlugins.length} 个自定义插件`))
+    } catch (error) {
+        console.warn(chalk.yellow('加载自定义插件失败:'), error.message)
+    }
+    
+    // 合并内置插件和自定义插件
+    const allPlugins = [...plugins, ...customPlugins]
+    
     await bootstrapPlugins({
         pluginManager,
-        plugins,
+        plugins: allPlugins,
         contextFactory: (manifest) => ({
             manifest,
             log: console,
