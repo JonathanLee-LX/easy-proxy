@@ -1,8 +1,11 @@
 import type React from 'react'
 
-// 性能配置
-const MAX_HIGHLIGHT_SIZE = 1024 * 1024 // 1MB，超过此大小不进行语法高亮
-const MAX_HIGHLIGHT_LINES = 10000 // 最多高亮 10000 行
+// 性能配置 - 支持通过环境变量自定义
+const MAX_HIGHLIGHT_SIZE = parseInt(import.meta.env.VITE_MAX_HIGHLIGHT_SIZE || '1048576') // 默认1MB (1024*1024)
+const MAX_HIGHLIGHT_LINES = parseInt(import.meta.env.VITE_MAX_HIGHLIGHT_LINES || '10000') // 默认10000行
+const MAX_JSON_MATCHES = parseInt(import.meta.env.VITE_MAX_JSON_MATCHES || '50000') // 默认50000
+const MAX_HTML_MATCHES = parseInt(import.meta.env.VITE_MAX_HTML_MATCHES || '30000') // 默认30000
+const MAX_JS_MATCHES = parseInt(import.meta.env.VITE_MAX_JS_MATCHES || '30000') // 默认30000
 
 /**
  * 检查内容是否适合进行语法高亮
@@ -125,9 +128,8 @@ function highlightJson(json: string): React.ReactNode[] {
   let lastIndex = 0
   let match: RegExpExecArray | null
   let matchCount = 0
-  const MAX_MATCHES = 50000 // 限制最大匹配数，防止性能问题
 
-  while ((match = tokenRe.exec(json)) !== null && matchCount++ < MAX_MATCHES) {
+  while ((match = tokenRe.exec(json)) !== null && matchCount++ < MAX_JSON_MATCHES) {
     if (match.index > lastIndex) {
       nodes.push(json.slice(lastIndex, match.index))
     }
@@ -175,9 +177,8 @@ function highlightHtml(html: string): React.ReactNode[] {
   let match: RegExpExecArray | null
   let currentIndex = 0
   let matchCount = 0
-  const MAX_MATCHES = 30000
   
-  while ((match = tagRe.exec(html)) !== null && matchCount++ < MAX_MATCHES) {
+  while ((match = tagRe.exec(html)) !== null && matchCount++ < MAX_HTML_MATCHES) {
     // 添加标签前的文本
     if (match.index > currentIndex) {
       const text = html.slice(currentIndex, match.index)
@@ -370,9 +371,8 @@ function highlightJavaScript(js: string): React.ReactNode[] {
   let lastIndex = 0
   let match: RegExpExecArray | null
   let matchCount = 0
-  const MAX_MATCHES = 30000
   
-  while ((match = combinedRe.exec(js)) !== null && matchCount++ < MAX_MATCHES) {
+  while ((match = combinedRe.exec(js)) !== null && matchCount++ < MAX_JS_MATCHES) {
     if (match.index > lastIndex) {
       nodes.push(js.slice(lastIndex, match.index))
     }
