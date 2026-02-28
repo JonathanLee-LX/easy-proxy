@@ -13,12 +13,8 @@ if (!fs.existsSync(certDir)) {
     fs.mkdirSync(certDir, { recursive: true })
 }
 
-// 创建系统配置目录
-const epConfigDir = path.resolve(epDir, '.epconfig')
-if (!fs.existsSync(epConfigDir)) {
-    fs.mkdirSync(epConfigDir, { recursive: true })
-}
-const settingsPath = path.resolve(epConfigDir, 'settings.json')
+// 系统设置文件路径（统一放在 .ep 目录下）
+const settingsPath = path.resolve(epDir, 'settings.json')
 
 const { crtMgr, ensureRootCA } = require('./dist/cert')
 const { WebSocket, WebSocketServer } = require('ws')
