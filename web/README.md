@@ -92,7 +92,7 @@ export default defineConfig([
 
 ### 可配置参数
 
-- `VITE_MAX_HIGHLIGHT_SIZE` - 最大高亮文件大小（字节，默认: 1048576 / 1MB）
+- `VITE_MAX_HIGHLIGHT_SIZE` - 最大高亮文件大小（字节，默认: 2097152 / 2MB）
 - `VITE_MAX_HIGHLIGHT_LINES` - 最大高亮行数（默认: 10000）
 - `VITE_MAX_JSON_MATCHES` - JSON最大匹配数（默认: 50000）
 - `VITE_MAX_HTML_MATCHES` - HTML最大匹配数（默认: 30000）

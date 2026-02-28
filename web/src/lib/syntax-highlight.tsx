@@ -1,7 +1,7 @@
 import type React from 'react'
 
 // 性能配置 - 支持通过环境变量自定义
-const MAX_HIGHLIGHT_SIZE = parseInt(import.meta.env.VITE_MAX_HIGHLIGHT_SIZE || '1048576') // 默认1MB (1024*1024)
+const MAX_HIGHLIGHT_SIZE = parseInt(import.meta.env.VITE_MAX_HIGHLIGHT_SIZE || '2097152') // 默认2MB (2*1024*1024)
 const MAX_HIGHLIGHT_LINES = parseInt(import.meta.env.VITE_MAX_HIGHLIGHT_LINES || '10000') // 默认10000行
 const MAX_JSON_MATCHES = parseInt(import.meta.env.VITE_MAX_JSON_MATCHES || '50000') // 默认50000
 const MAX_HTML_MATCHES = parseInt(import.meta.env.VITE_MAX_HTML_MATCHES || '30000') // 默认30000

@@ -90,7 +90,7 @@
 - 边界情况处理完善
 
 **性能限制** (已根据实际使用场景优化，支持环境变量自定义):
-- 最大文件大小：1MB（默认，可通过`VITE_MAX_HIGHLIGHT_SIZE`配置）
+- 最大文件大小：2MB（默认，可通过`VITE_MAX_HIGHLIGHT_SIZE`配置）
 - 最大行数：10000行（默认，可通过`VITE_MAX_HIGHLIGHT_LINES`配置）
 - JSON最大匹配数：50000（可通过`VITE_MAX_JSON_MATCHES`配置）
 - HTML最大匹配数：30000（可通过`VITE_MAX_HTML_MATCHES`配置）

@@ -46,7 +46,7 @@ if (fs.existsSync(envPath)) {
 // 默认配置
 console.log('\n📋 默认配置:')
 const defaults = {
-  'VITE_MAX_HIGHLIGHT_SIZE': '1048576 (1MB)',
+  'VITE_MAX_HIGHLIGHT_SIZE': '2097152 (2MB)',
   'VITE_MAX_HIGHLIGHT_LINES': '10000',
   'VITE_MAX_JSON_MATCHES': '50000',
   'VITE_MAX_HTML_MATCHES': '30000',
