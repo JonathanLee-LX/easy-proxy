@@ -7,10 +7,11 @@ import { LogTable } from '@/components/log-table'
 import { DetailPanel } from '@/components/detail-panel'
 import { MockConfig } from '@/components/mock-config'
 import { PluginConfig } from '@/components/plugin-config'
+import { AISettings, AIConfigBadge } from '@/components/ai-settings'
 import { useProxyStore } from '@/hooks/use-proxy-store'
 import { useFuzzyFilter } from '@/hooks/use-fuzzy-filter'
 import { useTheme } from '@/components/theme-provider'
-import { Globe, Moon, Sun } from 'lucide-react'
+import { Globe, Moon, Sun, Settings } from 'lucide-react'
 import type { MockRule } from '@/types'
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
   const [recording, setRecording] = useState(true)
   const [autoScroll, setAutoScroll] = useState(true)
   const [activeTab, setActiveTab] = useState('logs')
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // 从日志详情创建 mock 的初始数据
   const [mockInitialData, setMockInitialData] = useState<Partial<MockRule> | null>(null)
@@ -84,6 +86,16 @@ function App() {
           <h1 className="text-sm font-semibold">Easy Proxy</h1>
           <span className="text-xs text-muted-foreground">开发代理工具</span>
           <div className="flex-1" />
+          <AIConfigBadge />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSettingsOpen(true)}
+            className="h-8 w-8"
+            aria-label="设置"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -211,6 +223,12 @@ function App() {
         selectedRecord={store.records.find(r => r.id === store.selectedRecordId)}
         onCreateMock={handleCreateMockFromLog}
         onReplay={handleReplay}
+      />
+
+      {/* AI Settings */}
+      <AISettings
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
       />
     </div>
   )
