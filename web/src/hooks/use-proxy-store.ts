@@ -9,11 +9,22 @@ function parseEprcRules(text: string): RuleItem[] {
     .split(/\r?\n/)
     .filter((line) => line.trim())
     .flatMap((line) => {
-      let enabled = true
-      if (line.trimStart().startsWith('//')) {
-        enabled = false
-        line = line.replace(/^\/\//, '').trim()
+      const trimmed = line.trim()
+      
+      // 跳过注释行（以 # 开头）
+      if (trimmed.startsWith('#')) {
+        return []
       }
+      
+      // 处理禁用规则（以 // 开头）
+      let enabled = true
+      if (trimmed.startsWith('//')) {
+        enabled = false
+        line = trimmed.slice(2).trim()
+      } else {
+        line = trimmed
+      }
+      
       const parts = line.split(/\s+/).filter(Boolean)
       if (parts.length < 2) return []
 
