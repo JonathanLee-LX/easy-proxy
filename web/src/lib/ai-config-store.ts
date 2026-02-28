@@ -3,12 +3,23 @@
  * 使用localStorage保存AI配置
  */
 
+export interface AIModel {
+  id: string
+  name: string
+  provider: 'openai' | 'anthropic'
+  apiKey: string
+  baseUrl: string
+  model: string
+}
+
 export interface AIConfig {
   enabled: boolean
   provider: 'openai' | 'anthropic'
   apiKey: string
   baseUrl: string
   model: string
+  models?: AIModel[]
+  activeModelId?: string
 }
 
 const STORAGE_KEY = 'easy-proxy-ai-config'
@@ -48,6 +59,11 @@ export function getAIConfig(): AIConfig {
         config.model = DEFAULT_MODELS[config.provider]
       }
       
+      // 初始化 models 数组（向后兼容）
+      if (!config.models) {
+        config.models = []
+      }
+      
       return config
     }
   } catch (error) {
@@ -60,7 +76,7 @@ export function getAIConfig(): AIConfig {
     return envConfig
   }
   
-  return { ...DEFAULT_CONFIG }
+  return { ...DEFAULT_CONFIG, models: [] }
 }
 
 /**
@@ -123,5 +139,83 @@ export function getDefaultValues(provider: 'openai' | 'anthropic') {
   return {
     baseUrl: DEFAULT_URLS[provider],
     model: DEFAULT_MODELS[provider],
+  }
+}
+
+/**
+ * 获取当前激活的模型配置
+ */
+export function getActiveModel(config: AIConfig): AIModel | null {
+  if (!config.models || config.models.length === 0) {
+    return null
+  }
+  
+  if (config.activeModelId) {
+    const activeModel = config.models.find(m => m.id === config.activeModelId)
+    if (activeModel) {
+      return activeModel
+    }
+  }
+  
+  return config.models[0]
+}
+
+/**
+ * 添加新的模型配置
+ */
+export function addModel(config: AIConfig, model: Omit<AIModel, 'id'>): AIConfig {
+  const newModel: AIModel = {
+    ...model,
+    id: Date.now().toString(),
+  }
+  
+  const newModels = [...(config.models || []), newModel]
+  
+  return {
+    ...config,
+    models: newModels,
+    activeModelId: config.activeModelId || newModel.id,
+  }
+}
+
+/**
+ * 更新模型配置
+ */
+export function updateModel(config: AIConfig, modelId: string, updates: Partial<AIModel>): AIConfig {
+  const newModels = (config.models || []).map(m =>
+    m.id === modelId ? { ...m, ...updates } : m
+  )
+  
+  return {
+    ...config,
+    models: newModels,
+  }
+}
+
+/**
+ * 删除模型配置
+ */
+export function deleteModel(config: AIConfig, modelId: string): AIConfig {
+  const newModels = (config.models || []).filter(m => m.id !== modelId)
+  
+  let newActiveModelId = config.activeModelId
+  if (config.activeModelId === modelId && newModels.length > 0) {
+    newActiveModelId = newModels[0].id
+  }
+  
+  return {
+    ...config,
+    models: newModels,
+    activeModelId: newActiveModelId,
+  }
+}
+
+/**
+ * 设置激活的模型
+ */
+export function setActiveModel(config: AIConfig, modelId: string): AIConfig {
+  return {
+    ...config,
+    activeModelId: modelId,
   }
 }

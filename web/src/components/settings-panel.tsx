@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -20,7 +21,8 @@ import {
 } from '@/components/ui/select'
 import {
   Settings, Save, RotateCcw, Eye, EyeOff, CheckCircle2, XCircle,
-  Monitor, Moon, Sun, FileText, RefreshCw
+  Monitor, Moon, Sun, FileText, RefreshCw, Plus, Trash2, Check,
+  Stethoscope, AlertCircle
 } from 'lucide-react'
 import {
   getAIConfig,
@@ -28,7 +30,11 @@ import {
   resetAIConfig,
   isAIConfigValid,
   getDefaultValues,
-  type AIConfig
+  addModel,
+  deleteModel,
+  setActiveModel,
+  type AIConfig,
+  type AIModel
 } from '@/lib/ai-config-store'
 import { useTheme } from '@/components/theme-provider'
 
@@ -46,20 +52,21 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [saving, setSaving] = useState(false)
   const [aiTestResult, setAiTestResult] = useState<'success' | 'error' | null>(null)
   const [aiTestMessage, setAiTestMessage] = useState('')
+  
+  // 多模型配置状态
+  const [newModelForm, setNewModelForm] = useState<Partial<AIModel> | null>(null)
 
   // 配置文件状态
   const [configPath, setConfigPath] = useState('')
+  const [rulesFilePath, setRulesFilePath] = useState('')
+  const [mocksFilePath, setMocksFilePath] = useState('')
+  
+  // 配置诊断状态
+  const [diagnostics, setDiagnostics] = useState<any>(null)
+  const [diagnosing, setDiagnosing] = useState(false)
 
   // 字体大小偏好
   const [fontSize, setFontSize] = useState<string>('medium')
-
-  // 初始化字体大小
-  useEffect(() => {
-    const saved = localStorage.getItem('font-size') || 'medium'
-    setFontSize(saved)
-    const size = fontSizeOptions.find(o => o.value === saved)?.size || '14px'
-    document.documentElement.style.setProperty('--font-size-base', size)
-  }, [])
 
   const fontSizeOptions = [
     { value: 'small', label: '小', size: '12px' },
@@ -67,23 +74,53 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     { value: 'large', label: '大', size: '16px' },
   ]
 
+  // 初始化字体大小
+  useEffect(() => {
+    import('@/lib/settings-store').then(({ loadSettings }) => {
+      loadSettings().then(settings => {
+        const saved = settings.fontSize || 'medium'
+        setFontSize(saved)
+        const size = fontSizeOptions.find(o => o.value === saved)?.size || '14px'
+        document.documentElement.style.setProperty('--font-size-base', size)
+      }).catch(() => {
+        const saved = 'medium'
+        setFontSize(saved)
+        document.documentElement.style.setProperty('--font-size-base', '14px')
+      })
+    })
+  }, [])
+
   // 应用字体大小
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('font-size', fontSize)
       const size = fontSizeOptions.find(o => o.value === fontSize)?.size || '14px'
       document.documentElement.style.setProperty('--font-size-base', size)
+      
+      // 保存到服务器
+      import('@/lib/settings-store').then(({ updateSettings }) => {
+        updateSettings({ fontSize }).catch(console.error)
+      })
     }
   }, [fontSize])
 
   useEffect(() => {
     if (open) {
-      setAiConfig(getAIConfig())
+      // 从设置存储中加载 AI 配置和文件路径
+      import('@/lib/settings-store').then(({ loadSettings }) => {
+        loadSettings().then(settings => {
+          setAiConfig(settings.aiConfig)
+          setRulesFilePath(settings.rulesFilePath || '')
+          setMocksFilePath(settings.mocksFilePath || '')
+        }).catch(() => {
+          setAiConfig(getAIConfig())
+        })
+      })
       setAiTestResult(null)
       setAiTestMessage('')
       // 获取当前配置文件路径
       fetch('/api/config-path').then(res => res.json()).then(data => {
         if (data.path) setConfigPath(data.path)
+        if (data.mocksPath) setMocksFilePath(data.mocksPath)
       }).catch(() => {})
     }
   }, [open])
@@ -102,7 +139,13 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const handleAiSave = async () => {
     setSaving(true)
     try {
+      // 保存到文件系统
+      const { updateSettings } = await import('@/lib/settings-store')
+      await updateSettings({ aiConfig })
+      
+      // 同时保存到 localStorage 作为备份
       saveAIConfig(aiConfig)
+      
       setAiTestResult('success')
       setAiTestMessage('AI 配置保存成功')
     } catch (error) {
@@ -197,13 +240,61 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
   const handleRefreshConfig = useCallback(async () => {
     try {
-      const res = await fetch('/api/rules', { method: 'GET' })
+      const res = await fetch('/api/refresh-config', { method: 'POST' })
       if (res.ok) {
-        setAiTestMessage('配置已刷新')
-        setTimeout(() => setAiTestMessage(''), 2000)
+        const data = await res.json()
+        setAiTestResult('success')
+        setAiTestMessage(data.message || '配置已刷新')
+        setTimeout(() => {
+          setAiTestResult(null)
+          setAiTestMessage('')
+        }, 2000)
+      } else {
+        const data = await res.json()
+        setAiTestResult('error')
+        setAiTestMessage(data.error || '刷新配置失败')
+        setTimeout(() => {
+          setAiTestResult(null)
+          setAiTestMessage('')
+        }, 2000)
       }
     } catch (error) {
       console.error('刷新配置失败:', error)
+      setAiTestResult('error')
+      setAiTestMessage('刷新配置失败')
+      setTimeout(() => {
+        setAiTestResult(null)
+        setAiTestMessage('')
+      }, 2000)
+    }
+  }, [])
+
+  const handleDiagnose = useCallback(async () => {
+    setDiagnosing(true)
+    setDiagnostics(null)
+    try {
+      const res = await fetch('/api/config-doctor')
+      if (res.ok) {
+        const data = await res.json()
+        setDiagnostics(data)
+      } else {
+        setAiTestResult('error')
+        setAiTestMessage('诊断失败')
+        setTimeout(() => {
+          setAiTestResult(null)
+          setAiTestMessage('')
+        }, 2000)
+      }
+    } catch (error) {
+      console.error('诊断失败:', error)
+      setAiTestResult('error')
+      setAiTestMessage('诊断失败')
+      setTimeout(() => {
+        setAiTestResult(null)
+        setAiTestMessage('')
+      }, 2000)
+    } finally {
+      setDiagnosing(false)
     }
   }, [])
 
@@ -232,7 +323,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
             {/* 主题 */}
             <div className="space-y-2">
               <Label className="text-sm">主题</Label>
-              <Select value={theme} onValueChange={(v) => setTheme(v as 'light' | 'dark' | 'system')}>
+              <Select value={theme} onValueChange={(v: string) => setTheme(v as 'light' | 'dark' | 'system')}>
                 <SelectTrigger>
                   <SelectValue placeholder="选择主题" />
                 </SelectTrigger>
@@ -291,11 +382,96 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
           {/* 配置文件 */}
           <TabsContent value="config" className="flex-1 overflow-auto p-6 space-y-6 mt-0">
-            <div>
-              <h3 className="text-sm font-medium mb-3">当前配置文件</h3>
-              <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
-                <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="text-sm font-mono truncate">{configPath || '加载中...'}</span>
+            {/* 路由规则文件 */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">路由规则文件</Label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
+                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-mono truncate flex-1">
+                    {configPath || '加载中...'}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="rulesPath" className="text-xs text-muted-foreground">
+                    自定义路由规则文件路径（留空使用默认）
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="rulesPath"
+                      value={rulesFilePath}
+                      onChange={(e) => setRulesFilePath(e.target.value)}
+                      placeholder="如: /path/to/my-rules.eprc"
+                      className="flex-1 h-8 text-sm font-mono"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const { updateSettings } = await import('@/lib/settings-store')
+                        await updateSettings({ rulesFilePath })
+                        handleRefreshConfig()
+                      }}
+                      className="h-8"
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      应用
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    支持 .eprc、.json、.js 格式的配置文件
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Mock 规则文件 */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Mock 规则文件</Label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
+                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-mono truncate flex-1">
+                    {mocksFilePath || '默认: ~/.ep/mocks.json'}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mocksPath" className="text-xs text-muted-foreground">
+                    自定义 Mock 规则文件路径（留空使用默认）
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="mocksPath"
+                      value={mocksFilePath}
+                      onChange={(e) => setMocksFilePath(e.target.value)}
+                      placeholder="如: /path/to/my-mocks.json"
+                      className="flex-1 h-8 text-sm font-mono"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const { updateSettings } = await import('@/lib/settings-store')
+                        await updateSettings({ mocksFilePath })
+                        setAiTestResult('success')
+                        setAiTestMessage('Mock 文件路径已更新，刷新页面后生效')
+                        setTimeout(() => {
+                          setAiTestResult(null)
+                          setAiTestMessage('')
+                        }, 3000)
+                      }}
+                      className="h-8"
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      应用
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    必须是 JSON 格式的 Mock 规则文件
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -306,13 +482,123 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={handleRefreshConfig}>
                   <RefreshCw className="h-4 w-4 mr-1" />
-                  刷新配置
+                  重新加载配置
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleDiagnose}
+                  disabled={diagnosing}
+                >
+                  <Stethoscope className="h-4 w-4 mr-1" />
+                  {diagnosing ? '诊断中...' : '诊断配置'}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                点击刷新配置可重新加载当前配置文件
+                点击重新加载可应用修改后的配置文件，点击诊断配置可检查配置有效性
               </p>
             </div>
+
+            {/* 诊断结果 */}
+            {diagnostics && (
+              <div className="space-y-3">
+                <Separator />
+                <div>
+                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4" />
+                    诊断结果
+                  </h3>
+                  
+                  {/* 总体状态 */}
+                  <div className={`mb-3 p-3 rounded-md border ${
+                    diagnostics.status === 'ok'
+                      ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900'
+                      : diagnostics.status === 'warning'
+                      ? 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900'
+                      : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900'
+                  }`}>
+                    {diagnostics.status === 'ok' && (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        <span className="text-sm font-medium text-green-700 dark:text-green-300">
+                          所有检查通过！配置正常。
+                        </span>
+                      </div>
+                    )}
+                    {diagnostics.status === 'warning' && (
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                        <span className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
+                          发现 {diagnostics.warnings.length} 个警告
+                        </span>
+                      </div>
+                    )}
+                    {diagnostics.status === 'error' && (
+                      <div className="flex items-center gap-2">
+                        <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                        <span className="text-sm font-medium text-red-700 dark:text-red-300">
+                          发现 {diagnostics.errors.length} 个错误
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 检查项列表 */}
+                  <div className="space-y-2">
+                    {diagnostics.checks.map((check: any, index: number) => (
+                      <div key={index} className="p-2 rounded border bg-card">
+                        <div className="flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium">{check.name}</div>
+                            <div className="text-xs text-muted-foreground font-mono truncate">
+                              {check.path}
+                            </div>
+                            {check.details && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {check.details.rules !== undefined && `${check.details.rules} 条规则`}
+                                {check.details.total !== undefined && `${check.details.total} 条规则 (${check.details.enabled} 已启用)`}
+                                {check.details.size !== undefined && ` · ${check.details.size} bytes`}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 警告列表 */}
+                  {diagnostics.warnings && diagnostics.warnings.length > 0 && (
+                    <div className="mt-3 space-y-1">
+                      <div className="text-xs font-medium text-yellow-700 dark:text-yellow-300">
+                        警告:
+                      </div>
+                      {diagnostics.warnings.map((warning: string, index: number) => (
+                        <div key={index} className="flex items-start gap-2 text-xs text-yellow-600 dark:text-yellow-400">
+                          <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                          <span>{warning}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 错误列表 */}
+                  {diagnostics.errors && diagnostics.errors.length > 0 && (
+                    <div className="mt-3 space-y-1">
+                      <div className="text-xs font-medium text-red-700 dark:text-red-300">
+                        错误:
+                      </div>
+                      {diagnostics.errors.map((error: string, index: number) => (
+                        <div key={index} className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400">
+                          <XCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                          <span>{error}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           {/* AI 配置 */}
@@ -334,14 +620,228 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
             <Separator />
 
+            {/* 多模型配置 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm">AI 模型配置</Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setNewModelForm({
+                      name: '',
+                      provider: 'openai',
+                      apiKey: '',
+                      baseUrl: 'https://api.openai.com/v1/chat/completions',
+                      model: 'gpt-4o-mini',
+                    })
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  添加模型
+                </Button>
+              </div>
+
+              {/* 模型列表 */}
+              <div className="space-y-2">
+                {aiConfig.models && aiConfig.models.length > 0 ? (
+                  aiConfig.models.map((model) => (
+                    <div
+                      key={model.id}
+                      className={`p-3 rounded-md border ${
+                        aiConfig.activeModelId === model.id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{model.name}</span>
+                            {aiConfig.activeModelId === model.id && (
+                              <Badge variant="default" className="text-xs">当前使用</Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {model.provider === 'openai' ? 'OpenAI' : 'Anthropic'} - {model.model}
+                          </p>
+                        </div>
+                        <div className="flex gap-1">
+                          {aiConfig.activeModelId !== model.id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setAiConfig(setActiveModel(aiConfig, model.id))}
+                              className="h-7 text-xs"
+                            >
+                              <Check className="h-3 w-3 mr-1" />
+                              使用
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setAiConfig(deleteModel(aiConfig, model.id))}
+                            className="h-7 w-7 p-0 text-destructive"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground italic py-4 text-center">
+                    暂无模型配置，点击"添加模型"创建
+                  </p>
+                )}
+              </div>
+
+              {/* 新增模型表单 */}
+              {newModelForm && (
+                <div className="p-4 rounded-md border border-primary bg-primary/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">新增模型</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setNewModelForm(null)}
+                      className="h-6 w-6 p-0"
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="newModelName" className="text-xs">模型名称</Label>
+                    <Input
+                      id="newModelName"
+                      value={newModelForm.name || ''}
+                      onChange={(e) => setNewModelForm({ ...newModelForm, name: e.target.value })}
+                      placeholder="如：GPT-4o Mini"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs">服务商</Label>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={newModelForm.provider === 'openai' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => {
+                          const defaults = getDefaultValues('openai')
+                          setNewModelForm({
+                            ...newModelForm,
+                            provider: 'openai',
+                            baseUrl: defaults.baseUrl,
+                            model: defaults.model,
+                          })
+                        }}
+                        className="h-7 text-xs"
+                      >
+                        OpenAI
+                      </Button>
+                      <Button
+                        variant={newModelForm.provider === 'anthropic' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => {
+                          const defaults = getDefaultValues('anthropic')
+                          setNewModelForm({
+                            ...newModelForm,
+                            provider: 'anthropic',
+                            baseUrl: defaults.baseUrl,
+                            model: defaults.model,
+                          })
+                        }}
+                        className="h-7 text-xs"
+                      >
+                        Anthropic
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="newModelApiKey" className="text-xs">API Key</Label>
+                    <Input
+                      id="newModelApiKey"
+                      type={showApiKey ? 'text' : 'password'}
+                      value={newModelForm.apiKey || ''}
+                      onChange={(e) => setNewModelForm({ ...newModelForm, apiKey: e.target.value })}
+                      placeholder="输入 API Key"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="newModelModel" className="text-xs">模型</Label>
+                    <Input
+                      id="newModelModel"
+                      value={newModelForm.model || ''}
+                      onChange={(e) => setNewModelForm({ ...newModelForm, model: e.target.value })}
+                      placeholder="模型名称"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="newModelBaseUrl" className="text-xs">API 端点</Label>
+                    <Input
+                      id="newModelBaseUrl"
+                      value={newModelForm.baseUrl || ''}
+                      onChange={(e) => setNewModelForm({ ...newModelForm, baseUrl: e.target.value })}
+                      placeholder="API 端点"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setNewModelForm(null)}
+                      className="h-7 text-xs"
+                    >
+                      取消
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (newModelForm.name && newModelForm.apiKey && newModelForm.model && newModelForm.baseUrl) {
+                          setAiConfig(addModel(aiConfig, newModelForm as Omit<AIModel, 'id'>))
+                          setNewModelForm(null)
+                        }
+                      }}
+                      disabled={!newModelForm.name || !newModelForm.apiKey || !newModelForm.model || !newModelForm.baseUrl}
+                      className="h-7 text-xs"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      添加
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* 传统单模型配置（向后兼容） */}
+            <div className="space-y-2">
+              <Label className="text-sm">传统配置（向后兼容）</Label>
+              <p className="text-xs text-muted-foreground">
+                如果未配置多模型，将使用此配置
+              </p>
+            </div>
+
             {/* Provider 选择 */}
             <div className="space-y-2">
-              <Label>AI 服务商</Label>
+              <Label className="text-xs">AI 服务商</Label>
               <div className="flex gap-2">
                 <Button
                   variant={aiConfig.provider === 'openai' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => handleProviderChange('openai')}
+                  className="h-7 text-xs"
                 >
                   OpenAI
                 </Button>
@@ -349,6 +849,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                   variant={aiConfig.provider === 'anthropic' ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => handleProviderChange('anthropic')}
+                  className="h-7 text-xs"
                 >
                   Anthropic
                 </Button>
@@ -357,7 +858,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
             {/* API Key */}
             <div className="space-y-2">
-              <Label htmlFor="apiKey">API Key</Label>
+              <Label htmlFor="apiKey" className="text-xs">API Key</Label>
               <div className="flex gap-2">
                 <Input
                   id="apiKey"
@@ -365,12 +866,13 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                   value={aiConfig.apiKey}
                   onChange={(e) => setAiConfig({ ...aiConfig, apiKey: e.target.value })}
                   placeholder="输入 API Key"
-                  className="flex-1"
+                  className="flex-1 h-8 text-sm"
                 />
                 <Button
                   variant="outline"
                   size="icon"
                   onClick={() => setShowApiKey(!showApiKey)}
+                  className="h-8 w-8"
                 >
                   {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
@@ -379,18 +881,19 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
             {/* Model */}
             <div className="space-y-2">
-              <Label htmlFor="model">模型</Label>
+              <Label htmlFor="model" className="text-xs">模型</Label>
               <Input
                 id="model"
                 value={aiConfig.model}
                 onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
                 placeholder="模型名称"
+                className="h-8 text-sm"
               />
             </div>
 
             {/* API 端点 */}
             <div className="space-y-2">
-              <Label htmlFor="baseUrl">API 端点</Label>
+              <Label htmlFor="baseUrl" className="text-xs">API 端点</Label>
               <Input
                 id="baseUrl"
                 value={aiConfig.baseUrl}
@@ -399,6 +902,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                   ? 'https://api.openai.com/v1/chat/completions'
                   : 'https://api.anthropic.com/v1/messages'
                 }
+                className="h-8 text-sm"
               />
             </div>
 

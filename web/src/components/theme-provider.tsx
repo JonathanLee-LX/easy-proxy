@@ -1,4 +1,5 @@
 import * as React from "react"
+import { loadSettings, updateSettings, getCachedSettings } from '@/lib/settings-store'
 
 type Theme = "light" | "dark" | "system"
 
@@ -26,28 +27,40 @@ function getSystemTheme(): "light" | "dark" {
 export function ThemeProvider({
   children,
   defaultTheme = "system",
-  storageKey = "theme",
 }: ThemeProviderProps) {
   const [theme, setThemeState] = React.useState<Theme>(() => {
     if (typeof window === "undefined") {
       return defaultTheme
     }
-    const stored = localStorage.getItem(storageKey)
-    if (stored === "light" || stored === "dark" || stored === "system") {
-      return stored
-    }
-    return defaultTheme
+    const settings = getCachedSettings()
+    return settings.theme || defaultTheme
   })
+
+  const [loaded, setLoaded] = React.useState(false)
+
+  // 初始化时从服务器加载设置
+  React.useEffect(() => {
+    loadSettings().then(settings => {
+      setThemeState(settings.theme || defaultTheme)
+      setLoaded(true)
+    }).catch(() => {
+      setLoaded(true)
+    })
+  }, [defaultTheme])
 
   // 计算实际应该使用的主题
   const resolvedTheme = theme === "system" ? getSystemTheme() : theme
 
   React.useEffect(() => {
+    if (!loaded) return
+
     const root = window.document.documentElement
     root.classList.remove("light", "dark")
     root.classList.add(resolvedTheme)
-    localStorage.setItem(storageKey, theme)
-  }, [theme, resolvedTheme, storageKey])
+    
+    // 保存到文件系统
+    updateSettings({ theme }).catch(console.error)
+  }, [theme, resolvedTheme, loaded])
 
   // 监听系统主题变化
   React.useEffect(() => {

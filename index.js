@@ -6,12 +6,15 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
-// 必须在加载 cert 模块前创建证书目录（node-easy-cert 在加载时会检查）
+// 创建 .ep 目录和 ca 证书目录
 const epDir = path.resolve(os.homedir(), '.ep')
 const certDir = path.resolve(epDir, 'ca')
 if (!fs.existsSync(certDir)) {
     fs.mkdirSync(certDir, { recursive: true })
 }
+
+// 系统设置文件路径（统一放在 .ep 目录下）
+const settingsPath = path.resolve(epDir, 'settings.json')
 
 const { crtMgr, ensureRootCA } = require('./dist/cert')
 const { WebSocket, WebSocketServer } = require('ws')
@@ -67,6 +70,7 @@ const requestPipeline = createPipeline({
 
 let ruleMap = {}
 let currentConfig = null // { path, format } 当前生效的配置
+let currentMocksPath = null // 当前 Mock 配置文件路径
 
 const MAX_RECORD_SIZE = process.env.MAX_RECORD_SIZE ? parseInt(process.env.MAX_RECORD_SIZE) : 10000
 const MAX_DETAIL_SIZE = 200
@@ -85,6 +89,162 @@ const pipelineGate = createPipelineGate({
     onModeGate,
     enableBuiltinMockPlugin: ENABLE_BUILTIN_MOCK_PLUGIN,
 })
+
+/**
+ * 从 settings.json 加载自定义配置文件路径
+ */
+function loadCustomPathsFromSettings() {
+    try {
+        if (fs.existsSync(settingsPath)) {
+            const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+            return {
+                rulesFilePath: settings.rulesFilePath || null,
+                mocksFilePath: settings.mocksFilePath || null
+            }
+        }
+    } catch (error) {
+        console.error('加载自定义配置路径失败:', error)
+    }
+    return { rulesFilePath: null, mocksFilePath: null }
+}
+
+/**
+ * 执行配置文件诊断
+ */
+function performConfigDiagnostics() {
+    const diagnostics = {
+        status: 'ok',
+        checks: [],
+        errors: [],
+        warnings: []
+    }
+    
+    // 检查配置目录
+    if (fs.existsSync(epDir)) {
+        diagnostics.checks.push({
+            name: '配置目录',
+            status: 'ok',
+            path: epDir
+        })
+    } else {
+        diagnostics.errors.push('配置目录不存在: ' + epDir)
+        diagnostics.status = 'error'
+    }
+    
+    // 检查系统设置
+    if (fs.existsSync(settingsPath)) {
+        try {
+            const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+            diagnostics.checks.push({
+                name: '系统设置',
+                status: 'ok',
+                path: settingsPath,
+                details: {
+                    theme: settings.theme,
+                    fontSize: settings.fontSize,
+                    aiEnabled: settings.aiConfig?.enabled || false,
+                    customRulesPath: settings.rulesFilePath || null,
+                    customMocksPath: settings.mocksFilePath || null
+                }
+            })
+        } catch (error) {
+            diagnostics.errors.push('系统设置文件格式错误: ' + error.message)
+            diagnostics.status = 'error'
+        }
+    } else {
+        diagnostics.warnings.push('系统设置文件不存在，将使用默认设置')
+    }
+    
+    // 检查路由规则文件
+    const customPaths = loadCustomPathsFromSettings()
+    const rulesPath = customPaths.rulesFilePath || (currentConfig?.path || defaultRulesPath)
+    
+    if (fs.existsSync(rulesPath)) {
+        try {
+            const content = fs.readFileSync(rulesPath, 'utf8')
+            const lines = content.split('\n').filter(line => {
+                const trimmed = line.trim()
+                return trimmed && !trimmed.startsWith('#')
+            })
+            diagnostics.checks.push({
+                name: '路由规则文件',
+                status: 'ok',
+                path: rulesPath,
+                details: {
+                    rules: lines.length,
+                    size: content.length
+                }
+            })
+        } catch (error) {
+            diagnostics.errors.push('路由规则文件读取失败: ' + error.message)
+            diagnostics.status = 'error'
+        }
+    } else {
+        diagnostics.warnings.push('路由规则文件不存在: ' + rulesPath)
+    }
+    
+    // 检查 Mock 规则文件
+    const mocksPath = customPaths.mocksFilePath || getMockFilePath()
+    
+    if (fs.existsSync(mocksPath)) {
+        try {
+            const content = fs.readFileSync(mocksPath, 'utf8')
+            const data = JSON.parse(content)
+            const enabledRules = (data.rules || []).filter(r => r.enabled).length
+            diagnostics.checks.push({
+                name: 'Mock 规则文件',
+                status: 'ok',
+                path: mocksPath,
+                details: {
+                    total: (data.rules || []).length,
+                    enabled: enabledRules,
+                    size: content.length
+                }
+            })
+        } catch (error) {
+            diagnostics.errors.push('Mock 规则文件格式错误: ' + error.message)
+            diagnostics.status = 'error'
+        }
+    } else {
+        diagnostics.warnings.push('Mock 规则文件不存在: ' + mocksPath)
+    }
+    
+    // 检查证书文件
+    const certChecks = []
+    if (fs.existsSync(certDir)) {
+        certChecks.push('证书目录存在')
+        
+        if (fs.existsSync(path.join(certDir, 'rootCA.crt'))) {
+            certChecks.push('根证书存在')
+        } else {
+            diagnostics.warnings.push('根证书不存在，HTTPS 代理可能无法使用')
+        }
+        
+        if (fs.existsSync(path.join(certDir, 'rootCA.key'))) {
+            certChecks.push('根证书私钥存在')
+        }
+        
+        diagnostics.checks.push({
+            name: 'SSL 证书',
+            status: certChecks.length >= 2 ? 'ok' : 'warning',
+            path: certDir,
+            details: {
+                checks: certChecks
+            }
+        })
+    } else {
+        diagnostics.warnings.push('证书目录不存在')
+    }
+    
+    // 设置最终状态
+    if (diagnostics.errors.length > 0) {
+        diagnostics.status = 'error'
+    } else if (diagnostics.warnings.length > 0) {
+        diagnostics.status = 'warning'
+    }
+    
+    return diagnostics
+}
 
 // ===== HTTP/2 代理支持 =====
 const h2SessionPool = new Map() // origin -> http2.ClientHttp2Session
@@ -272,16 +432,34 @@ async function makeProxyRequest(target, method, headers, reqBody) {
 }
 
 // ===== Mock 功能 =====
-const MOCK_FILE = path.join(epDir, 'mocks.json')
+const DEFAULT_MOCK_FILE = path.join(epDir, 'mocks.json')
 let mockRules = [] // [{ id, urlPattern, method, statusCode, headers, body, enabled, name }]
 let mockIdSeq = 1
 
+/**
+ * 获取当前 Mock 文件路径（从 settings.json 读取或使用默认）
+ */
+function getMockFilePath() {
+    if (currentMocksPath) {
+        return currentMocksPath
+    }
+    const customPaths = loadCustomPathsFromSettings()
+    if (customPaths.mocksFilePath && fs.existsSync(customPaths.mocksFilePath)) {
+        currentMocksPath = customPaths.mocksFilePath
+        return currentMocksPath
+    }
+    currentMocksPath = DEFAULT_MOCK_FILE
+    return DEFAULT_MOCK_FILE
+}
+
 function loadMockRules() {
     try {
-        if (fs.existsSync(MOCK_FILE)) {
-            const data = JSON.parse(fs.readFileSync(MOCK_FILE, 'utf8'))
+        const mockFile = getMockFilePath()
+        if (fs.existsSync(mockFile)) {
+            const data = JSON.parse(fs.readFileSync(mockFile, 'utf8'))
             mockRules = Array.isArray(data.rules) ? data.rules : []
             mockIdSeq = (data.nextId || Math.max(0, ...mockRules.map(r => r.id || 0))) + 1
+            proxyDebug(`已加载 ${mockRules.length} 条 Mock 规则 (${mockFile})`)
         }
     } catch (err) {
         console.error('加载 mock 规则失败:', err.message)
@@ -291,7 +469,9 @@ function loadMockRules() {
 
 function saveMockRules() {
     try {
-        fs.writeFileSync(MOCK_FILE, JSON.stringify({ nextId: mockIdSeq, rules: mockRules }, null, 2), 'utf8')
+        const mockFile = getMockFilePath()
+        fs.writeFileSync(mockFile, JSON.stringify({ nextId: mockIdSeq, rules: mockRules }, null, 2), 'utf8')
+        proxyDebug(`Mock 规则已保存到 ${mockFile}`)
     } catch (err) {
         console.error('保存 mock 规则失败:', err.message)
     }
@@ -743,8 +923,25 @@ function loadAndWatchConfig(configPath, format) {
 
 /**
  * 解析并加载配置，优先使用当前工作目录的 .eprc / ep.config.json / ep.config.js
+ * 或从 settings.json 读取自定义路径
  */
 function ensureConfigFile() {
+    // 首先检查 settings.json 中是否有自定义路径
+    const customPaths = loadCustomPathsFromSettings()
+    
+    if (customPaths.rulesFilePath && fs.existsSync(customPaths.rulesFilePath)) {
+        // 使用自定义路由规则文件
+        const ext = path.extname(customPaths.rulesFilePath)
+        let format = 'eprc'
+        if (ext === '.json') format = 'json'
+        else if (ext === '.js') format = 'js'
+        
+        loadAndWatchConfig(customPaths.rulesFilePath, format)
+        proxyDebug('使用自定义路由配置:', customPaths.rulesFilePath)
+        return
+    }
+    
+    // 检查项目目录配置
     const resolved = resolveConfigPath()
     if (resolved) {
         loadAndWatchConfig(resolved.path, resolved.format)
@@ -752,6 +949,7 @@ function ensureConfigFile() {
         return
     }
 
+    // 使用默认配置
     const configPath = DEFAULT_CONFIG_PATH
     const configDir = path.dirname(configPath)
     if (!fs.existsSync(configDir)) {
@@ -794,7 +992,118 @@ const proxyServer = http.createServer((req, res) => {
         // API: 获取当前配置文件路径
         if (req.url === '/api/config-path') {
             res.setHeader('Content-Type', 'application/json')
-            res.write(JSON.stringify({ path: currentConfig?.path || '' }))
+            res.write(JSON.stringify({ 
+                path: currentConfig?.path || '',
+                mocksPath: getMockFilePath()
+            }))
+            res.end()
+            return
+        }
+
+        // API: 刷新配置文件
+        if (req.url === '/api/refresh-config' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+                // 重新读取自定义路径配置
+                const customPaths = loadCustomPathsFromSettings()
+                
+                // 刷新路由规则
+                if (customPaths.rulesFilePath && fs.existsSync(customPaths.rulesFilePath)) {
+                    const ext = path.extname(customPaths.rulesFilePath)
+                    let format = 'eprc'
+                    if (ext === '.json') format = 'json'
+                    else if (ext === '.js') format = 'js'
+                    
+                    ruleMap = loadConfigFromFile(customPaths.rulesFilePath, format)
+                    currentConfig = { path: customPaths.rulesFilePath, format }
+                    logRuleMap()
+                } else if (currentConfig && currentConfig.path) {
+                    ruleMap = loadConfigFromFile(currentConfig.path, currentConfig.format)
+                    logRuleMap()
+                } else {
+                    res.statusCode = 400
+                    res.write(JSON.stringify({ error: '无当前配置文件' }))
+                    res.end()
+                    return
+                }
+                
+                // 刷新 Mock 规则
+                currentMocksPath = null // 清除缓存，强制重新读取
+                loadMockRules()
+                
+                res.write(JSON.stringify({ 
+                    status: 'success', 
+                    message: '配置已刷新',
+                    rulesPath: currentConfig?.path,
+                    mocksPath: getMockFilePath()
+                }))
+            } catch (error) {
+                res.statusCode = 500
+                res.write(JSON.stringify({ error: error.message }))
+            }
+            res.end()
+            return
+        }
+
+        // API: 获取系统设置
+        if (req.url === '/api/settings' && req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+                if (fs.existsSync(settingsPath)) {
+                    const settingsData = fs.readFileSync(settingsPath, 'utf8')
+                    res.write(settingsData)
+                } else {
+                    // 返回默认设置
+                    res.write(JSON.stringify({
+                        theme: 'system',
+                        fontSize: 'medium',
+                        aiConfig: {
+                            enabled: false,
+                            provider: 'openai',
+                            apiKey: '',
+                            baseUrl: '',
+                            model: '',
+                            models: []
+                        }
+                    }))
+                }
+            } catch (error) {
+                res.statusCode = 500
+                res.write(JSON.stringify({ error: error.message }))
+            }
+            res.end()
+            return
+        }
+
+        // API: 保存系统设置
+        if (req.url === '/api/settings' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let body = ''
+            req.on('data', chunk => { body += chunk })
+            req.on('end', () => {
+                try {
+                    const settings = JSON.parse(body)
+                    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8')
+                    res.write(JSON.stringify({ status: 'success', message: '设置已保存' }))
+                } catch (error) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: error.message }))
+                }
+                res.end()
+            })
+            return
+        }
+
+        // API: 配置文件健康检查
+        if (req.url === '/api/config-doctor' && req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+                const result = performConfigDiagnostics()
+                res.write(JSON.stringify(result))
+            } catch (error) {
+                res.statusCode = 500
+                res.write(JSON.stringify({ error: error.message }))
+            }
             res.end()
             return
         }

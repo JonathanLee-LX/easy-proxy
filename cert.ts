@@ -5,6 +5,7 @@ import { execSync } from 'child_process';
 import { stat, mkdirSync } from 'fs';
 import * as path from 'path';
 
+// 证书存储在 .ep/ca 目录下（保持独立）
 const rootDirPath = path.resolve(os.homedir(), '.ep', 'ca');
 
 const options = {

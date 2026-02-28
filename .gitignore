@@ -20,4 +20,4 @@ helpers.d.ts
 helpers.*.map
 cert.js
 cert.d.ts
-cert.*.map
+cert.*.mapserver.log

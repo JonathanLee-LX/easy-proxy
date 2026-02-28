@@ -7,20 +7,44 @@
 
 全局安装easy-dev-proxy `npm install easy-dev-proxy -g`,会创建一个`ep`命令。
 
-通过`ep`命令即可启动本地的代理服务器
+### 命令
+
+```bash
+# 启动代理服务器
+ep
+
+# 启动并自动打开浏览器
+ep --open
+
+# 检查配置文件健康状况
+ep doctor
+
+# 显示帮助信息
+ep --help
+```
 
 ### 配置文件
 
-配置目录：`cwd/.epconfig`，文件命名：`.[env].[json|js]?` 或 `.[env]`
+配置文件扁平化存储在 `~/.ep/` 目录：
 
-通过 `EP_ENV` 选择环境（默认 `eprc`），按优先级加载：
-- `.[env].json` - JSON 格式：`{ "rules": { "pattern": "target" } }`
-- `.[env].js` - 导出 `module.exports = { rules: { "pattern": "target" } }`（只读）
-- `.[env]` - 行格式：`rule target` 或 `rule1 rule2 target`
+```
+~/.ep/
+├── .eprc              # 路由规则配置
+├── mocks.json         # Mock 规则配置
+├── settings.json      # 系统设置（主题、字体、AI配置）
+└── ca/                # SSL 证书目录
+```
 
-示例：`.epconfig/.eprc`、`.epconfig/.dev.json`、`EP_ENV=prod` 时加载 `.epconfig/.prod.json`
+**路由规则配置**:
+- 项目目录配置（优先）：`.eprc`、`ep.config.json`、`ep.config.js`
+- 用户默认配置：`~/.ep/.eprc`
+- 支持 EPRC、JSON、JS 三种格式
 
-若未找到项目配置，则使用 `~/.ep/.eprc`
+**Web 界面管理**:
+- 启动后访问 http://localhost:8899
+- 通过界面管理路由规则、Mock 规则和系统设置
+
+详见 [配置文件结构说明](./CONFIG_STRUCTURE.md)
 
 ### 自动打开浏览器并设置代理
 
@@ -78,7 +102,9 @@
 
 ## 文档
 
-查看 [文档索引](./docs/DOCS_INDEX.md) 了解所有可用文档。
+- [配置文件结构说明](./CONFIG_STRUCTURE.md) - 配置文件详细说明 ⭐
+- [文档索引](./docs/DOCS_INDEX.md) - 了解所有可用文档
+- [Mock 优化指南](./MOCK_OPTIMIZATION_SUMMARY.md) - Mock 功能优化说明
 
 ## 插件开发
 

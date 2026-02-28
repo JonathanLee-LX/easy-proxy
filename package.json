@@ -17,6 +17,7 @@
     "test:refactor": "npm run build && node -c index.js && npm test",
     "prepublish": "npm run build && npm run test",
     "start:open": "npm run build && node index.js --open",
+    "doctor": "node bin/doctor.js",
     "mcp": "node mcp-server.js",
     "build:web": "cd web && pnpm run build",
     "dev:web": "cd web && pnpm run dev",
