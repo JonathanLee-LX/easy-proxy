@@ -10,9 +10,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw } from 'lucide-react'
+import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw, Zap, TestTube2 } from 'lucide-react'
 import type { Plugin } from '@/types'
 import { PluginGenerator } from './plugin-generator'
+import { PluginTestDialog } from './plugin-test-dialog'
 
 interface PluginConfigProps {
   // 插件列表相关
@@ -46,6 +47,11 @@ export function PluginConfig({
   const [loadingThirdParty, setLoadingThirdParty] = useState(false)
   const [generatorOpen, setGeneratorOpen] = useState(false)
   const [customPlugins, setCustomPlugins] = useState<any[]>([])
+  const [testDialogOpen, setTestDialogOpen] = useState(false)
+  const [testPluginId, setTestPluginId] = useState('')
+  const [testPluginName, setTestPluginName] = useState('')
+  const [testPluginHooks, setTestPluginHooks] = useState<string[]>([])
+  const [hotReloading, setHotReloading] = useState(false)
 
   useEffect(() => {
     fetchPlugins()
@@ -83,6 +89,37 @@ export function PluginConfig({
       console.error('删除插件失败:', error)
       alert('删除失败')
     }
+  }
+
+  const handleHotReload = async () => {
+    setHotReloading(true)
+    try {
+      const res = await fetch('/api/plugins/reload', {
+        method: 'POST'
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        alert(`成功热加载 ${data.count} 个插件！`)
+        await fetchPlugins()
+        await fetchCustomPlugins()
+      } else {
+        const error = await res.json()
+        alert(error.error || '热加载失败')
+      }
+    } catch (error) {
+      console.error('热加载失败:', error)
+      alert('热加载失败')
+    } finally {
+      setHotReloading(false)
+    }
+  }
+
+  const handleTestPlugin = (pluginId: string, pluginName: string, hooks: string[]) => {
+    setTestPluginId(pluginId)
+    setTestPluginName(pluginName)
+    setTestPluginHooks(hooks)
+    setTestDialogOpen(true)
   }
 
   const handleStartPlugin = async (id: string) => {
@@ -210,10 +247,29 @@ export function PluginConfig({
               variant="outline"
               size="sm"
               onClick={fetchCustomPlugins}
-              disabled={loading}
+              disabled={loading || hotReloading}
             >
               <RefreshCw className="h-4 w-4 mr-1" />
-              刷新
+              刷新列表
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleHotReload}
+              disabled={loading || hotReloading}
+              className="text-orange-600 border-orange-300 hover:bg-orange-50"
+            >
+              {hotReloading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  加载中...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-1" />
+                  热加载插件
+                </>
+              )}
             </Button>
             <Button
               size="sm"
@@ -231,7 +287,7 @@ export function PluginConfig({
                 <TableHead>文件名</TableHead>
                 <TableHead>编译状态</TableHead>
                 <TableHead>修改时间</TableHead>
-                <TableHead className="w-24">操作</TableHead>
+                <TableHead className="w-32">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -242,47 +298,67 @@ export function PluginConfig({
                   </TableCell>
                 </TableRow>
               ) : (
-                customPlugins.map((plugin) => (
-                  <TableRow key={plugin.filename}>
-                    <TableCell className="font-medium font-mono text-sm">{plugin.filename}</TableCell>
-                    <TableCell>
-                      {plugin.filename.endsWith('.ts') ? (
-                        plugin.compiled ? (
-                          plugin.needsRecompile ? (
-                            <Badge variant="outline" className="text-yellow-600 border-yellow-300">
-                              需要重新编译
-                            </Badge>
+                customPlugins.map((plugin) => {
+                  // 从已加载的插件中查找对应的插件信息
+                  const pluginId = plugin.filename.replace(/\.(ts|js)$/, '').replace(/^/, 'local.')
+                  const loadedPlugin = plugins.find(p => p.id === pluginId)
+                  
+                  return (
+                    <TableRow key={plugin.filename}>
+                      <TableCell className="font-medium font-mono text-sm">{plugin.filename}</TableCell>
+                      <TableCell>
+                        {plugin.filename.endsWith('.ts') ? (
+                          plugin.compiled ? (
+                            plugin.needsRecompile ? (
+                              <Badge variant="outline" className="text-yellow-600 border-yellow-300">
+                                需要重新编译
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-green-600 border-green-300">
+                                已编译
+                              </Badge>
+                            )
                           ) : (
-                            <Badge variant="outline" className="text-green-600 border-green-300">
-                              已编译
+                            <Badge variant="outline" className="text-red-600 border-red-300">
+                              未编译
                             </Badge>
                           )
                         ) : (
-                          <Badge variant="outline" className="text-red-600 border-red-300">
-                            未编译
+                          <Badge variant="outline" className="text-blue-600 border-blue-300">
+                            JavaScript
                           </Badge>
-                        )
-                      ) : (
-                        <Badge variant="outline" className="text-blue-600 border-blue-300">
-                          JavaScript
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {new Date(plugin.modified).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteCustomPlugin(plugin.filename)}
-                        className="text-destructive"
-                      >
-                        删除
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(plugin.modified).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {loadedPlugin && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleTestPlugin(loadedPlugin.id, loadedPlugin.name, loadedPlugin.hooks)}
+                              className="text-blue-600"
+                              title="测试插件"
+                            >
+                              <TestTube2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteCustomPlugin(plugin.filename)}
+                            className="text-destructive"
+                            title="删除插件"
+                          >
+                            删除
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
           </Table>
@@ -366,6 +442,15 @@ export function PluginConfig({
         open={generatorOpen}
         onOpenChange={setGeneratorOpen}
         onPluginSaved={fetchCustomPlugins}
+      />
+
+      {/* Plugin Test Dialog */}
+      <PluginTestDialog
+        open={testDialogOpen}
+        onOpenChange={setTestDialogOpen}
+        pluginId={testPluginId}
+        pluginName={testPluginName}
+        hooks={testPluginHooks}
       />
     </div>
   )

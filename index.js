@@ -1323,6 +1323,15 @@ const proxyServer = http.createServer((req, res) => {
                 
                 if (fs.existsSync(filePath)) {
                     fs.unlinkSync(filePath)
+                    
+                    // 同时删除编译后的.js文件
+                    if (filename.endsWith('.ts')) {
+                        const jsPath = filePath.replace(/\.ts$/, '.js')
+                        if (fs.existsSync(jsPath)) {
+                            fs.unlinkSync(jsPath)
+                        }
+                    }
+                    
                     res.write(JSON.stringify({ 
                         status: 'success', 
                         message: '插件已删除' 
@@ -1336,6 +1345,151 @@ const proxyServer = http.createServer((req, res) => {
                 res.write(JSON.stringify({ error: error.message }))
             }
             res.end()
+            return
+        }
+
+        // API: 热加载自定义插件
+        if (req.url === '/api/plugins/reload' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+                const plugins = await reloadCustomPlugins()
+                res.write(JSON.stringify({ 
+                    status: 'success', 
+                    message: `已重新加载 ${plugins.length} 个自定义插件`,
+                    count: plugins.length,
+                    plugins: plugins.map(p => ({
+                        id: p.manifest.id,
+                        name: p.manifest.name,
+                        version: p.manifest.version
+                    }))
+                }))
+            } catch (error) {
+                res.statusCode = 500
+                res.write(JSON.stringify({ error: error.message }))
+            }
+            res.end()
+            return
+        }
+
+        // API: 测试插件功能
+        if (req.url === '/api/plugins/test' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let body = ''
+            req.on('data', chunk => { body += chunk })
+            req.on('end', async () => {
+                try {
+                    const data = JSON.parse(body)
+                    const pluginId = data.pluginId
+                    const testType = data.testType || 'request' // request, all
+                    
+                    const allPlugins = pluginManager.getAll()
+                    const targetPlugin = allPlugins.find(p => p.manifest.id === pluginId)
+                    
+                    if (!targetPlugin) {
+                        res.statusCode = 404
+                        res.write(JSON.stringify({ error: '插件不存在' }))
+                        res.end()
+                        return
+                    }
+                    
+                    const testLogs = []
+                    const testLogger = {
+                        log: (...args) => testLogs.push({ level: 'log', message: args.join(' ') }),
+                        info: (...args) => testLogs.push({ level: 'info', message: args.join(' ') }),
+                        warn: (...args) => testLogs.push({ level: 'warn', message: args.join(' ') }),
+                        error: (...args) => testLogs.push({ level: 'error', message: args.join(' ') }),
+                    }
+                    
+                    const testResults = {
+                        pluginId,
+                        pluginName: targetPlugin.manifest.name,
+                        testType,
+                        hooks: targetPlugin.manifest.hooks,
+                        logs: testLogs,
+                        hookResults: {}
+                    }
+                    
+                    // 测试各个hook
+                    const hooks = targetPlugin.manifest.hooks || []
+                    
+                    for (const hookName of hooks) {
+                        const hookFn = targetPlugin[hookName]
+                        if (typeof hookFn !== 'function') continue
+                        
+                        try {
+                            // 构造测试上下文
+                            let testContext
+                            
+                            if (hookName === 'onRequestStart' || hookName === 'onBeforeProxy') {
+                                testContext = {
+                                    request: {
+                                        method: data.method || 'GET',
+                                        url: data.url || 'http://example.com/test',
+                                        headers: data.headers || { 'user-agent': 'test' },
+                                        body: data.body || ''
+                                    },
+                                    target: data.url || 'http://example.com/test',
+                                    meta: { _test: true },
+                                    shortCircuited: false,
+                                    shortCircuitResponse: null,
+                                    setTarget: (newTarget) => { testContext.target = newTarget },
+                                    respond: (response) => { 
+                                        testContext.shortCircuited = true
+                                        testContext.shortCircuitResponse = response
+                                    }
+                                }
+                            } else if (hookName === 'onBeforeResponse' || hookName === 'onAfterResponse') {
+                                testContext = {
+                                    request: {
+                                        method: data.method || 'GET',
+                                        url: data.url || 'http://example.com/test',
+                                        headers: data.headers || {},
+                                        body: data.body || ''
+                                    },
+                                    target: data.url || 'http://example.com/test',
+                                    meta: { _test: true },
+                                    response: {
+                                        statusCode: data.statusCode || 200,
+                                        headers: data.responseHeaders || { 'content-type': 'text/plain' },
+                                        body: data.responseBody || 'test response'
+                                    }
+                                }
+                            } else if (hookName === 'onError') {
+                                testContext = {
+                                    phase: 'test',
+                                    error: new Error(data.errorMessage || 'Test error'),
+                                    meta: { _test: true }
+                                }
+                            }
+                            
+                            const startTime = Date.now()
+                            await hookFn.call(targetPlugin, testContext)
+                            const duration = Date.now() - startTime
+                            
+                            testResults.hookResults[hookName] = {
+                                status: 'success',
+                                duration,
+                                context: testContext
+                            }
+                        } catch (error) {
+                            testResults.hookResults[hookName] = {
+                                status: 'error',
+                                error: error.message,
+                                stack: error.stack
+                            }
+                        }
+                    }
+                    
+                    res.write(JSON.stringify({ 
+                        status: 'success',
+                        results: testResults
+                    }))
+                } catch (error) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: error.message }))
+                }
+                res.end()
+            })
             return
         }
 
@@ -2390,6 +2544,9 @@ function canUsePipelineExecuteForSource(source) {
     return pipelineGate.canUsePipelineExecuteForSource(source)
 }
 
+// 存储自定义插件的引用，用于热加载
+let loadedCustomPlugins = []
+
 async function bootstrapBuiltinPlugins() {
     const plugins = createBuiltinPlugins({
         enableMock: ENABLE_BUILTIN_MOCK_PLUGIN,
@@ -2404,6 +2561,22 @@ async function bootstrapBuiltinPlugins() {
     
     // 加载自定义插件
     const customPluginsDir = path.resolve(epDir, 'plugins')
+    loadedCustomPlugins = await loadCustomPluginsInternal(customPluginsDir)
+    
+    // 合并内置插件和自定义插件
+    const allPlugins = [...plugins, ...loadedCustomPlugins]
+    
+    await bootstrapPlugins({
+        pluginManager,
+        plugins: allPlugins,
+        contextFactory: (manifest) => ({
+            manifest,
+            log: console,
+        }),
+    })
+}
+
+async function loadCustomPluginsInternal(customPluginsDir) {
     let customPlugins = []
     try {
         const { loadCustomPlugins } = require('./dist/core/custom-plugin-loader')
@@ -2415,18 +2588,41 @@ async function bootstrapBuiltinPlugins() {
     } catch (error) {
         console.warn(chalk.yellow('加载自定义插件失败:'), error.message)
     }
+    return customPlugins
+}
+
+async function reloadCustomPlugins() {
+    const customPluginsDir = path.resolve(epDir, 'plugins')
+    const newCustomPlugins = await loadCustomPluginsInternal(customPluginsDir)
     
-    // 合并内置插件和自定义插件
-    const allPlugins = [...plugins, ...customPlugins]
+    // 卸载旧的自定义插件
+    for (const oldPlugin of loadedCustomPlugins) {
+        try {
+            if (typeof oldPlugin.dispose === 'function') {
+                await oldPlugin.dispose()
+            }
+        } catch (error) {
+            console.error('卸载插件失败:', oldPlugin.manifest.id, error.message)
+        }
+    }
     
-    await bootstrapPlugins({
-        pluginManager,
-        plugins: allPlugins,
-        contextFactory: (manifest) => ({
-            manifest,
-            log: console,
-        }),
-    })
+    // 注册并启动新的自定义插件
+    for (const newPlugin of newCustomPlugins) {
+        try {
+            pluginManager.register(newPlugin)
+            const context = { manifest: newPlugin.manifest, log: console }
+            await newPlugin.setup(context)
+            if (typeof newPlugin.start === 'function') {
+                await newPlugin.start()
+            }
+            console.log(chalk.green(`已热加载插件: ${newPlugin.manifest.id}`))
+        } catch (error) {
+            console.error('热加载插件失败:', newPlugin.manifest.id, error.message)
+        }
+    }
+    
+    loadedCustomPlugins = newCustomPlugins
+    return newCustomPlugins
 }
 
 function shouldUsePluginMockForRequest(source, rule) {

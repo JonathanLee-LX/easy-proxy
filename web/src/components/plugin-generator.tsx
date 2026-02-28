@@ -46,6 +46,8 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
   const [copied, setCopied] = useState(false)
   const [codeLength, setCodeLength] = useState(0)
   const [generationProgress, setGenerationProgress] = useState(0)
+  const [saved, setSaved] = useState(false)
+  const [reloading, setReloading] = useState(false)
 
   const aiConfig = getAIConfig()
   const isAIReady = isAIConfigValid(aiConfig)
@@ -209,26 +211,21 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
       // 根据编译状态显示不同消息
       if (data.compiled) {
         setStatusType('success')
-        setStatusMessage(`插件已保存并编译成功！\n路径: ${data.path}`)
+        setStatusMessage(`插件已保存并编译成功！现在可以热加载测试。`)
+        setSaved(true)
       } else if (data.compileError) {
         setStatusType('error')
-        setStatusMessage(`插件已保存但编译失败: ${data.compileError}\n路径: ${data.path}`)
+        setStatusMessage(`插件已保存但编译失败: ${data.compileError}`)
+        setSaved(false)
       } else {
         setStatusType('success')
-        setStatusMessage(`插件已保存到 ${data.path}`)
+        setStatusMessage(`插件已保存，但需要重启服务器才能使用`)
+        setSaved(true)
       }
       
       // 通知父组件插件已保存
       if (onPluginSaved) {
         onPluginSaved()
-      }
-
-      // 如果编译成功，3秒后关闭；否则保持打开让用户查看错误
-      if (data.compiled) {
-        setTimeout(() => {
-          onOpenChange(false)
-          resetForm()
-        }, 3000)
       }
     } catch (error) {
       setStatusType('error')
@@ -246,6 +243,40 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
     }
   }
 
+  const handleHotReload = async () => {
+    setReloading(true)
+    try {
+      const response = await fetch('/api/plugins/reload', {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || '热加载失败')
+      }
+
+      const data = await response.json()
+      setStatusType('success')
+      setStatusMessage(`成功热加载 ${data.count} 个插件！插件已激活，可以使用了。`)
+      
+      // 通知父组件更新插件列表
+      if (onPluginSaved) {
+        onPluginSaved()
+      }
+
+      // 3秒后关闭
+      setTimeout(() => {
+        onOpenChange(false)
+        resetForm()
+      }, 3000)
+    } catch (error) {
+      setStatusType('error')
+      setStatusMessage(error instanceof Error ? error.message : '热加载失败')
+    } finally {
+      setReloading(false)
+    }
+  }
+
   const resetForm = () => {
     setPluginName('')
     setPluginDescription('')
@@ -259,6 +290,8 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
     setCopied(false)
     setCodeLength(0)
     setGenerationProgress(0)
+    setSaved(false)
+    setReloading(false)
   }
 
   return (
@@ -485,9 +518,9 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
               onOpenChange(false)
               resetForm()
             }}
-            disabled={generating || saving}
+            disabled={generating || saving || reloading}
           >
-            取消
+            {saved ? '完成' : '取消'}
           </Button>
           <div className="flex gap-2">
             {!generatedCode ? (
@@ -508,7 +541,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
                   </>
                 )}
               </Button>
-            ) : (
+            ) : !saved ? (
               <>
                 <Button
                   variant="outline"
@@ -542,6 +575,25 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
                   )}
                 </Button>
               </>
+            ) : (
+              <Button
+                size="sm"
+                onClick={handleHotReload}
+                disabled={reloading}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {reloading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    加载中...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 mr-1" />
+                    热加载并测试
+                  </>
+                )}
+              </Button>
             )}
           </div>
         </div>
