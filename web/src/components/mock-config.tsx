@@ -22,6 +22,7 @@ import { Plus, Trash2, Pencil, FileText, Code, ChevronDown, ChevronRight } from 
 import { MonacoEditor } from '@/components/monaco-editor'
 import { formatContent } from '@/lib/formatter'
 import { validateContent } from '@/lib/syntax-highlight'
+import { fixCode } from '@/lib/code-fixer'
 import type { MockRule } from '@/types'
 
 interface MockConfigProps {
@@ -65,6 +66,8 @@ export function MockConfig({
   const [headerValue, setHeaderValue] = useState('')
   const [formatError, setFormatError] = useState<string | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [fixing, setFixing] = useState(false)
+  const [formatting, setFormatting] = useState(false)
 
   useEffect(() => {
     fetchMocks()
@@ -183,17 +186,41 @@ export function MockConfig({
     }
   }
 
-  // 自动格式化 body（支持 JSON, HTML, JS, CSS）
-  const formatBody = useCallback(() => {
+  // 自动格式化 body（使用 Prettier）
+  const formatBody = useCallback(async () => {
+    setFormatting(true)
     try {
-      const { formatted, type } = formatContent(editForm.body)
+      const { formatted, type } = await formatContent(editForm.body)
       updateField('body', formatted)
       setFormatError(null)
-      // 显示格式化成功的提示（可选）
       console.log(`已格式化为 ${type}`)
     } catch (error) {
       setFormatError(error instanceof Error ? error.message : '格式化失败')
       setTimeout(() => setFormatError(null), 3000)
+    } finally {
+      setFormatting(false)
+    }
+  }, [editForm.body])
+
+  // AI自动修复语法错误
+  const fixBodyErrors = useCallback(async () => {
+    setFixing(true)
+    try {
+      const result = await fixCode(editForm.body)
+      if (result.success) {
+        updateField('body', result.fixed)
+        setValidationError(null)
+        setFormatError(null)
+        console.log(`代码已修复 (方法: ${result.method === 'ai' ? 'AI' : '规则'})`)
+      } else {
+        setFormatError('自动修复失败,请手动修正语法错误')
+        setTimeout(() => setFormatError(null), 3000)
+      }
+    } catch (error) {
+      setFormatError(error instanceof Error ? error.message : '修复失败')
+      setTimeout(() => setFormatError(null), 3000)
+    } finally {
+      setFixing(false)
     }
   }, [editForm.body])
 
@@ -444,9 +471,26 @@ export function MockConfig({
                     {formatError && (
                       <span className="text-xs text-red-500">{formatError}</span>
                     )}
-                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={formatBody}>
+                    {validationError && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-6 text-xs text-orange-600 border-orange-300 hover:bg-orange-50" 
+                        onClick={fixBodyErrors}
+                        disabled={fixing}
+                      >
+                        {fixing ? '修复中...' : 'AI修复'}
+                      </Button>
+                    )}
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 text-xs" 
+                      onClick={formatBody}
+                      disabled={formatting}
+                    >
                       <Code className="h-3 w-3 mr-1" />
-                      智能格式化
+                      {formatting ? '格式化中...' : '智能格式化'}
                     </Button>
                   </div>
                 </div>
