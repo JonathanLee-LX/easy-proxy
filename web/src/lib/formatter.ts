@@ -112,9 +112,14 @@ function formatHtml(content: string): string {
     } else {
       // 文本内容
       const nextTag = content.indexOf('<', i)
-      const text = content.substring(i, nextTag === -1 ? content.length : nextTag).trim()
+      let text = content.substring(i, nextTag === -1 ? content.length : nextTag)
+      
+      // 只移除前后的换行和多余空白，但保留单个空格
+      text = text.replace(/^\s+/, '').replace(/\s+$/, '')
       
       if (text) {
+        // 将内部的多个空白字符合并为单个空格
+        text = text.replace(/\s+/g, ' ')
         formatted += text
       }
       

@@ -67,7 +67,7 @@ export function useFuzzyFilter(records: ProxyRecord[]) {
         // Plain text fuzzy match against source, target, method
         else {
           const lower = cleanTerm.toLowerCase()
-          const haystack = `${record.method} ${record.source} ${record.target} ${record.time}`.toLowerCase()
+          const haystack = `${record.method} ${record.source} ${record.target || ''} ${record.time || ''}`.toLowerCase()
           // Fuzzy: check if all characters appear in order
           matches = fuzzyMatch(lower, haystack)
         }
