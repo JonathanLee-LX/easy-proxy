@@ -1351,23 +1351,25 @@ const proxyServer = http.createServer((req, res) => {
         // API: 热加载自定义插件
         if (req.url === '/api/plugins/reload' && req.method === 'POST') {
             res.setHeader('Content-Type', 'application/json')
-            try {
-                const plugins = await reloadCustomPlugins()
-                res.write(JSON.stringify({ 
-                    status: 'success', 
-                    message: `已重新加载 ${plugins.length} 个自定义插件`,
-                    count: plugins.length,
-                    plugins: plugins.map(p => ({
-                        id: p.manifest.id,
-                        name: p.manifest.name,
-                        version: p.manifest.version
+            ;(async () => {
+                try {
+                    const plugins = await reloadCustomPlugins()
+                    res.write(JSON.stringify({ 
+                        status: 'success', 
+                        message: `已重新加载 ${plugins.length} 个自定义插件`,
+                        count: plugins.length,
+                        plugins: plugins.map(p => ({
+                            id: p.manifest.id,
+                            name: p.manifest.name,
+                            version: p.manifest.version
+                        }))
                     }))
-                }))
-            } catch (error) {
-                res.statusCode = 500
-                res.write(JSON.stringify({ error: error.message }))
-            }
-            res.end()
+                } catch (error) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: error.message }))
+                }
+                res.end()
+            })()
             return
         }
 
@@ -1412,6 +1414,12 @@ const proxyServer = http.createServer((req, res) => {
                     // 测试各个hook
                     const hooks = targetPlugin.manifest.hooks || []
                     
+                    // 创建测试用的context（包含log对象）
+                    const testContextBase = {
+                        log: testLogger,
+                        manifest: targetPlugin.manifest
+                    }
+                    
                     for (const hookName of hooks) {
                         const hookFn = targetPlugin[hookName]
                         if (typeof hookFn !== 'function') continue
@@ -1420,8 +1428,11 @@ const proxyServer = http.createServer((req, res) => {
                             // 构造测试上下文
                             let testContext
                             
+                            // 注意：hook的context参数不包含log，插件应该使用setup时保存的context.log
+                            // 但为了测试方便，我们在testContext中也提供log
                             if (hookName === 'onRequestStart' || hookName === 'onBeforeProxy') {
                                 testContext = {
+                                    log: testLogger,
                                     request: {
                                         method: data.method || 'GET',
                                         url: data.url || 'http://example.com/test',
@@ -1429,7 +1440,7 @@ const proxyServer = http.createServer((req, res) => {
                                         body: data.body || ''
                                     },
                                     target: data.url || 'http://example.com/test',
-                                    meta: { _test: true },
+                                    meta: { _test: true, _pluginRequestStartAt: Date.now() },
                                     shortCircuited: false,
                                     shortCircuitResponse: null,
                                     setTarget: (newTarget) => { testContext.target = newTarget },
@@ -1440,6 +1451,7 @@ const proxyServer = http.createServer((req, res) => {
                                 }
                             } else if (hookName === 'onBeforeResponse' || hookName === 'onAfterResponse') {
                                 testContext = {
+                                    log: testLogger,
                                     request: {
                                         method: data.method || 'GET',
                                         url: data.url || 'http://example.com/test',
@@ -1447,7 +1459,7 @@ const proxyServer = http.createServer((req, res) => {
                                         body: data.body || ''
                                     },
                                     target: data.url || 'http://example.com/test',
-                                    meta: { _test: true },
+                                    meta: { _test: true, _pluginRequestStartAt: Date.now() },
                                     response: {
                                         statusCode: data.statusCode || 200,
                                         headers: data.responseHeaders || { 'content-type': 'text/plain' },
@@ -1456,6 +1468,7 @@ const proxyServer = http.createServer((req, res) => {
                                 }
                             } else if (hookName === 'onError') {
                                 testContext = {
+                                    log: testLogger,
                                     phase: 'test',
                                     error: new Error(data.errorMessage || 'Test error'),
                                     meta: { _test: true }
