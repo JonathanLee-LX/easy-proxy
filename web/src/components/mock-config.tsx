@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
 import { Plus, Trash2, Pencil, FileText, Code, ChevronDown, ChevronRight } from 'lucide-react'
-import { JsonTextarea } from '@/components/json-textarea'
+import { MonacoEditor } from '@/components/monaco-editor'
 import { formatContent } from '@/lib/formatter'
 import { validateContent } from '@/lib/syntax-highlight'
 import type { MockRule } from '@/types'
@@ -450,10 +450,11 @@ export function MockConfig({
                     </Button>
                   </div>
                 </div>
-                <JsonTextarea
+                <MonacoEditor
                   value={editForm.body}
                   onChange={(v) => updateField('body', v)}
                   placeholder='支持 JSON, HTML, JS, CSS 等格式'
+                  minHeight="300px"
                 />
                 {validationError && (
                   <div className="flex items-start gap-2 p-2 rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
