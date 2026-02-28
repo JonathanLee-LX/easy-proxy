@@ -35,9 +35,17 @@ function App() {
         }
       })
     }
+
+    // 移除 truncated 前缀（如果存在）
+    let cleanBody = data.responseBody
+    const truncatedMatch = cleanBody.match(/^\(truncated, \d+ bytes\)\n/)
+    if (truncatedMatch) {
+      cleanBody = cleanBody.substring(truncatedMatch[0].length)
+    }
+
     setMockInitialData({
       urlPattern: data.source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), // 转义为正则
-      body: data.responseBody,
+      body: cleanBody,
       statusCode: data.statusCode,
       headers: customHeaders,
       name: '从日志创建',

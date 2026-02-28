@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, Wand2, RotateCw } from 'lucide-react'
-import { highlightJson } from '@/lib/json-highlight'
+import { highlightCode, detectLanguage, shouldHighlight as shouldHighlightContent } from '@/lib/syntax-highlight'
 import type { RecordDetail, ProxyRecord } from '@/types'
 
 interface DetailPanelProps {
@@ -50,22 +50,40 @@ function HeadersView({ headers }: { headers: Record<string, string> }) {
 }
 
 function BodyView({ body }: { body: string }) {
-  if (!body) {
+  // 使用 useMemo 缓存格式化和高亮结果
+  const content = useMemo(() => {
+    if (!body) return null
+    
+    // 检测语言类型
+    const language = detectLanguage(body)
+    let formatted = body
+    
+    // 如果是 JSON，尝试格式化
+    if (language === 'json') {
+      try {
+        const obj = JSON.parse(body)
+        formatted = JSON.stringify(obj, null, 2)
+      } catch {
+        // 格式化失败，使用原始内容
+      }
+    }
+    
+    // 检查是否应该高亮
+    if (!shouldHighlightContent(formatted) || language === 'text') {
+      return { highlighted: false, content: formatted }
+    }
+    
+    // 应用语法高亮
+    return { highlighted: true, content: highlightCode(formatted, language) }
+  }, [body])
+  
+  if (!content) {
     return <p className="text-sm text-muted-foreground py-2">无内容</p>
   }
-  // Try to format & highlight as JSON
-  let isJson = false
-  let formatted = body
-  try {
-    const obj = JSON.parse(body)
-    formatted = JSON.stringify(obj, null, 2)
-    isJson = true
-  } catch {
-    // keep as-is
-  }
+  
   return (
     <pre className="font-mono text-xs whitespace-pre-wrap break-all p-2 bg-muted/50 rounded-md max-h-[400px] overflow-auto">
-      {isJson ? highlightJson(formatted) : formatted}
+      {content.highlighted ? content.content : content.content}
     </pre>
   )
 }
