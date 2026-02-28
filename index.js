@@ -1180,7 +1180,7 @@ const proxyServer = http.createServer((req, res) => {
             res.setHeader('Content-Type', 'application/json')
             let body = ''
             req.on('data', chunk => { body += chunk })
-            req.on('end', () => {
+            req.on('end', async () => {
                 try {
                     const data = JSON.parse(body)
                     const pluginsDir = path.resolve(epDir, 'plugins')
@@ -1193,10 +1193,34 @@ const proxyServer = http.createServer((req, res) => {
                     const filePath = path.resolve(pluginsDir, data.filename)
                     fs.writeFileSync(filePath, data.code, 'utf8')
                     
+                    // 如果是TypeScript文件，自动编译为JavaScript
+                    let compiled = false
+                    let compileError = null
+                    
+                    if (data.filename.endsWith('.ts')) {
+                        try {
+                            const { compilePluginFile } = require('./dist/core/plugin-compiler')
+                            const compileResult = await compilePluginFile(filePath)
+                            
+                            if (compileResult.success) {
+                                compiled = true
+                                console.log(chalk.green(`已编译插件: ${data.filename} -> ${data.filename.replace('.ts', '.js')}`))
+                            } else {
+                                compileError = compileResult.error
+                                console.warn(chalk.yellow(`插件编译失败: ${compileResult.error}`))
+                            }
+                        } catch (error) {
+                            compileError = error.message
+                            console.error(chalk.red('编译插件时出错:', error.message))
+                        }
+                    }
+                    
                     res.write(JSON.stringify({ 
                         status: 'success', 
-                        message: '插件已保存',
-                        path: filePath
+                        message: compiled ? '插件已保存并编译' : '插件已保存',
+                        path: filePath,
+                        compiled,
+                        compileError
                     }))
                 } catch (error) {
                     res.statusCode = 500
@@ -1220,14 +1244,59 @@ const proxyServer = http.createServer((req, res) => {
                 }
                 
                 const files = fs.readdirSync(pluginsDir)
-                    .filter(file => file.endsWith('.ts') || file.endsWith('.js'))
-                    .map(file => ({
-                        filename: file,
-                        path: path.resolve(pluginsDir, file),
-                        modified: fs.statSync(path.resolve(pluginsDir, file)).mtime
-                    }))
+                const pluginInfo = []
                 
-                res.write(JSON.stringify({ plugins: files }))
+                // 收集.ts和.js文件信息
+                const tsFiles = files.filter(f => f.endsWith('.ts'))
+                const jsFiles = files.filter(f => f.endsWith('.js'))
+                
+                // 处理每个.ts文件
+                tsFiles.forEach(tsFile => {
+                    const baseName = tsFile.replace(/\.ts$/, '')
+                    const jsFile = baseName + '.js'
+                    const hasCompiled = jsFiles.includes(jsFile)
+                    
+                    const tsPath = path.resolve(pluginsDir, tsFile)
+                    const tsStat = fs.statSync(tsPath)
+                    
+                    let compiledTime = null
+                    if (hasCompiled) {
+                        const jsPath = path.resolve(pluginsDir, jsFile)
+                        const jsStat = fs.statSync(jsPath)
+                        compiledTime = jsStat.mtime
+                    }
+                    
+                    pluginInfo.push({
+                        filename: tsFile,
+                        path: tsPath,
+                        modified: tsStat.mtime,
+                        compiled: hasCompiled,
+                        compiledTime: compiledTime,
+                        needsRecompile: hasCompiled && compiledTime < tsStat.mtime
+                    })
+                })
+                
+                // 添加独立的.js文件（没有对应.ts的）
+                jsFiles.forEach(jsFile => {
+                    const baseName = jsFile.replace(/\.js$/, '')
+                    const tsFile = baseName + '.ts'
+                    
+                    if (!tsFiles.includes(tsFile)) {
+                        const jsPath = path.resolve(pluginsDir, jsFile)
+                        const jsStat = fs.statSync(jsPath)
+                        
+                        pluginInfo.push({
+                            filename: jsFile,
+                            path: jsPath,
+                            modified: jsStat.mtime,
+                            compiled: true,
+                            compiledTime: jsStat.mtime,
+                            needsRecompile: false
+                        })
+                    }
+                })
+                
+                res.write(JSON.stringify({ plugins: pluginInfo }))
             } catch (error) {
                 res.statusCode = 500
                 res.write(JSON.stringify({ error: error.message }))

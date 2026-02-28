@@ -13,54 +13,36 @@ export interface CustomPluginLoaderOptions {
 }
 
 /**
- * 加载单个插件文件
+ * 加载单个插件文件（优先加载.js文件）
  */
 async function loadPluginFile(filePath: string, logger?: Logger): Promise<Plugin | null> {
     try {
-        // 读取文件内容
-        const code = fs.readFileSync(filePath, 'utf8');
+        let actualFilePath = filePath;
         
-        // 对于 TypeScript 文件，我们需要先编译
-        // 这里简化处理，直接使用 eval（生产环境应该使用 ts-node 或者预编译）
-        // 注意：这是一个简化的实现，实际应该使用更安全的方式
-        
-        // 创建一个沙箱环境来执行插件代码
-        const sandbox: any = {
-            exports: {},
-            module: { exports: {} },
-            require: (name: string) => {
-                // 只允许导入特定的模块
-                if (name === './types' || name === '../types') {
-                    return require('./types');
+        // 如果是.ts文件，检查是否存在对应的.js文件
+        if (filePath.endsWith('.ts')) {
+            const jsFilePath = filePath.replace(/\.ts$/, '.js');
+            if (fs.existsSync(jsFilePath)) {
+                actualFilePath = jsFilePath;
+                if (logger) {
+                    logger.info(`使用编译后的JS文件: ${path.basename(jsFilePath)}`);
                 }
-                throw new Error(`不允许导入模块: ${name}`);
-            },
-            console,
-        };
-
-        // 对于 TypeScript 代码，我们需要将其转换为 JavaScript
-        // 这里使用简单的字符串替换来移除类型注解（不完整的实现）
-        let jsCode = code
-            .replace(/: \w+(\[\])?/g, '')  // 移除简单类型注解
-            .replace(/interface \w+ {[^}]+}/g, '')  // 移除接口定义
-            .replace(/export /g, '');  // 移除 export 关键字
-
-        // 包装代码以支持 exports
-        const wrappedCode = `
-            (function(exports, module, require, console) {
-                ${jsCode}
-                return typeof plugin !== 'undefined' ? plugin : module.exports;
-            })
-        `;
-
-        // 执行代码
-        const pluginFactory = eval(wrappedCode);
-        const pluginObj = pluginFactory(
-            sandbox.exports,
-            sandbox.module,
-            sandbox.require,
-            sandbox.console
-        );
+            } else {
+                if (logger) {
+                    logger.warn(`未找到编译后的JS文件: ${path.basename(jsFilePath)}，将跳过此插件`);
+                }
+                return null;
+            }
+        }
+        
+        // 使用Node.js的require加载JavaScript模块
+        // 清除require缓存，确保加载最新版本
+        delete require.cache[require.resolve(actualFilePath)];
+        
+        const pluginModule = require(actualFilePath);
+        
+        // 插件可能通过exports.plugin或module.exports导出
+        const pluginObj = pluginModule.plugin || pluginModule.default || pluginModule;
 
         // 验证插件对象
         if (!pluginObj || typeof pluginObj !== 'object') {
@@ -99,9 +81,37 @@ export async function loadCustomPlugins(options: CustomPluginLoaderOptions): Pro
 
         // 读取目录中的所有文件
         const files = fs.readdirSync(pluginsDir);
-        const pluginFiles = files.filter(file => 
-            file.endsWith('.ts') || file.endsWith('.js')
-        );
+        
+        // 优先加载.js文件，如果没有.js则尝试加载.ts
+        const pluginFiles: string[] = [];
+        const tsFiles = files.filter(f => f.endsWith('.ts'));
+        const jsFiles = files.filter(f => f.endsWith('.js'));
+        
+        // 对于每个.ts文件，检查是否有对应的.js文件
+        for (const tsFile of tsFiles) {
+            const baseName = tsFile.replace(/\.ts$/, '');
+            const jsFile = baseName + '.js';
+            
+            if (jsFiles.includes(jsFile)) {
+                // 有编译后的.js文件，使用.js
+                if (!pluginFiles.includes(jsFile)) {
+                    pluginFiles.push(jsFile);
+                }
+            } else {
+                // 没有.js文件，尝试使用.ts（但会警告）
+                pluginFiles.push(tsFile);
+            }
+        }
+        
+        // 添加独立的.js文件（没有对应.ts的）
+        for (const jsFile of jsFiles) {
+            const baseName = jsFile.replace(/\.js$/, '');
+            const tsFile = baseName + '.ts';
+            
+            if (!tsFiles.includes(tsFile) && !pluginFiles.includes(jsFile)) {
+                pluginFiles.push(jsFile);
+            }
+        }
 
         if (logger) {
             logger.info(`发现 ${pluginFiles.length} 个插件文件`);

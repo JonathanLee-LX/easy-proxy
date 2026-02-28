@@ -229,6 +229,7 @@ export function PluginConfig({
             <TableHeader>
               <TableRow>
                 <TableHead>文件名</TableHead>
+                <TableHead>编译状态</TableHead>
                 <TableHead>修改时间</TableHead>
                 <TableHead className="w-24">操作</TableHead>
               </TableRow>
@@ -236,7 +237,7 @@ export function PluginConfig({
             <TableBody>
               {customPlugins.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                     暂无自定义插件，点击上方按钮使用 AI 生成插件
                   </TableCell>
                 </TableRow>
@@ -244,6 +245,29 @@ export function PluginConfig({
                 customPlugins.map((plugin) => (
                   <TableRow key={plugin.filename}>
                     <TableCell className="font-medium font-mono text-sm">{plugin.filename}</TableCell>
+                    <TableCell>
+                      {plugin.filename.endsWith('.ts') ? (
+                        plugin.compiled ? (
+                          plugin.needsRecompile ? (
+                            <Badge variant="outline" className="text-yellow-600 border-yellow-300">
+                              需要重新编译
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-green-600 border-green-300">
+                              已编译
+                            </Badge>
+                          )
+                        ) : (
+                          <Badge variant="outline" className="text-red-600 border-red-300">
+                            未编译
+                          </Badge>
+                        )
+                      ) : (
+                        <Badge variant="outline" className="text-blue-600 border-blue-300">
+                          JavaScript
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {new Date(plugin.modified).toLocaleString()}
                     </TableCell>
