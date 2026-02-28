@@ -1,8 +1,8 @@
 import type React from 'react'
 
 // 性能配置
-const MAX_HIGHLIGHT_SIZE = 50 * 1024 // 50KB，超过此大小不进行语法高亮
-const MAX_HIGHLIGHT_LINES = 1000 // 最多高亮 1000 行
+const MAX_HIGHLIGHT_SIZE = 1024 * 1024 // 1MB，超过此大小不进行语法高亮
+const MAX_HIGHLIGHT_LINES = 10000 // 最多高亮 10000 行
 
 /**
  * 检查内容是否适合进行语法高亮
@@ -125,7 +125,7 @@ function highlightJson(json: string): React.ReactNode[] {
   let lastIndex = 0
   let match: RegExpExecArray | null
   let matchCount = 0
-  const MAX_MATCHES = 5000 // 限制最大匹配数，防止性能问题
+  const MAX_MATCHES = 50000 // 限制最大匹配数，防止性能问题
 
   while ((match = tokenRe.exec(json)) !== null && matchCount++ < MAX_MATCHES) {
     if (match.index > lastIndex) {
@@ -175,7 +175,7 @@ function highlightHtml(html: string): React.ReactNode[] {
   let match: RegExpExecArray | null
   let currentIndex = 0
   let matchCount = 0
-  const MAX_MATCHES = 3000
+  const MAX_MATCHES = 30000
   
   while ((match = tagRe.exec(html)) !== null && matchCount++ < MAX_MATCHES) {
     // 添加标签前的文本
@@ -370,7 +370,7 @@ function highlightJavaScript(js: string): React.ReactNode[] {
   let lastIndex = 0
   let match: RegExpExecArray | null
   let matchCount = 0
-  const MAX_MATCHES = 3000
+  const MAX_MATCHES = 30000
   
   while ((match = combinedRe.exec(js)) !== null && matchCount++ < MAX_MATCHES) {
     if (match.index > lastIndex) {
