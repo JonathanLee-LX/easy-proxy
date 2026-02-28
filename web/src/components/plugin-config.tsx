@@ -10,8 +10,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Play, Square, Loader2, Shield, ShieldAlert } from 'lucide-react'
+import { Play, Square, Loader2, Shield, ShieldAlert, Sparkles, RefreshCw, Zap, TestTube2 } from 'lucide-react'
 import type { Plugin } from '@/types'
+import { PluginGenerator } from './plugin-generator'
+import { PluginTestDialog } from './plugin-test-dialog'
 
 interface PluginConfigProps {
   // 插件列表相关
@@ -43,11 +45,82 @@ export function PluginConfig({
   const [loading, setLoading] = useState(false)
   const [thirdPartyPath, setThirdPartyPath] = useState('')
   const [loadingThirdParty, setLoadingThirdParty] = useState(false)
+  const [generatorOpen, setGeneratorOpen] = useState(false)
+  const [customPlugins, setCustomPlugins] = useState<any[]>([])
+  const [testDialogOpen, setTestDialogOpen] = useState(false)
+  const [testPluginId, setTestPluginId] = useState('')
+  const [testPluginName, setTestPluginName] = useState('')
+  const [testPluginHooks, setTestPluginHooks] = useState<string[]>([])
+  const [hotReloading, setHotReloading] = useState(false)
 
   useEffect(() => {
     fetchPlugins()
     fetchThirdPartyPlugins()
+    fetchCustomPlugins()
   }, [fetchPlugins, fetchThirdPartyPlugins])
+
+  const fetchCustomPlugins = async () => {
+    try {
+      const res = await fetch('/api/plugins/custom')
+      const data = await res.json()
+      setCustomPlugins(data.plugins || [])
+    } catch (error) {
+      console.error('加载自定义插件失败:', error)
+    }
+  }
+
+  const handleDeleteCustomPlugin = async (filename: string) => {
+    if (!confirm(`确定要删除插件 ${filename} 吗？`)) {
+      return
+    }
+    
+    try {
+      const res = await fetch(`/api/plugins/custom/${encodeURIComponent(filename)}`, {
+        method: 'DELETE'
+      })
+      
+      if (res.ok) {
+        await fetchCustomPlugins()
+      } else {
+        const error = await res.json()
+        alert(error.error || '删除失败')
+      }
+    } catch (error) {
+      console.error('删除插件失败:', error)
+      alert('删除失败')
+    }
+  }
+
+  const handleHotReload = async () => {
+    setHotReloading(true)
+    try {
+      const res = await fetch('/api/plugins/reload', {
+        method: 'POST'
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        alert(`成功热加载 ${data.count} 个插件！`)
+        await fetchPlugins()
+        await fetchCustomPlugins()
+      } else {
+        const error = await res.json()
+        alert(error.error || '热加载失败')
+      }
+    } catch (error) {
+      console.error('热加载失败:', error)
+      alert('热加载失败')
+    } finally {
+      setHotReloading(false)
+    }
+  }
+
+  const handleTestPlugin = (pluginId: string, pluginName: string, hooks: string[]) => {
+    setTestPluginId(pluginId)
+    setTestPluginName(pluginName)
+    setTestPluginHooks(hooks)
+    setTestDialogOpen(true)
+  }
 
   const handleStartPlugin = async (id: string) => {
     setLoading(true)
@@ -165,6 +238,121 @@ export function PluginConfig({
         </div>
       </div>
 
+      {/* Custom AI Plugins */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-medium">自定义插件</h3>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchCustomPlugins}
+              disabled={loading || hotReloading}
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              刷新列表
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleHotReload}
+              disabled={loading || hotReloading}
+              className="text-orange-600 border-orange-300 hover:bg-orange-50"
+            >
+              {hotReloading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  加载中...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-1" />
+                  热加载插件
+                </>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setGeneratorOpen(true)}
+            >
+              <Sparkles className="h-4 w-4 mr-1" />
+              AI 生成插件
+            </Button>
+          </div>
+        </div>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>插件名称</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead>修改时间</TableHead>
+                <TableHead className="w-32">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {customPlugins.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                    暂无自定义插件，点击上方按钮使用 AI 生成插件
+                  </TableCell>
+                </TableRow>
+              ) : (
+                customPlugins.map((plugin) => {
+                  // 从已加载的插件中查找对应的插件信息
+                  const pluginId = plugin.filename.replace(/\.js$/, '').replace(/^/, 'local.')
+                  const loadedPlugin = plugins.find(p => p.id === pluginId)
+                  
+                  return (
+                    <TableRow key={plugin.filename}>
+                      <TableCell className="font-medium font-mono text-sm">{plugin.filename}</TableCell>
+                      <TableCell>
+                        {loadedPlugin ? (
+                          <Badge variant="outline" className="text-green-600 border-green-300">
+                            已加载
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-gray-600 border-gray-300">
+                            未加载
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {new Date(plugin.modified).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {loadedPlugin && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleTestPlugin(loadedPlugin.id, loadedPlugin.name, loadedPlugin.hooks)}
+                              className="text-blue-600"
+                              title="测试插件"
+                            >
+                              <TestTube2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteCustomPlugin(plugin.filename)}
+                            className="text-destructive"
+                            title="删除插件"
+                          >
+                            删除
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
       {/* Third-party Plugins */}
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -236,6 +424,22 @@ export function PluginConfig({
           </Table>
         </div>
       </div>
+
+      {/* Plugin Generator Dialog */}
+      <PluginGenerator
+        open={generatorOpen}
+        onOpenChange={setGeneratorOpen}
+        onPluginSaved={fetchCustomPlugins}
+      />
+
+      {/* Plugin Test Dialog */}
+      <PluginTestDialog
+        open={testDialogOpen}
+        onOpenChange={setTestDialogOpen}
+        pluginId={testPluginId}
+        pluginName={testPluginName}
+        hooks={testPluginHooks}
+      />
     </div>
   )
 }

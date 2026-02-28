@@ -108,7 +108,41 @@ ep --help
 
 ## 插件开发
 
-Easy Proxy 提供了强大的插件系统，允许开发者扩展代理功能。详细的插件开发指南请参考：
+Easy Proxy 提供了强大的插件系统，允许开发者扩展代理功能。
+
+### AI 辅助插件开发 ✨ 新功能
+
+**通过AI自动生成自定义插件**，无需手写代码！
+
+1. **配置AI服务**：在Web界面设置中配置OpenAI或Anthropic API
+2. **描述需求**：用自然语言描述插件功能
+3. **AI生成代码**：实时查看AI生成的TypeScript插件代码
+4. **自动编译**：保存时自动编译为JavaScript
+5. **即刻使用**：重启服务器后插件自动加载
+
+**特性**：
+- 🤖 支持 OpenAI 和 Anthropic
+- ⚡ 流式输出，实时查看生成进度
+- 🔧 自动编译 TypeScript → JavaScript  
+- 📊 编译状态可视化（已编译/未编译/需要重新编译）
+- 💾 自动保存到 `~/.ep/plugins/` 目录
+
+**使用步骤**：
+1. 启动代理服务器并访问 Web 界面
+2. 进入"扩展插件"标签页
+3. 点击"AI 生成插件"按钮
+4. 填写插件需求并生成
+5. 查看代码，确认后保存
+
+详见：
+- [AI插件功能完整总结](./AI_PLUGIN_FEATURE_SUMMARY.md) ⭐ - 功能概述、使用指南、演示视频
+- [插件生成器功能说明](./PLUGIN_GENERATOR_FEATURE.md) - 技术实现细节
+- [流式输出功能说明](./STREAMING_FEATURE.md) - 流式生成原理和优势
+- [插件编译功能说明](./PLUGIN_COMPILATION.md) - TypeScript编译机制
+
+### 手动插件开发
+
+如果您希望手动编写插件，详细的插件开发指南请参考：
 
 - [插件系统完整开发指南](./docs/plugin/PLUGIN_SYSTEM_GUIDE.md) ⭐ - 包含插件接口、Hook 协议、示例代码和最佳实践
 - [插件架构设计文档](./docs/plugin/RFC_PLUGIN_ARCHITECTURE.md) - 插件系统的架构设计和实施方案

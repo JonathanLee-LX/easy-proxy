@@ -1108,6 +1108,371 @@ const proxyServer = http.createServer((req, res) => {
             return
         }
 
+        // API: 生成插件代码（流式）
+        if (req.url === '/api/plugins/generate-stream' && req.method === 'POST') {
+            let body = ''
+            req.on('data', chunk => { body += chunk })
+            req.on('end', async () => {
+                try {
+                    const data = JSON.parse(body)
+                    const { generatePluginStream } = require('./dist/core/plugin-generator')
+                    
+                    // 设置 SSE 响应头
+                    res.writeHead(200, {
+                        'Content-Type': 'text/event-stream',
+                        'Cache-Control': 'no-cache',
+                        'Connection': 'keep-alive',
+                        'Access-Control-Allow-Origin': '*'
+                    })
+                    
+                    // 发送初始事件
+                    res.write('event: start\n')
+                    res.write('data: {"status":"generating"}\n\n')
+                    
+                    let accumulatedCode = ''
+                    
+                    // 生成插件，实时发送chunk
+                    const result = await generatePluginStream(
+                        data.requirement, 
+                        data.aiConfig,
+                        (chunk) => {
+                            accumulatedCode += chunk
+                            res.write('event: chunk\n')
+                            res.write(`data: ${JSON.stringify({ chunk, accumulated: accumulatedCode })}\n\n`)
+                        }
+                    )
+                    
+                    // 发送完成事件
+                    res.write('event: complete\n')
+                    res.write(`data: ${JSON.stringify({ status: 'success', plugin: result })}\n\n`)
+                    res.end()
+                } catch (error) {
+                    res.write('event: error\n')
+                    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`)
+                    res.end()
+                }
+            })
+            return
+        }
+
+        // API: 生成插件代码（非流式，向后兼容）
+        if (req.url === '/api/plugins/generate' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let body = ''
+            req.on('data', chunk => { body += chunk })
+            req.on('end', async () => {
+                try {
+                    const data = JSON.parse(body)
+                    const { generatePlugin } = require('./dist/core/plugin-generator')
+                    const result = await generatePlugin(data.requirement, data.aiConfig)
+                    res.write(JSON.stringify({ status: 'success', plugin: result }))
+                } catch (error) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: error.message }))
+                }
+                res.end()
+            })
+            return
+        }
+
+        // API: 保存插件到配置目录
+        if (req.url === '/api/plugins/save' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let body = ''
+            req.on('data', chunk => { body += chunk })
+            req.on('end', async () => {
+                try {
+                    const data = JSON.parse(body)
+                    const pluginsDir = path.resolve(epDir, 'plugins')
+                    
+                    // 创建 plugins 目录
+                    if (!fs.existsSync(pluginsDir)) {
+                        fs.mkdirSync(pluginsDir, { recursive: true })
+                    }
+                    
+                    const filePath = path.resolve(pluginsDir, data.filename)
+                    fs.writeFileSync(filePath, data.code, 'utf8')
+                    
+                    console.log(chalk.green(`已保存插件: ${data.filename}`))
+                    
+                    res.write(JSON.stringify({ 
+                        status: 'success', 
+                        message: '插件已保存',
+                        path: filePath
+                    }))
+                } catch (error) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: error.message }))
+                }
+                res.end()
+            })
+            return
+        }
+
+        // API: 列出自定义插件
+        if (req.url === '/api/plugins/custom' && req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+                const pluginsDir = path.resolve(epDir, 'plugins')
+                
+                if (!fs.existsSync(pluginsDir)) {
+                    res.write(JSON.stringify({ plugins: [] }))
+                    res.end()
+                    return
+                }
+                
+                const files = fs.readdirSync(pluginsDir)
+                const pluginInfo = []
+                
+                // 只列出.js文件
+                const jsFiles = files.filter(f => f.endsWith('.js'))
+                
+                jsFiles.forEach(jsFile => {
+                    const jsPath = path.resolve(pluginsDir, jsFile)
+                    const jsStat = fs.statSync(jsPath)
+                    
+                    pluginInfo.push({
+                        filename: jsFile,
+                        path: jsPath,
+                        modified: jsStat.mtime
+                    })
+                })
+                
+                res.write(JSON.stringify({ plugins: pluginInfo }))
+            } catch (error) {
+                res.statusCode = 500
+                res.write(JSON.stringify({ error: error.message }))
+            }
+            res.end()
+            return
+        }
+
+        // API: 删除自定义插件
+        if (req.url.startsWith('/api/plugins/custom/') && req.method === 'DELETE') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+                const filename = decodeURIComponent(req.url.replace('/api/plugins/custom/', ''))
+                const pluginsDir = path.resolve(epDir, 'plugins')
+                const filePath = path.resolve(pluginsDir, filename)
+                
+                // 安全检查：确保文件在 plugins 目录内
+                if (!filePath.startsWith(pluginsDir)) {
+                    res.statusCode = 403
+                    res.write(JSON.stringify({ error: '非法的文件路径' }))
+                    res.end()
+                    return
+                }
+                
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath)
+                    
+                    // 同时删除编译后的.js文件
+                    if (filename.endsWith('.ts')) {
+                        const jsPath = filePath.replace(/\.ts$/, '.js')
+                        if (fs.existsSync(jsPath)) {
+                            fs.unlinkSync(jsPath)
+                        }
+                    }
+                    
+                    res.write(JSON.stringify({ 
+                        status: 'success', 
+                        message: '插件已删除' 
+                    }))
+                } else {
+                    res.statusCode = 404
+                    res.write(JSON.stringify({ error: '插件文件不存在' }))
+                }
+            } catch (error) {
+                res.statusCode = 500
+                res.write(JSON.stringify({ error: error.message }))
+            }
+            res.end()
+            return
+        }
+
+        // API: 热加载自定义插件
+        if (req.url === '/api/plugins/reload' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            ;(async () => {
+                try {
+                    const plugins = await reloadCustomPlugins()
+                    res.write(JSON.stringify({ 
+                        status: 'success', 
+                        message: `已重新加载 ${plugins.length} 个自定义插件`,
+                        count: plugins.length,
+                        plugins: plugins.map(p => ({
+                            id: p.manifest.id,
+                            name: p.manifest.name,
+                            version: p.manifest.version
+                        }))
+                    }))
+                } catch (error) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: error.message }))
+                }
+                res.end()
+            })()
+            return
+        }
+
+        // API: AI自动修复插件
+        if (req.url === '/api/plugins/fix' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let body = ''
+            req.on('data', chunk => { body += chunk })
+            req.on('end', async () => {
+                try {
+                    const data = JSON.parse(body)
+                    const { fixPluginWithAI } = require('./dist/core/plugin-generator')
+                    const fixedCode = await fixPluginWithAI(
+                        data.originalCode,
+                        data.testError,
+                        data.requirement,
+                        data.aiConfig
+                    )
+                    res.write(JSON.stringify({ status: 'success', fixedCode }))
+                } catch (error) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: error.message }))
+                }
+                res.end()
+            })
+            return
+        }
+
+        // API: 测试插件功能
+        if (req.url === '/api/plugins/test' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let body = ''
+            req.on('data', chunk => { body += chunk })
+            req.on('end', async () => {
+                try {
+                    const data = JSON.parse(body)
+                    const pluginId = data.pluginId
+                    const testType = data.testType || 'request' // request, all
+                    
+                    const allPlugins = pluginManager.getAll()
+                    const targetPlugin = allPlugins.find(p => p.manifest.id === pluginId)
+                    
+                    if (!targetPlugin) {
+                        res.statusCode = 404
+                        res.write(JSON.stringify({ error: '插件不存在' }))
+                        res.end()
+                        return
+                    }
+                    
+                    const testLogs = []
+                    const testLogger = {
+                        log: (...args) => testLogs.push({ level: 'log', message: args.join(' ') }),
+                        info: (...args) => testLogs.push({ level: 'info', message: args.join(' ') }),
+                        warn: (...args) => testLogs.push({ level: 'warn', message: args.join(' ') }),
+                        error: (...args) => testLogs.push({ level: 'error', message: args.join(' ') }),
+                    }
+                    
+                    const testResults = {
+                        pluginId,
+                        pluginName: targetPlugin.manifest.name,
+                        testType,
+                        hooks: targetPlugin.manifest.hooks,
+                        logs: testLogs,
+                        hookResults: {}
+                    }
+                    
+                    // 测试各个hook
+                    const hooks = targetPlugin.manifest.hooks || []
+                    
+                    // 创建测试用的context（包含log对象）
+                    const testContextBase = {
+                        log: testLogger,
+                        manifest: targetPlugin.manifest
+                    }
+                    
+                    for (const hookName of hooks) {
+                        const hookFn = targetPlugin[hookName]
+                        if (typeof hookFn !== 'function') continue
+                        
+                        try {
+                            // 构造测试上下文
+                            let testContext
+                            
+                            // 注意：hook的context参数不包含log，插件应该使用setup时保存的context.log
+                            // 但为了测试方便，我们在testContext中也提供log
+                            if (hookName === 'onRequestStart' || hookName === 'onBeforeProxy') {
+                                testContext = {
+                                    log: testLogger,
+                                    request: {
+                                        method: data.method || 'GET',
+                                        url: data.url || 'http://example.com/test',
+                                        headers: data.headers || { 'user-agent': 'test' },
+                                        body: data.body || ''
+                                    },
+                                    target: data.url || 'http://example.com/test',
+                                    meta: { _test: true, _pluginRequestStartAt: Date.now() },
+                                    shortCircuited: false,
+                                    shortCircuitResponse: null,
+                                    setTarget: (newTarget) => { testContext.target = newTarget },
+                                    respond: (response) => { 
+                                        testContext.shortCircuited = true
+                                        testContext.shortCircuitResponse = response
+                                    }
+                                }
+                            } else if (hookName === 'onBeforeResponse' || hookName === 'onAfterResponse') {
+                                testContext = {
+                                    log: testLogger,
+                                    request: {
+                                        method: data.method || 'GET',
+                                        url: data.url || 'http://example.com/test',
+                                        headers: data.headers || {},
+                                        body: data.body || ''
+                                    },
+                                    target: data.url || 'http://example.com/test',
+                                    meta: { _test: true, _pluginRequestStartAt: Date.now() },
+                                    response: {
+                                        statusCode: data.statusCode || 200,
+                                        headers: data.responseHeaders || { 'content-type': 'text/plain' },
+                                        body: data.responseBody || 'test response'
+                                    }
+                                }
+                            } else if (hookName === 'onError') {
+                                testContext = {
+                                    log: testLogger,
+                                    phase: 'test',
+                                    error: new Error(data.errorMessage || 'Test error'),
+                                    meta: { _test: true }
+                                }
+                            }
+                            
+                            const startTime = Date.now()
+                            await hookFn.call(targetPlugin, testContext)
+                            const duration = Date.now() - startTime
+                            
+                            testResults.hookResults[hookName] = {
+                                status: 'success',
+                                duration,
+                                context: testContext
+                            }
+                        } catch (error) {
+                            testResults.hookResults[hookName] = {
+                                status: 'error',
+                                error: error.message,
+                                stack: error.stack
+                            }
+                        }
+                    }
+                    
+                    res.write(JSON.stringify({ 
+                        status: 'success',
+                        results: testResults
+                    }))
+                } catch (error) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: error.message }))
+                }
+                res.end()
+            })
+            return
+        }
+
         if(req.url.startsWith('/api/rules')) {
             const method = req.method.toLocaleLowerCase()
             if(method === 'put') {
@@ -2159,6 +2524,9 @@ function canUsePipelineExecuteForSource(source) {
     return pipelineGate.canUsePipelineExecuteForSource(source)
 }
 
+// 存储自定义插件的引用，用于热加载
+let loadedCustomPlugins = []
+
 async function bootstrapBuiltinPlugins() {
     const plugins = createBuiltinPlugins({
         enableMock: ENABLE_BUILTIN_MOCK_PLUGIN,
@@ -2170,14 +2538,71 @@ async function bootstrapBuiltinPlugins() {
         getRuleMap: () => ruleMap,
         loggerPlugin: builtinLoggerPlugin,
     })
+    
+    // 加载自定义插件
+    const customPluginsDir = path.resolve(epDir, 'plugins')
+    loadedCustomPlugins = await loadCustomPluginsInternal(customPluginsDir)
+    
+    // 合并内置插件和自定义插件
+    const allPlugins = [...plugins, ...loadedCustomPlugins]
+    
     await bootstrapPlugins({
         pluginManager,
-        plugins,
+        plugins: allPlugins,
         contextFactory: (manifest) => ({
             manifest,
             log: console,
         }),
     })
+}
+
+async function loadCustomPluginsInternal(customPluginsDir) {
+    let customPlugins = []
+    try {
+        const { loadCustomPlugins } = require('./dist/core/custom-plugin-loader')
+        customPlugins = await loadCustomPlugins({
+            pluginsDir: customPluginsDir,
+            logger: console,
+        })
+        console.log(chalk.green(`已加载 ${customPlugins.length} 个自定义插件`))
+    } catch (error) {
+        console.warn(chalk.yellow('加载自定义插件失败:'), error.message)
+    }
+    return customPlugins
+}
+
+async function reloadCustomPlugins() {
+    const customPluginsDir = path.resolve(epDir, 'plugins')
+    const newCustomPlugins = await loadCustomPluginsInternal(customPluginsDir)
+    
+    // 卸载旧的自定义插件
+    for (const oldPlugin of loadedCustomPlugins) {
+        try {
+            if (typeof oldPlugin.dispose === 'function') {
+                await oldPlugin.dispose()
+            }
+        } catch (error) {
+            console.error('卸载插件失败:', oldPlugin.manifest.id, error.message)
+        }
+    }
+    
+    // 注册并启动新的自定义插件
+    for (const newPlugin of newCustomPlugins) {
+        try {
+            pluginManager.register(newPlugin)
+            const context = { manifest: newPlugin.manifest, log: console }
+            await newPlugin.setup(context)
+            if (typeof newPlugin.start === 'function') {
+                await newPlugin.start()
+            }
+            console.log(chalk.green(`已热加载插件: ${newPlugin.manifest.id}`))
+        } catch (error) {
+            console.error('热加载插件失败:', newPlugin.manifest.id, error.message)
+        }
+    }
+    
+    loadedCustomPlugins = newCustomPlugins
+    return newCustomPlugins
 }
 
 function shouldUsePluginMockForRequest(source, rule) {
