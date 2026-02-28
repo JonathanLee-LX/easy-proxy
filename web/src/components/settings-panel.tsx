@@ -69,24 +69,43 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
   // 初始化字体大小
   useEffect(() => {
-    const saved = localStorage.getItem('font-size') || 'medium'
-    setFontSize(saved)
-    const size = fontSizeOptions.find(o => o.value === saved)?.size || '14px'
-    document.documentElement.style.setProperty('--font-size-base', size)
+    import('@/lib/settings-store').then(({ loadSettings }) => {
+      loadSettings().then(settings => {
+        const saved = settings.fontSize || 'medium'
+        setFontSize(saved)
+        const size = fontSizeOptions.find(o => o.value === saved)?.size || '14px'
+        document.documentElement.style.setProperty('--font-size-base', size)
+      }).catch(() => {
+        const saved = 'medium'
+        setFontSize(saved)
+        document.documentElement.style.setProperty('--font-size-base', '14px')
+      })
+    })
   }, [])
 
   // 应用字体大小
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('font-size', fontSize)
       const size = fontSizeOptions.find(o => o.value === fontSize)?.size || '14px'
       document.documentElement.style.setProperty('--font-size-base', size)
+      
+      // 保存到服务器
+      import('@/lib/settings-store').then(({ updateSettings }) => {
+        updateSettings({ fontSize }).catch(console.error)
+      })
     }
   }, [fontSize])
 
   useEffect(() => {
     if (open) {
-      setAiConfig(getAIConfig())
+      // 从设置存储中加载 AI 配置
+      import('@/lib/settings-store').then(({ loadSettings }) => {
+        loadSettings().then(settings => {
+          setAiConfig(settings.aiConfig)
+        }).catch(() => {
+          setAiConfig(getAIConfig())
+        })
+      })
       setAiTestResult(null)
       setAiTestMessage('')
       // 获取当前配置文件路径
@@ -110,7 +129,13 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const handleAiSave = async () => {
     setSaving(true)
     try {
+      // 保存到文件系统
+      const { updateSettings } = await import('@/lib/settings-store')
+      await updateSettings({ aiConfig })
+      
+      // 同时保存到 localStorage 作为备份
       saveAIConfig(aiConfig)
+      
       setAiTestResult('success')
       setAiTestMessage('AI 配置保存成功')
     } catch (error) {

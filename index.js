@@ -13,6 +13,13 @@ if (!fs.existsSync(certDir)) {
     fs.mkdirSync(certDir, { recursive: true })
 }
 
+// 创建系统配置目录
+const epConfigDir = path.resolve(epDir, '.epconfig')
+if (!fs.existsSync(epConfigDir)) {
+    fs.mkdirSync(epConfigDir, { recursive: true })
+}
+const settingsPath = path.resolve(epConfigDir, 'settings.json')
+
 const { crtMgr, ensureRootCA } = require('./dist/cert')
 const { WebSocket, WebSocketServer } = require('ws')
 const { copyHeaders, resolveTargetUrl, getFreePort, loadConfigFromFile, resolveConfigPath, ruleMapToEprcText, DEFAULT_CONFIG_PATH } = require('./dist/helpers')
@@ -816,6 +823,55 @@ const proxyServer = http.createServer((req, res) => {
                 res.write(JSON.stringify({ error: error.message }))
             }
             res.end()
+            return
+        }
+
+        // API: 获取系统设置
+        if (req.url === '/api/settings' && req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+                if (fs.existsSync(settingsPath)) {
+                    const settingsData = fs.readFileSync(settingsPath, 'utf8')
+                    res.write(settingsData)
+                } else {
+                    // 返回默认设置
+                    res.write(JSON.stringify({
+                        theme: 'system',
+                        fontSize: 'medium',
+                        aiConfig: {
+                            enabled: false,
+                            provider: 'openai',
+                            apiKey: '',
+                            baseUrl: '',
+                            model: '',
+                            models: []
+                        }
+                    }))
+                }
+            } catch (error) {
+                res.statusCode = 500
+                res.write(JSON.stringify({ error: error.message }))
+            }
+            res.end()
+            return
+        }
+
+        // API: 保存系统设置
+        if (req.url === '/api/settings' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            let body = ''
+            req.on('data', chunk => { body += chunk })
+            req.on('end', () => {
+                try {
+                    const settings = JSON.parse(body)
+                    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf8')
+                    res.write(JSON.stringify({ status: 'success', message: '设置已保存' }))
+                } catch (error) {
+                    res.statusCode = 500
+                    res.write(JSON.stringify({ error: error.message }))
+                }
+                res.end()
+            })
             return
         }
 
