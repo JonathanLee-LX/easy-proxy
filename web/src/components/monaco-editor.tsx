@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react'
-import Editor, { OnMount, Monaco } from '@monaco-editor/react'
+import Editor, { type OnMount, type Monaco } from '@monaco-editor/react'
 import type { editor } from 'monaco-editor'
 
 interface MonacoEditorProps {
