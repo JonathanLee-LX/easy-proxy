@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, Wand2, RotateCw } from 'lucide-react'
-import { highlightJson } from '@/lib/json-highlight'
+import { highlightCode, detectLanguage } from '@/lib/syntax-highlight'
 import type { RecordDetail, ProxyRecord } from '@/types'
 
 interface DetailPanelProps {
@@ -53,19 +53,27 @@ function BodyView({ body }: { body: string }) {
   if (!body) {
     return <p className="text-sm text-muted-foreground py-2">无内容</p>
   }
-  // Try to format & highlight as JSON
-  let isJson = false
+  
+  // 检测语言类型
+  const language = detectLanguage(body)
   let formatted = body
-  try {
-    const obj = JSON.parse(body)
-    formatted = JSON.stringify(obj, null, 2)
-    isJson = true
-  } catch {
-    // keep as-is
+  
+  // 如果是 JSON，尝试格式化
+  if (language === 'json') {
+    try {
+      const obj = JSON.parse(body)
+      formatted = JSON.stringify(obj, null, 2)
+    } catch {
+      // 格式化失败，使用原始内容
+    }
   }
+  
+  // 应用语法高亮
+  const shouldHighlight = language !== 'text'
+  
   return (
     <pre className="font-mono text-xs whitespace-pre-wrap break-all p-2 bg-muted/50 rounded-md max-h-[400px] overflow-auto">
-      {isJson ? highlightJson(formatted) : formatted}
+      {shouldHighlight ? highlightCode(formatted, language) : formatted}
     </pre>
   )
 }
