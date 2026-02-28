@@ -70,7 +70,7 @@ let currentConfig = null // { path, format } 当前生效的配置
 
 const MAX_RECORD_SIZE = process.env.MAX_RECORD_SIZE ? parseInt(process.env.MAX_RECORD_SIZE) : 10000
 const MAX_DETAIL_SIZE = 200
-const MAX_BODY_SIZE = 100 * 1024 // 100KB
+const MAX_BODY_SIZE = 5 * 1024 * 1024 // 5MB
 const proxyRecordArr = []
 let recordIdSeq = 0
 const proxyRecordDetailMap = new Map()
