@@ -1,8 +1,11 @@
 import type React from 'react'
 
-// 性能配置
-const MAX_HIGHLIGHT_SIZE = 50 * 1024 // 50KB，超过此大小不进行语法高亮
-const MAX_HIGHLIGHT_LINES = 1000 // 最多高亮 1000 行
+// 性能配置 - 支持通过环境变量自定义
+const MAX_HIGHLIGHT_SIZE = parseInt(import.meta.env.VITE_MAX_HIGHLIGHT_SIZE || '2097152') // 默认2MB (2*1024*1024)
+const MAX_HIGHLIGHT_LINES = parseInt(import.meta.env.VITE_MAX_HIGHLIGHT_LINES || '10000') // 默认10000行
+const MAX_JSON_MATCHES = parseInt(import.meta.env.VITE_MAX_JSON_MATCHES || '50000') // 默认50000
+const MAX_HTML_MATCHES = parseInt(import.meta.env.VITE_MAX_HTML_MATCHES || '30000') // 默认30000
+const MAX_JS_MATCHES = parseInt(import.meta.env.VITE_MAX_JS_MATCHES || '30000') // 默认30000
 
 /**
  * 检查内容是否适合进行语法高亮
@@ -32,32 +35,83 @@ export function detectLanguage(code: string): 'json' | 'html' | 'css' | 'javascr
   
   if (!trimmed) return 'text'
   
-  // 检测 JSON
+  // 检测 JSON（优先级最高，因为JSON格式最严格）
   if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
       (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
     try {
       JSON.parse(trimmed)
       return 'json'
     } catch {
-      // 继续检测其他类型
+      // 可能是JavaScript对象字面量，继续检测
     }
   }
   
-  // 检测 HTML
-  if (trimmed.startsWith('<!DOCTYPE') || 
-      trimmed.startsWith('<html') ||
-      /<[a-z][\s\S]*>/i.test(trimmed)) {
+  // 检测 HTML（更全面的检测）
+  // 1. DOCTYPE声明
+  if (/^<!DOCTYPE\s+html/i.test(trimmed)) {
+    return 'html'
+  }
+  
+  // 2. HTML标签（包括常见的HTML标签）
+  if (trimmed.startsWith('<html') || trimmed.startsWith('<!DOCTYPE')) {
+    return 'html'
+  }
+  
+  // 3. 检测常见HTML标签
+  const htmlTags = /^<(!DOCTYPE|html|head|body|div|span|p|a|img|ul|ol|li|table|tr|td|th|form|input|button|h[1-6]|nav|header|footer|section|article|main|aside)\b/i
+  if (htmlTags.test(trimmed)) {
+    return 'html'
+  }
+  
+  // 4. 检测是否包含HTML标签结构（开始和结束标签）
+  if (/<[a-z][\w-]*(\s+[^>]*)?>\s*[\s\S]*<\/[a-z][\w-]*>/i.test(trimmed)) {
+    return 'html'
+  }
+  
+  // 5. 检测单个HTML标签（包括自闭合标签）
+  if (/<[a-z][\w-]*(\s+[^>]*)?\/?>/i.test(trimmed) && !trimmed.includes('{')) {
     return 'html'
   }
   
   // 检测 CSS
-  if (/[a-z-]+\s*\{[\s\S]*\}/i.test(trimmed) || 
-      /@(media|keyframes|import|font-face)/i.test(trimmed)) {
+  // 1. CSS规则（选择器 + 大括号）
+  if (/^[.#]?[a-z][\w-]*\s*\{/i.test(trimmed)) {
+    return 'css'
+  }
+  
+  // 2. CSS @ 规则
+  if (/^@(media|keyframes|import|font-face|charset|supports|page|namespace)/i.test(trimmed)) {
+    return 'css'
+  }
+  
+  // 3. 包含CSS属性的模式
+  if (/[a-z-]+\s*:\s*[^;]+;/i.test(trimmed) && trimmed.includes('{')) {
     return 'css'
   }
   
   // 检测 JavaScript
-  if (/(function|const|let|var|class|import|export|=>)/i.test(trimmed)) {
+  // 1. 严格模式声明
+  if (trimmed.startsWith('"use strict"') || trimmed.startsWith("'use strict'")) {
+    return 'javascript'
+  }
+  
+  // 2. ES6+ 导入导出
+  if (/^(import|export)\s+/m.test(trimmed)) {
+    return 'javascript'
+  }
+  
+  // 3. 函数声明
+  if (/^(function\s+\w+|const\s+\w+\s*=\s*\(|let\s+\w+\s*=\s*\(|var\s+\w+\s*=\s*\()/m.test(trimmed)) {
+    return 'javascript'
+  }
+  
+  // 4. 箭头函数
+  if (/=>\s*\{?/.test(trimmed)) {
+    return 'javascript'
+  }
+  
+  // 5. JavaScript关键字
+  if (/(^|\s)(class|function|const|let|var|if|else|for|while|return|try|catch|finally|throw|new|async|await)\s+/i.test(trimmed)) {
     return 'javascript'
   }
   
@@ -74,9 +128,8 @@ function highlightJson(json: string): React.ReactNode[] {
   let lastIndex = 0
   let match: RegExpExecArray | null
   let matchCount = 0
-  const MAX_MATCHES = 5000 // 限制最大匹配数，防止性能问题
 
-  while ((match = tokenRe.exec(json)) !== null && matchCount++ < MAX_MATCHES) {
+  while ((match = tokenRe.exec(json)) !== null && matchCount++ < MAX_JSON_MATCHES) {
     if (match.index > lastIndex) {
       nodes.push(json.slice(lastIndex, match.index))
     }
@@ -124,9 +177,8 @@ function highlightHtml(html: string): React.ReactNode[] {
   let match: RegExpExecArray | null
   let currentIndex = 0
   let matchCount = 0
-  const MAX_MATCHES = 3000
   
-  while ((match = tagRe.exec(html)) !== null && matchCount++ < MAX_MATCHES) {
+  while ((match = tagRe.exec(html)) !== null && matchCount++ < MAX_HTML_MATCHES) {
     // 添加标签前的文本
     if (match.index > currentIndex) {
       const text = html.slice(currentIndex, match.index)
@@ -319,9 +371,8 @@ function highlightJavaScript(js: string): React.ReactNode[] {
   let lastIndex = 0
   let match: RegExpExecArray | null
   let matchCount = 0
-  const MAX_MATCHES = 3000
   
-  while ((match = combinedRe.exec(js)) !== null && matchCount++ < MAX_MATCHES) {
+  while ((match = combinedRe.exec(js)) !== null && matchCount++ < MAX_JS_MATCHES) {
     if (match.index > lastIndex) {
       nodes.push(js.slice(lastIndex, match.index))
     }
@@ -409,5 +460,274 @@ export function isValidJson(str: string): boolean {
     return true
   } catch {
     return false
+  }
+}
+
+/**
+ * 验证HTML内容的基本结构
+ * 检查标签是否配对、基本语法错误等
+ */
+export function validateHtml(html: string): { valid: boolean; error?: string } {
+  const trimmed = html.trim()
+  if (!trimmed) {
+    return { valid: true }
+  }
+
+  const stack: Array<{ tag: string; pos: number }> = []
+  const selfClosingTags = ['br', 'hr', 'img', 'input', 'link', 'meta', 'area', 'base', 'col', 'embed', 'param', 'source', 'track', 'wbr']
+  
+  // 简化的HTML标签正则
+  const tagRe = /<!--[\s\S]*?-->|<!DOCTYPE[^>]*>|<\/?([a-z][\w-]*)\b([^>]*)>/gi
+  let match: RegExpExecArray | null
+  
+  try {
+    while ((match = tagRe.exec(trimmed)) !== null) {
+      const fullMatch = match[0]
+      const tagName = match[1]?.toLowerCase()
+      
+      // 跳过注释和DOCTYPE
+      if (fullMatch.startsWith('<!--') || fullMatch.toLowerCase().startsWith('<!doctype')) {
+        continue
+      }
+      
+      // 检查是否是自闭合标签
+      const isSelfClosing = fullMatch.endsWith('/>') || (tagName && selfClosingTags.includes(tagName))
+      
+      if (fullMatch.startsWith('</')) {
+        // 闭合标签
+        if (stack.length === 0) {
+          return { valid: false, error: `未找到与 </${tagName}> 匹配的开始标签` }
+        }
+        const last = stack.pop()
+        if (last && last.tag !== tagName) {
+          return { valid: false, error: `标签不匹配：期望 </${last.tag}>，但找到 </${tagName}>` }
+        }
+      } else if (!isSelfClosing && tagName) {
+        // 开始标签（非自闭合）
+        stack.push({ tag: tagName, pos: match.index })
+      }
+    }
+    
+    if (stack.length > 0) {
+      const unclosed = stack.map(t => `<${t.tag}>`).join(', ')
+      return { valid: false, error: `未闭合的标签：${unclosed}` }
+    }
+    
+    return { valid: true }
+  } catch (error) {
+    return { valid: false, error: `HTML解析错误：${error instanceof Error ? error.message : '未知错误'}` }
+  }
+}
+
+/**
+ * 验证CSS内容的基本语法
+ */
+export function validateCss(css: string): { valid: boolean; error?: string } {
+  const trimmed = css.trim()
+  if (!trimmed) {
+    return { valid: true }
+  }
+
+  try {
+    // 检查大括号是否匹配
+    let braceCount = 0
+    let inString = false
+    let stringChar = ''
+    
+    for (let i = 0; i < trimmed.length; i++) {
+      const char = trimmed[i]
+      const prevChar = i > 0 ? trimmed[i - 1] : ''
+      
+      // 处理字符串
+      if ((char === '"' || char === "'") && prevChar !== '\\') {
+        if (!inString) {
+          inString = true
+          stringChar = char
+        } else if (char === stringChar) {
+          inString = false
+        }
+      }
+      
+      if (!inString) {
+        if (char === '{') {
+          braceCount++
+        } else if (char === '}') {
+          braceCount--
+          if (braceCount < 0) {
+            return { valid: false, error: 'CSS语法错误：多余的闭合大括号 }' }
+          }
+        }
+      }
+    }
+    
+    if (braceCount !== 0) {
+      return { valid: false, error: braceCount > 0 ? 'CSS语法错误：缺少闭合大括号 }' : 'CSS语法错误：多余的闭合大括号 }' }
+    }
+    
+    if (inString) {
+      return { valid: false, error: 'CSS语法错误：未闭合的字符串' }
+    }
+    
+    return { valid: true }
+  } catch (error) {
+    return { valid: false, error: `CSS解析错误：${error instanceof Error ? error.message : '未知错误'}` }
+  }
+}
+
+/**
+ * 验证JavaScript内容的基本语法
+ */
+export function validateJavaScript(js: string): { valid: boolean; error?: string } {
+  const trimmed = js.trim()
+  if (!trimmed) {
+    return { valid: true }
+  }
+
+  try {
+    // 检查大括号、中括号、小括号是否匹配
+    const stack: string[] = []
+    let inString = false
+    let stringChar = ''
+    let inRegex = false
+    let inComment = false
+    let inMultiLineComment = false
+    
+    for (let i = 0; i < trimmed.length; i++) {
+      const char = trimmed[i]
+      const prevChar = i > 0 ? trimmed[i - 1] : ''
+      const nextChar = i + 1 < trimmed.length ? trimmed[i + 1] : ''
+      
+      // 处理多行注释
+      if (!inString && !inRegex && !inComment) {
+        if (char === '/' && nextChar === '*') {
+          inMultiLineComment = true
+          i++
+          continue
+        }
+      }
+      
+      if (inMultiLineComment) {
+        if (char === '*' && nextChar === '/') {
+          inMultiLineComment = false
+          i++
+        }
+        continue
+      }
+      
+      // 处理单行注释
+      if (!inString && !inRegex && !inMultiLineComment) {
+        if (char === '/' && nextChar === '/') {
+          inComment = true
+          continue
+        }
+      }
+      
+      if (inComment) {
+        if (char === '\n') {
+          inComment = false
+        }
+        continue
+      }
+      
+      // 处理字符串
+      if ((char === '"' || char === "'" || char === '`') && prevChar !== '\\' && !inRegex) {
+        if (!inString) {
+          inString = true
+          stringChar = char
+        } else if (char === stringChar) {
+          inString = false
+          stringChar = ''
+        }
+      }
+      
+      if (inString) {
+        continue
+      }
+      
+      // 处理正则表达式（简化版）
+      if (char === '/' && !inString && prevChar !== '\\') {
+        const prevNonSpace = trimmed.slice(0, i).trimEnd().slice(-1)
+        if (prevNonSpace === '=' || prevNonSpace === '(' || prevNonSpace === '[' || prevNonSpace === ',' || prevNonSpace === ':') {
+          inRegex = true
+          continue
+        }
+      }
+      
+      if (inRegex) {
+        if (char === '/' && prevChar !== '\\') {
+          inRegex = false
+        }
+        continue
+      }
+      
+      // 检查括号匹配
+      if (char === '{' || char === '[' || char === '(') {
+        stack.push(char)
+      } else if (char === '}' || char === ']' || char === ')') {
+        const expected = char === '}' ? '{' : char === ']' ? '[' : '('
+        const last = stack.pop()
+        if (last !== expected) {
+          const charName = char === '}' ? '大括号' : char === ']' ? '中括号' : '小括号'
+          return { valid: false, error: `JavaScript语法错误：${charName}不匹配` }
+        }
+      }
+    }
+    
+    if (stack.length > 0) {
+      const unclosed = stack[stack.length - 1]
+      const name = unclosed === '{' ? '大括号' : unclosed === '[' ? '中括号' : '小括号'
+      return { valid: false, error: `JavaScript语法错误：未闭合的${name} ${unclosed}` }
+    }
+    
+    if (inString) {
+      return { valid: false, error: 'JavaScript语法错误：未闭合的字符串' }
+    }
+    
+    if (inMultiLineComment) {
+      return { valid: false, error: 'JavaScript语法错误：未闭合的多行注释' }
+    }
+    
+    return { valid: true }
+  } catch (error) {
+    return { valid: false, error: `JavaScript解析错误：${error instanceof Error ? error.message : '未知错误'}` }
+  }
+}
+
+/**
+ * 验证内容的语法
+ * 根据内容类型自动选择验证方式
+ */
+export function validateContent(content: string): { valid: boolean; error?: string; type?: string } {
+  const trimmed = content.trim()
+  if (!trimmed) {
+    return { valid: true }
+  }
+
+  const type = detectLanguage(content)
+  
+  switch (type) {
+    case 'json':
+      if (!isValidJson(content)) {
+        return { valid: false, error: 'JSON格式错误：请检查语法', type: 'JSON' }
+      }
+      return { valid: true, type: 'JSON' }
+    
+    case 'html': {
+      const result = validateHtml(content)
+      return { ...result, type: 'HTML' }
+    }
+    
+    case 'css': {
+      const result = validateCss(content)
+      return { ...result, type: 'CSS' }
+    }
+    
+    case 'javascript': {
+      const result = validateJavaScript(content)
+      return { ...result, type: 'JavaScript' }
+    }
+    
+    default:
+      return { valid: true, type: 'Text' }
   }
 }

@@ -71,3 +71,40 @@ export default defineConfig([
   },
 ])
 ```
+
+## 环境变量配置
+
+本项目支持通过环境变量自定义Mock功能的语法高亮和验证性能参数。
+
+### 快速开始
+
+1. 复制环境变量示例文件：
+   ```bash
+   cp .env.example .env
+   ```
+
+2. 根据需要编辑 `.env` 文件中的配置项
+
+3. 重新构建项目：
+   ```bash
+   pnpm run build
+   ```
+
+### 可配置参数
+
+- `VITE_MAX_HIGHLIGHT_SIZE` - 最大高亮文件大小（字节，默认: 2097152 / 2MB）
+- `VITE_MAX_HIGHLIGHT_LINES` - 最大高亮行数（默认: 10000）
+- `VITE_MAX_JSON_MATCHES` - JSON最大匹配数（默认: 50000）
+- `VITE_MAX_HTML_MATCHES` - HTML最大匹配数（默认: 30000）
+- `VITE_MAX_JS_MATCHES` - JavaScript最大匹配数（默认: 30000）
+
+### 详细文档
+
+查看 [ENV_CONFIG.md](./ENV_CONFIG.md) 了解详细的配置说明和性能调优建议。
+
+### 验证配置
+
+运行以下命令检查当前配置：
+```bash
+node test-env-config.cjs
+```

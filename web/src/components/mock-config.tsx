@@ -21,6 +21,7 @@ import { Separator } from '@/components/ui/separator'
 import { Plus, Trash2, Pencil, FileText, Code, ChevronDown, ChevronRight } from 'lucide-react'
 import { JsonTextarea } from '@/components/json-textarea'
 import { formatContent } from '@/lib/formatter'
+import { validateContent } from '@/lib/syntax-highlight'
 import type { MockRule } from '@/types'
 
 interface MockConfigProps {
@@ -63,6 +64,7 @@ export function MockConfig({
   const [headerKey, setHeaderKey] = useState('')
   const [headerValue, setHeaderValue] = useState('')
   const [formatError, setFormatError] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchMocks()
@@ -79,19 +81,37 @@ export function MockConfig({
     }
   }, [initialEditData, onInitialEditConsumed])
 
-  // 关闭编辑面板时重置 header 输入框
+  // 关闭编辑面板时重置状态
   useEffect(() => {
     if (!editOpen) {
       setHeaderKey('')
       setHeaderValue('')
       setHeadersExpanded(false)
+      setValidationError(null)
+      setFormatError(null)
     }
   }, [editOpen])
+
+  // 验证body内容
+  const validateBody = useCallback((body: string) => {
+    if (!body.trim()) {
+      setValidationError(null)
+      return
+    }
+
+    const result = validateContent(body)
+    if (!result.valid) {
+      setValidationError(result.error || '内容格式错误')
+    } else {
+      setValidationError(null)
+    }
+  }, [])
 
   const openCreate = useCallback(() => {
     setEditId(null)
     setEditForm(EMPTY_RULE)
     setHeadersExpanded(false)
+    setValidationError(null)
     setEditOpen(true)
   }, [])
 
@@ -109,10 +129,27 @@ export function MockConfig({
       enabled: rule.enabled,
     })
     setHeadersExpanded(!!rule.headers && Object.keys(rule.headers).length > 0)
+    
+    // 验证已有的body内容
+    if (rule.bodyType === 'inline' && rule.body) {
+      validateBody(rule.body)
+    } else {
+      setValidationError(null)
+    }
+    
     setEditOpen(true)
-  }, [])
+  }, [validateBody])
 
   const handleSave = useCallback(async () => {
+    // 在保存前进行最终验证
+    if (editForm.bodyType === 'inline' && editForm.body.trim()) {
+      const result = validateContent(editForm.body)
+      if (!result.valid) {
+        setValidationError(result.error || '内容格式错误')
+        return
+      }
+    }
+
     setSaving(true)
     if (editId != null) {
       await updateMock(editId, editForm)
@@ -139,6 +176,11 @@ export function MockConfig({
 
   const updateField = <K extends keyof Omit<MockRule, 'id'>>(field: K, value: Omit<MockRule, 'id'>[K]) => {
     setEditForm((prev) => ({ ...prev, [field]: value }))
+    
+    // 当更新body时进行实时验证
+    if (field === 'body' && typeof value === 'string') {
+      validateBody(value)
+    }
   }
 
   // 自动格式化 body（支持 JSON, HTML, JS, CSS）
@@ -413,6 +455,12 @@ export function MockConfig({
                   onChange={(v) => updateField('body', v)}
                   placeholder='支持 JSON, HTML, JS, CSS 等格式'
                 />
+                {validationError && (
+                  <div className="flex items-start gap-2 p-2 rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
+                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">语法错误：</span>
+                    <span className="text-xs text-red-600 dark:text-red-400 flex-1">{validationError}</span>
+                  </div>
+                )}
               </div>
             )}
             {/* Response Headers */}
