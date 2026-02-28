@@ -799,6 +799,26 @@ const proxyServer = http.createServer((req, res) => {
             return
         }
 
+        // API: 刷新配置文件
+        if (req.url === '/api/refresh-config' && req.method === 'POST') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+                if (currentConfig && currentConfig.path) {
+                    ruleMap = loadConfigFromFile(currentConfig.path, currentConfig.format)
+                    logRuleMap()
+                    res.write(JSON.stringify({ status: 'success', message: '配置已刷新' }))
+                } else {
+                    res.statusCode = 400
+                    res.write(JSON.stringify({ error: '无当前配置文件' }))
+                }
+            } catch (error) {
+                res.statusCode = 500
+                res.write(JSON.stringify({ error: error.message }))
+            }
+            res.end()
+            return
+        }
+
         if(req.url.startsWith('/api/rules')) {
             const method = req.method.toLocaleLowerCase()
             if(method === 'put') {

@@ -18,7 +18,7 @@ import {
   resetAIConfig, 
   isAIConfigValid,
   getDefaultValues,
-  type AIConfig 
+  type AIConfig
 } from '@/lib/ai-config-store'
 
 interface AISettingsProps {

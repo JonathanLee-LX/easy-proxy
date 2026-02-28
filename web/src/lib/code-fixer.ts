@@ -4,7 +4,7 @@
  */
 
 import { validateContent } from './syntax-highlight'
-import { getAIConfig, isAIConfigValid } from './ai-config-store'
+import { getAIConfig, isAIConfigValid, getActiveModel } from './ai-config-store'
 
 /**
  * 基于规则的简单修复
@@ -234,7 +234,21 @@ export async function fixCode(code: string): Promise<{ fixed: string; method: 'a
   // 只有在启用且配置有效时才使用AI
   if (isAIConfigValid(aiConfig)) {
     try {
-      const fixed = await fixWithAI(code, type, aiConfig)
+      // 优先使用多模型配置
+      const activeModel = getActiveModel(aiConfig)
+      const modelConfig = activeModel ? {
+        provider: activeModel.provider,
+        apiKey: activeModel.apiKey,
+        baseUrl: activeModel.baseUrl,
+        model: activeModel.model,
+      } : {
+        provider: aiConfig.provider,
+        apiKey: aiConfig.apiKey,
+        baseUrl: aiConfig.baseUrl,
+        model: aiConfig.model,
+      }
+      
+      const fixed = await fixWithAI(code, type, modelConfig)
       
       // 验证修复后的代码
       const fixedValidation = validateContent(fixed)
@@ -262,7 +276,7 @@ export async function fixCode(code: string): Promise<{ fixed: string; method: 'a
 /**
  * 使用OpenAI API修复代码
  */
-async function fixWithOpenAI(code: string, type: string, config: ReturnType<typeof getAIConfig>): Promise<string> {
+async function fixWithOpenAI(code: string, type: string, config: { provider: string; apiKey: string; baseUrl: string; model: string }): Promise<string> {
   const systemPrompt = `You are a code fixing assistant. Fix syntax errors in ${type.toUpperCase()} code. Return only the fixed code without explanations or markdown formatting.`
   const userPrompt = `Please fix the syntax errors in the following ${type.toUpperCase()} code. Return ONLY the fixed code without any explanations:
 
@@ -309,7 +323,7 @@ ${code}`
 /**
  * 使用Anthropic API修复代码
  */
-async function fixWithAnthropic(code: string, type: string, config: ReturnType<typeof getAIConfig>): Promise<string> {
+async function fixWithAnthropic(code: string, type: string, config: { provider: string; apiKey: string; baseUrl: string; model: string }): Promise<string> {
   const systemPrompt = `You are a code fixing assistant. Fix syntax errors in ${type.toUpperCase()} code. Return only the fixed code without explanations or markdown formatting.`
   const userPrompt = `Please fix the syntax errors in the following ${type.toUpperCase()} code. Return ONLY the fixed code without any explanations:
 
@@ -372,7 +386,7 @@ function cleanAIResponse(text: string): string {
 /**
  * 使用AI修复代码(根据配置选择提供商)
  */
-async function fixWithAI(code: string, type: string, config: ReturnType<typeof getAIConfig>): Promise<string> {
+async function fixWithAI(code: string, type: string, config: { provider: string; apiKey: string; baseUrl: string; model: string }): Promise<string> {
   if (config.provider === 'anthropic') {
     return fixWithAnthropic(code, type, config)
   } else {
