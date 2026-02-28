@@ -8,7 +8,9 @@ interface MonacoEditorProps {
   placeholder?: string
   className?: string
   minHeight?: string
+  height?: string
   language?: string
+  readOnly?: boolean
 }
 
 /**
@@ -21,7 +23,9 @@ export function MonacoEditor({
   placeholder,
   className,
   minHeight = '240px',
+  height,
   language = 'json',
+  readOnly = false,
 }: MonacoEditorProps) {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<Monaco | null>(null)
@@ -135,20 +139,27 @@ export function MonacoEditor({
     onChange(value || '')
   }
 
+  // 计算最终高度：如果传入了 height 则使用，否则使用 minHeight
+  const finalHeight = height || minHeight
+
   return (
-    <div className={`rounded-md border border-input overflow-hidden ${className || ''}`}>
+    <div
+      className={`rounded-md border border-input overflow-hidden ${className || ''}`}
+      style={height === 'flex' ? { height: '100%', display: 'flex', flexDirection: 'column' } : undefined}
+    >
       <Editor
-        height={minHeight}
+        height={height === 'flex' ? '100%' : finalHeight}
         language={detectedLanguage}
         value={value}
         onChange={handleEditorChange}
         onMount={handleEditorDidMount}
         options={{
-          readOnly: false,
+          readOnly,
         }}
         loading={
-          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            加载编辑器...
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-sm text-muted-foreground">
+            <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span>加载编辑器中...</span>
           </div>
         }
       />

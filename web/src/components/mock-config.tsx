@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useCallback, useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -18,7 +18,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
-import { Plus, Trash2, Pencil, FileText, Code, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, Pencil, FileText, Code, ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
 import { MonacoEditor } from '@/components/monaco-editor'
 import { formatContent } from '@/lib/formatter'
 import { validateContent } from '@/lib/syntax-highlight'
@@ -62,6 +62,8 @@ export function MockConfig({
   const [editForm, setEditForm] = useState<Omit<MockRule, 'id'>>(EMPTY_RULE)
   const [saving, setSaving] = useState(false)
   const [headersExpanded, setHeadersExpanded] = useState(false)
+  const [editorHeight, setEditorHeight] = useState(300) // 编辑器高度（像素）
+  const editorRef = useRef<HTMLDivElement>(null)
   const [headerKey, setHeaderKey] = useState('')
   const [headerValue, setHeaderValue] = useState('')
   const [formatError, setFormatError] = useState<string | null>(null)
@@ -142,6 +144,27 @@ export function MockConfig({
     
     setEditOpen(true)
   }, [validateBody])
+
+  // 拖拽调整编辑器高度
+  const handleEditorResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const startY = e.clientY
+    const startHeight = editorHeight
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startY
+      const newHeight = Math.max(150, startHeight + deltaY) // 最小高度 150px
+      setEditorHeight(newHeight)
+    }
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [editorHeight])
 
   const handleSave = useCallback(async () => {
     // 在保存前进行最终验证
@@ -494,12 +517,21 @@ export function MockConfig({
                     </Button>
                   </div>
                 </div>
-                <MonacoEditor
-                  value={editForm.body}
-                  onChange={(v) => updateField('body', v)}
-                  placeholder='支持 JSON, HTML, JS, CSS 等格式'
-                  minHeight="300px"
-                />
+                <div ref={editorRef} className="relative group">
+                  <MonacoEditor
+                    value={editForm.body}
+                    onChange={(v) => updateField('body', v)}
+                    placeholder='支持 JSON, HTML, JS, CSS 等格式'
+                    height={`${editorHeight}px`}
+                  />
+                  {/* 拖拽调整高度手柄 */}
+                  <div
+                    className="absolute bottom-0 left-0 right-0 h-4 cursor-ns-resize flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-border/50 to-transparent"
+                    onMouseDown={handleEditorResize}
+                  >
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </div>
                 {validationError && (
                   <div className="flex items-start gap-2 p-2 rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
                     <span className="text-xs text-red-600 dark:text-red-400 font-medium">语法错误：</span>

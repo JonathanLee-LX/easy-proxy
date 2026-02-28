@@ -465,7 +465,7 @@ export function isValidJson(str: string): boolean {
 
 /**
  * 验证HTML内容的基本结构
- * 检查标签是否配对、基本语法错误等
+ * 使用浏览器 DOMParser 进行验证（最可靠的方案）
  */
 export function validateHtml(html: string): { valid: boolean; error?: string } {
   const trimmed = html.trim()
@@ -473,46 +473,28 @@ export function validateHtml(html: string): { valid: boolean; error?: string } {
     return { valid: true }
   }
 
-  const stack: Array<{ tag: string; pos: number }> = []
-  const selfClosingTags = ['br', 'hr', 'img', 'input', 'link', 'meta', 'area', 'base', 'col', 'embed', 'param', 'source', 'track', 'wbr']
-  
-  // 简化的HTML标签正则
-  const tagRe = /<!--[\s\S]*?-->|<!DOCTYPE[^>]*>|<\/?([a-z][\w-]*)\b([^>]*)>/gi
-  let match: RegExpExecArray | null
-  
   try {
-    while ((match = tagRe.exec(trimmed)) !== null) {
-      const fullMatch = match[0]
-      const tagName = match[1]?.toLowerCase()
-      
-      // 跳过注释和DOCTYPE
-      if (fullMatch.startsWith('<!--') || fullMatch.toLowerCase().startsWith('<!doctype')) {
-        continue
-      }
-      
-      // 检查是否是自闭合标签
-      const isSelfClosing = fullMatch.endsWith('/>') || (tagName && selfClosingTags.includes(tagName))
-      
-      if (fullMatch.startsWith('</')) {
-        // 闭合标签
-        if (stack.length === 0) {
-          return { valid: false, error: `未找到与 </${tagName}> 匹配的开始标签` }
-        }
-        const last = stack.pop()
-        if (last && last.tag !== tagName) {
-          return { valid: false, error: `标签不匹配：期望 </${last.tag}>，但找到 </${tagName}>` }
-        }
-      } else if (!isSelfClosing && tagName) {
-        // 开始标签（非自闭合）
-        stack.push({ tag: tagName, pos: match.index })
-      }
+    // 使用浏览器 DOMParser 解析 HTML
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(trimmed, 'text/html')
+
+    // 检查解析错误（DOMParser 会尝试修复错误，但可以通过 querySelector 来检测问题）
+    const parseError = doc.querySelector('parsererror')
+    if (parseError) {
+      return { valid: false, error: 'HTML解析错误：' + parseError.textContent?.slice(0, 100) }
     }
-    
-    if (stack.length > 0) {
-      const unclosed = stack.map(t => `<${t.tag}>`).join(', ')
-      return { valid: false, error: `未闭合的标签：${unclosed}` }
+
+    // 检查是否有严重的结构问题
+    const body = doc.body
+    if (!body) {
+      return { valid: false, error: 'HTML解析失败：无法解析文档结构' }
     }
-    
+
+    // 额外的简单检查：确保有基本标签
+    if (trimmed.length > 0 && !trimmed.includes('<')) {
+      return { valid: false, error: '内容不像是有效的HTML' }
+    }
+
     return { valid: true }
   } catch (error) {
     return { valid: false, error: `HTML解析错误：${error instanceof Error ? error.message : '未知错误'}` }

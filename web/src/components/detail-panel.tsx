@@ -11,7 +11,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, Wand2, RotateCw } from 'lucide-react'
-import { highlightCode, detectLanguage, shouldHighlight as shouldHighlightContent } from '@/lib/syntax-highlight'
+import { detectLanguage } from '@/lib/syntax-highlight'
+import { MonacoEditor } from '@/components/monaco-editor'
 import type { RecordDetail, ProxyRecord } from '@/types'
 
 interface DetailPanelProps {
@@ -49,15 +50,17 @@ function HeadersView({ headers }: { headers: Record<string, string> }) {
   )
 }
 
-function BodyView({ body }: { body: string }) {
+function BodyView({ body, flex }: { body: string; flex?: boolean }) {
+  const [detectedLanguage, setDetectedLanguage] = useState('text')
+
   // 使用 useMemo 缓存格式化和高亮结果
-  const content = useMemo(() => {
-    if (!body) return null
-    
+  const formattedBody = useMemo(() => {
+    if (!body) return ''
+
     // 检测语言类型
     const language = detectLanguage(body)
     let formatted = body
-    
+
     // 如果是 JSON，尝试格式化
     if (language === 'json') {
       try {
@@ -67,24 +70,25 @@ function BodyView({ body }: { body: string }) {
         // 格式化失败，使用原始内容
       }
     }
-    
-    // 检查是否应该高亮
-    if (!shouldHighlightContent(formatted) || language === 'text') {
-      return { highlighted: false, content: formatted }
-    }
-    
-    // 应用语法高亮
-    return { highlighted: true, content: highlightCode(formatted, language) }
+
+    setDetectedLanguage(language)
+    return formatted
   }, [body])
-  
-  if (!content) {
+
+  if (!body) {
     return <p className="text-sm text-muted-foreground py-2">无内容</p>
   }
-  
+
   return (
-    <pre className="font-mono text-xs whitespace-pre-wrap break-all p-2 bg-muted/50 rounded-md max-h-[400px] overflow-auto">
-      {content.highlighted ? content.content : content.content}
-    </pre>
+    <div className={flex ? 'flex-1 min-h-0' : ''} style={flex ? { height: 'calc(100vh - 350px)' } : undefined}>
+      <MonacoEditor
+        value={formattedBody}
+        onChange={() => {}}
+        language={detectedLanguage}
+        height={flex ? 'calc(100vh - 350px)' : '300px'}
+        readOnly={true}
+      />
+    </div>
   )
 }
 
@@ -191,20 +195,20 @@ export function DetailPanel({ open, onClose, detail, loading, selectedRecord, on
                 </div>
               </ScrollArea>
             </TabsContent>
-            <TabsContent value="response" className="flex-1 min-h-0 mt-0">
-              <ScrollArea className="h-full px-4 pb-4">
-                <div className="space-y-3 pt-3">
-                  <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Response Headers</h4>
-                    <HeadersView headers={detail.responseHeaders} />
-                  </div>
-                  <Separator />
-                  <div>
-                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Response Body</h4>
-                    <BodyView body={detail.responseBody} />
-                  </div>
+            <TabsContent value="response" className="flex-1 min-h-0 mt-0 flex flex-col">
+              <div className="px-4 pt-3">
+                <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Response Headers</h4>
+                <ScrollArea className="h-[120px]">
+                  <HeadersView headers={detail.responseHeaders} />
+                </ScrollArea>
+              </div>
+              <Separator className="my-2" />
+              <div className="flex-1 min-h-0 px-4 pb-4 flex flex-col">
+                <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider shrink-0">Response Body</h4>
+                <div className="flex-1 min-h-0">
+                  <BodyView body={detail.responseBody} flex={true} />
                 </div>
-              </ScrollArea>
+              </div>
             </TabsContent>
           </Tabs>
         ) : (

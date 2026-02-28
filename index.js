@@ -791,6 +791,14 @@ const proxyServer = http.createServer((req, res) => {
         const webDistDir = path.resolve(__dirname, './web/dist')
         const hasReactBuild = fs.existsSync(path.resolve(webDistDir, 'index.html'))
 
+        // API: 获取当前配置文件路径
+        if (req.url === '/api/config-path') {
+            res.setHeader('Content-Type', 'application/json')
+            res.write(JSON.stringify({ path: currentConfig?.path || '' }))
+            res.end()
+            return
+        }
+
         if(req.url.startsWith('/api/rules')) {
             const method = req.method.toLocaleLowerCase()
             if(method === 'put') {

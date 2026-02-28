@@ -7,11 +7,12 @@ import { LogTable } from '@/components/log-table'
 import { DetailPanel } from '@/components/detail-panel'
 import { MockConfig } from '@/components/mock-config'
 import { PluginConfig } from '@/components/plugin-config'
-import { AISettings, AIConfigBadge } from '@/components/ai-settings'
+import { SettingsPanel } from '@/components/settings-panel'
+import { AIConfigBadge } from '@/components/ai-settings'
 import { useProxyStore } from '@/hooks/use-proxy-store'
 import { useFuzzyFilter } from '@/hooks/use-fuzzy-filter'
 import { useTheme } from '@/components/theme-provider'
-import { Globe, Moon, Sun, Settings } from 'lucide-react'
+import { Globe, Moon, Sun, Settings, Monitor } from 'lucide-react'
 import type { MockRule } from '@/types'
 
 function App() {
@@ -101,12 +102,15 @@ function App() {
             size="icon"
             onClick={toggleTheme}
             className="h-8 w-8"
-            aria-label="切换主题"
+            aria-label={`当前主题: ${theme}，点击切换`}
+            title={`主题: ${theme === 'system' ? '跟随系统' : theme === 'light' ? '浅色' : '深色'}`}
           >
             {theme === 'light' ? (
               <Moon className="h-4 w-4" />
-            ) : (
+            ) : theme === 'dark' ? (
               <Sun className="h-4 w-4" />
+            ) : (
+              <Monitor className="h-4 w-4" />
             )}
           </Button>
         </div>
@@ -225,8 +229,8 @@ function App() {
         onReplay={handleReplay}
       />
 
-      {/* AI Settings */}
-      <AISettings
+      {/* Settings */}
+      <SettingsPanel
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
       />
