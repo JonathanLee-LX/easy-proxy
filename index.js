@@ -6,7 +6,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
-// 必须在加载 cert 模块前创建证书目录（node-easy-cert 在加载时会检查）
+// 创建 .ep 目录和 ca 证书目录
 const epDir = path.resolve(os.homedir(), '.ep')
 const certDir = path.resolve(epDir, 'ca')
 if (!fs.existsSync(certDir)) {

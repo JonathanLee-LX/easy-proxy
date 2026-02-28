@@ -6,14 +6,13 @@
 
 ```
 ~/.ep/
-├── rules.eprc              # 路由规则配置（主配置）
-├── rules.json              # 路由规则配置（JSON格式，可选）
-├── rules.js                # 路由规则配置（JS格式，可选）
+├── .eprc                   # 路由规则配置（默认）
 ├── mocks.json              # Mock 规则配置
 ├── settings.json           # 系统设置（主题、字体、AI配置等）
-└── ca/                     # SSL证书目录
-    ├── rootCA.crt
-    └── rootCA.key
+└── ca/                     # SSL 证书目录
+    ├── rootCA.crt          # 根证书
+    ├── rootCA.key          # 根证书私钥
+    └── *.crt/*.key         # 动态生成的域名证书
 ```
 
 ## 配置文件详解

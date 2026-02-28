@@ -35,6 +35,22 @@ echo ""
 echo "2. 配置文件位置检查完成"
 echo ""
 
+# 恢复证书文件到 ca 目录（如果被移出）
+if [ ! -d ~/.ep/ca ]; then
+    mkdir -p ~/.ep/ca
+fi
+
+if [ -f ~/.ep/rootCA.crt ] && [ ! -f ~/.ep/ca/rootCA.crt ]; then
+    echo "恢复证书文件到 ca 目录..."
+    mv ~/.ep/rootCA.crt ~/.ep/ca/rootCA.crt
+    echo "  已移动 rootCA.crt"
+fi
+
+if [ -f ~/.ep/rootCA.key ] && [ ! -f ~/.ep/ca/rootCA.key ]; then
+    mv ~/.ep/rootCA.key ~/.ep/ca/rootCA.key
+    echo "  已移动 rootCA.key"
+fi
+
 # 迁移旧的 .epconfig 目录
 if [ -d ~/.ep/.epconfig ]; then
     echo "发现旧的 .epconfig 目录..."
@@ -56,10 +72,13 @@ echo "配置文件结构："
 echo "==================================="
 echo ""
 echo "~/.ep/"
-echo "├── settings.json       # 系统设置（主题、字体、AI配置）"
-echo "├── mocks.json          # Mock 规则"
 echo "├── .eprc               # 路由规则（可选）"
-echo "└── ca/                 # SSL 证书"
+echo "├── mocks.json          # Mock 规则"
+echo "├── settings.json       # 系统设置（主题、字体、AI配置）"
+echo "└── ca/                 # SSL 证书目录"
+echo "    ├── rootCA.crt"
+echo "    ├── rootCA.key"
+echo "    └── *.crt/*.key     # 动态生成的域名证书"
 echo ""
 echo "==================================="
 echo "清理完成！"
