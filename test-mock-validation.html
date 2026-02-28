@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock功能验证测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .test-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mock功能优化验证测试</h1>
+    
+    <div class="test-section">
+        <div class="test-title">测试1：HTML语法检测</div>
+        <div id="test1"></div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">测试2：HTML验证 - 正确的HTML</div>
+        <div id="test2"></div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">测试3：HTML验证 - 错误的HTML（未闭合标签）</div>
+        <div id="test3"></div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">测试4：CSS语法检测与验证</div>
+        <div id="test4"></div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">测试5：JavaScript语法检测与验证</div>
+        <div id="test5"></div>
+    </div>
+    
+    <div class="test-section">
+        <div class="test-title">测试6：JSON验证</div>
+        <div id="test6"></div>
+    </div>
+
+    <script type="module">
+        // 模拟导入的函数（实际会从构建的模块中导入）
+        function detectLanguage(code) {
+            const trimmed = code.trim()
+            if (!trimmed) return 'text'
+            
+            // 检测 JSON
+            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+                (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                try {
+                    JSON.parse(trimmed)
+                    return 'json'
+                } catch {}
+            }
+            
+            // 检测 HTML
+            if (/^<!DOCTYPE\s+html/i.test(trimmed) || 
+                trimmed.startsWith('<html') || 
+                /<[a-z][\w-]*(\s+[^>]*)?>[\s\S]*<\/[a-z][\w-]*>/i.test(trimmed)) {
+                return 'html'
+            }
+            
+            // 检测 CSS
+            if (/^[.#]?[a-z][\w-]*\s*\{/i.test(trimmed) ||
+                /^@(media|keyframes|import|font-face)/i.test(trimmed)) {
+                return 'css'
+            }
+            
+            // 检测 JavaScript
+            if (/(^|\s)(function|const|let|var|class|import|export)\s+/i.test(trimmed)) {
+                return 'javascript'
+            }
+            
+            return 'text'
+        }
+
+        function validateHtml(html) {
+            const trimmed = html.trim()
+            if (!trimmed) return { valid: true }
+
+            const stack = []
+            const selfClosingTags = ['br', 'hr', 'img', 'input', 'link', 'meta']
+            const tagRe = /<!--[\s\S]*?-->|<!DOCTYPE[^>]*>|<\/?([a-z][\w-]*)\b([^>]*)>/gi
+            let match
+
+            try {
+                while ((match = tagRe.exec(trimmed)) !== null) {
+                    const fullMatch = match[0]
+                    const tagName = match[1]?.toLowerCase()
+                    
+                    if (fullMatch.startsWith('<!--') || fullMatch.toLowerCase().startsWith('<!doctype')) {
+                        continue
+                    }
+                    
+                    const isSelfClosing = fullMatch.endsWith('/>') || (tagName && selfClosingTags.includes(tagName))
+                    
+                    if (fullMatch.startsWith('</')) {
+                        if (stack.length === 0) {
+                            return { valid: false, error: `未找到与 </${tagName}> 匹配的开始标签` }
+                        }
+                        const last = stack.pop()
+                        if (last && last.tag !== tagName) {
+                            return { valid: false, error: `标签不匹配：期望 </${last.tag}>，但找到 </${tagName}>` }
+                        }
+                    } else if (!isSelfClosing && tagName) {
+                        stack.push({ tag: tagName })
+                    }
+                }
+                
+                if (stack.length > 0) {
+                    const unclosed = stack.map(t => `<${t.tag}>`).join(', ')
+                    return { valid: false, error: `未闭合的标签：${unclosed}` }
+                }
+                
+                return { valid: true }
+            } catch (error) {
+                return { valid: false, error: `HTML解析错误：${error.message}` }
+            }
+        }
+
+        // 运行测试
+        const tests = [
+            {
+                id: 'test1',
+                name: 'HTML语法检测',
+                test: () => {
+                    const html = '<div>Hello World</div>'
+                    const result = detectLanguage(html)
+                    return {
+                        pass: result === 'html',
+                        message: `检测结果: ${result}${result === 'html' ? ' ✓' : ' ✗'}`
+                    }
+                }
+            },
+            {
+                id: 'test2',
+                name: 'HTML验证 - 正确',
+                test: () => {
+                    const html = '<div><p>Text</p></div>'
+                    const result = validateHtml(html)
+                    return {
+                        pass: result.valid,
+                        message: result.valid ? '验证通过 ✓' : `验证失败: ${result.error}`
+                    }
+                }
+            },
+            {
+                id: 'test3',
+                name: 'HTML验证 - 错误',
+                test: () => {
+                    const html = '<div><p>Text</div>'
+                    const result = validateHtml(html)
+                    return {
+                        pass: !result.valid,
+                        message: !result.valid ? `成功检测到错误: ${result.error} ✓` : '未能检测到错误 ✗'
+                    }
+                }
+            },
+            {
+                id: 'test4',
+                name: 'CSS检测',
+                test: () => {
+                    const css = '.class { color: red; }'
+                    const result = detectLanguage(css)
+                    return {
+                        pass: result === 'css',
+                        message: `检测结果: ${result}${result === 'css' ? ' ✓' : ' ✗'}`
+                    }
+                }
+            },
+            {
+                id: 'test5',
+                name: 'JavaScript检测',
+                test: () => {
+                    const js = 'function test() { return true; }'
+                    const result = detectLanguage(js)
+                    return {
+                        pass: result === 'javascript',
+                        message: `检测结果: ${result}${result === 'javascript' ? ' ✓' : ' ✗'}`
+                    }
+                }
+            },
+            {
+                id: 'test6',
+                name: 'JSON检测',
+                test: () => {
+                    const json = '{"name": "test", "value": 123}'
+                    const result = detectLanguage(json)
+                    return {
+                        pass: result === 'json',
+                        message: `检测结果: ${result}${result === 'json' ? ' ✓' : ' ✗'}`
+                    }
+                }
+            }
+        ]
+
+        tests.forEach(test => {
+            const result = test.test()
+            const elem = document.getElementById(test.id)
+            elem.className = result.pass ? 'success' : 'error'
+            elem.innerHTML = `<strong>${result.pass ? '✓ 通过' : '✗ 失败'}</strong><br>${result.message}`
+        })
+    </script>
+</body>
+</html>
