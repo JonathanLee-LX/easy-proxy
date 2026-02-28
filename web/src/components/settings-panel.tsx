@@ -21,7 +21,8 @@ import {
 } from '@/components/ui/select'
 import {
   Settings, Save, RotateCcw, Eye, EyeOff, CheckCircle2, XCircle,
-  Monitor, Moon, Sun, FileText, RefreshCw, Plus, Trash2, Check
+  Monitor, Moon, Sun, FileText, RefreshCw, Plus, Trash2, Check,
+  Stethoscope, AlertCircle
 } from 'lucide-react'
 import {
   getAIConfig,
@@ -59,6 +60,10 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [configPath, setConfigPath] = useState('')
   const [rulesFilePath, setRulesFilePath] = useState('')
   const [mocksFilePath, setMocksFilePath] = useState('')
+  
+  // 配置诊断状态
+  const [diagnostics, setDiagnostics] = useState<any>(null)
+  const [diagnosing, setDiagnosing] = useState(false)
 
   // 字体大小偏好
   const [fontSize, setFontSize] = useState<string>('medium')
@@ -264,6 +269,35 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
     }
   }, [])
 
+  const handleDiagnose = useCallback(async () => {
+    setDiagnosing(true)
+    setDiagnostics(null)
+    try {
+      const res = await fetch('/api/config-doctor')
+      if (res.ok) {
+        const data = await res.json()
+        setDiagnostics(data)
+      } else {
+        setAiTestResult('error')
+        setAiTestMessage('诊断失败')
+        setTimeout(() => {
+          setAiTestResult(null)
+          setAiTestMessage('')
+        }, 2000)
+      }
+    } catch (error) {
+      console.error('诊断失败:', error)
+      setAiTestResult('error')
+      setAiTestMessage('诊断失败')
+      setTimeout(() => {
+        setAiTestResult(null)
+        setAiTestMessage('')
+      }, 2000)
+    } finally {
+      setDiagnosing(false)
+    }
+  }, [])
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="p-0 flex flex-col w-[600px]">
@@ -450,11 +484,121 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                   <RefreshCw className="h-4 w-4 mr-1" />
                   重新加载配置
                 </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleDiagnose}
+                  disabled={diagnosing}
+                >
+                  <Stethoscope className="h-4 w-4 mr-1" />
+                  {diagnosing ? '诊断中...' : '诊断配置'}
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                点击重新加载可应用修改后的配置文件
+                点击重新加载可应用修改后的配置文件，点击诊断配置可检查配置有效性
               </p>
             </div>
+
+            {/* 诊断结果 */}
+            {diagnostics && (
+              <div className="space-y-3">
+                <Separator />
+                <div>
+                  <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4" />
+                    诊断结果
+                  </h3>
+                  
+                  {/* 总体状态 */}
+                  <div className={`mb-3 p-3 rounded-md border ${
+                    diagnostics.status === 'ok'
+                      ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900'
+                      : diagnostics.status === 'warning'
+                      ? 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900'
+                      : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900'
+                  }`}>
+                    {diagnostics.status === 'ok' && (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        <span className="text-sm font-medium text-green-700 dark:text-green-300">
+                          所有检查通过！配置正常。
+                        </span>
+                      </div>
+                    )}
+                    {diagnostics.status === 'warning' && (
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                        <span className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
+                          发现 {diagnostics.warnings.length} 个警告
+                        </span>
+                      </div>
+                    )}
+                    {diagnostics.status === 'error' && (
+                      <div className="flex items-center gap-2">
+                        <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                        <span className="text-sm font-medium text-red-700 dark:text-red-300">
+                          发现 {diagnostics.errors.length} 个错误
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 检查项列表 */}
+                  <div className="space-y-2">
+                    {diagnostics.checks.map((check: any, index: number) => (
+                      <div key={index} className="p-2 rounded border bg-card">
+                        <div className="flex items-start gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium">{check.name}</div>
+                            <div className="text-xs text-muted-foreground font-mono truncate">
+                              {check.path}
+                            </div>
+                            {check.details && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {check.details.rules !== undefined && `${check.details.rules} 条规则`}
+                                {check.details.total !== undefined && `${check.details.total} 条规则 (${check.details.enabled} 已启用)`}
+                                {check.details.size !== undefined && ` · ${check.details.size} bytes`}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 警告列表 */}
+                  {diagnostics.warnings && diagnostics.warnings.length > 0 && (
+                    <div className="mt-3 space-y-1">
+                      <div className="text-xs font-medium text-yellow-700 dark:text-yellow-300">
+                        警告:
+                      </div>
+                      {diagnostics.warnings.map((warning: string, index: number) => (
+                        <div key={index} className="flex items-start gap-2 text-xs text-yellow-600 dark:text-yellow-400">
+                          <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                          <span>{warning}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 错误列表 */}
+                  {diagnostics.errors && diagnostics.errors.length > 0 && (
+                    <div className="mt-3 space-y-1">
+                      <div className="text-xs font-medium text-red-700 dark:text-red-300">
+                        错误:
+                      </div>
+                      {diagnostics.errors.map((error: string, index: number) => (
+                        <div key={index} className="flex items-start gap-2 text-xs text-red-600 dark:text-red-400">
+                          <XCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                          <span>{error}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           {/* AI 配置 */}

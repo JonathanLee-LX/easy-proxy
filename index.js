@@ -108,6 +108,144 @@ function loadCustomPathsFromSettings() {
     return { rulesFilePath: null, mocksFilePath: null }
 }
 
+/**
+ * 执行配置文件诊断
+ */
+function performConfigDiagnostics() {
+    const diagnostics = {
+        status: 'ok',
+        checks: [],
+        errors: [],
+        warnings: []
+    }
+    
+    // 检查配置目录
+    if (fs.existsSync(epDir)) {
+        diagnostics.checks.push({
+            name: '配置目录',
+            status: 'ok',
+            path: epDir
+        })
+    } else {
+        diagnostics.errors.push('配置目录不存在: ' + epDir)
+        diagnostics.status = 'error'
+    }
+    
+    // 检查系统设置
+    if (fs.existsSync(settingsPath)) {
+        try {
+            const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+            diagnostics.checks.push({
+                name: '系统设置',
+                status: 'ok',
+                path: settingsPath,
+                details: {
+                    theme: settings.theme,
+                    fontSize: settings.fontSize,
+                    aiEnabled: settings.aiConfig?.enabled || false,
+                    customRulesPath: settings.rulesFilePath || null,
+                    customMocksPath: settings.mocksFilePath || null
+                }
+            })
+        } catch (error) {
+            diagnostics.errors.push('系统设置文件格式错误: ' + error.message)
+            diagnostics.status = 'error'
+        }
+    } else {
+        diagnostics.warnings.push('系统设置文件不存在，将使用默认设置')
+    }
+    
+    // 检查路由规则文件
+    const customPaths = loadCustomPathsFromSettings()
+    const rulesPath = customPaths.rulesFilePath || (currentConfig?.path || defaultRulesPath)
+    
+    if (fs.existsSync(rulesPath)) {
+        try {
+            const content = fs.readFileSync(rulesPath, 'utf8')
+            const lines = content.split('\n').filter(line => {
+                const trimmed = line.trim()
+                return trimmed && !trimmed.startsWith('#')
+            })
+            diagnostics.checks.push({
+                name: '路由规则文件',
+                status: 'ok',
+                path: rulesPath,
+                details: {
+                    rules: lines.length,
+                    size: content.length
+                }
+            })
+        } catch (error) {
+            diagnostics.errors.push('路由规则文件读取失败: ' + error.message)
+            diagnostics.status = 'error'
+        }
+    } else {
+        diagnostics.warnings.push('路由规则文件不存在: ' + rulesPath)
+    }
+    
+    // 检查 Mock 规则文件
+    const mocksPath = customPaths.mocksFilePath || getMockFilePath()
+    
+    if (fs.existsSync(mocksPath)) {
+        try {
+            const content = fs.readFileSync(mocksPath, 'utf8')
+            const data = JSON.parse(content)
+            const enabledRules = (data.rules || []).filter(r => r.enabled).length
+            diagnostics.checks.push({
+                name: 'Mock 规则文件',
+                status: 'ok',
+                path: mocksPath,
+                details: {
+                    total: (data.rules || []).length,
+                    enabled: enabledRules,
+                    size: content.length
+                }
+            })
+        } catch (error) {
+            diagnostics.errors.push('Mock 规则文件格式错误: ' + error.message)
+            diagnostics.status = 'error'
+        }
+    } else {
+        diagnostics.warnings.push('Mock 规则文件不存在: ' + mocksPath)
+    }
+    
+    // 检查证书文件
+    const certChecks = []
+    if (fs.existsSync(certDir)) {
+        certChecks.push('证书目录存在')
+        
+        if (fs.existsSync(path.join(certDir, 'rootCA.crt'))) {
+            certChecks.push('根证书存在')
+        } else {
+            diagnostics.warnings.push('根证书不存在，HTTPS 代理可能无法使用')
+        }
+        
+        if (fs.existsSync(path.join(certDir, 'rootCA.key'))) {
+            certChecks.push('根证书私钥存在')
+        }
+        
+        diagnostics.checks.push({
+            name: 'SSL 证书',
+            status: certChecks.length >= 2 ? 'ok' : 'warning',
+            path: certDir,
+            details: {
+                checks: certChecks
+            }
+        })
+    } else {
+        diagnostics.warnings.push('证书目录不存在')
+    }
+    
+    // 设置最终状态
+    if (diagnostics.errors.length > 0) {
+        diagnostics.status = 'error'
+    } else if (diagnostics.warnings.length > 0) {
+        diagnostics.status = 'warning'
+    }
+    
+    return diagnostics
+}
+
 // ===== HTTP/2 代理支持 =====
 const h2SessionPool = new Map() // origin -> http2.ClientHttp2Session
 
@@ -953,6 +1091,20 @@ const proxyServer = http.createServer((req, res) => {
                 }
                 res.end()
             })
+            return
+        }
+
+        // API: 配置文件健康检查
+        if (req.url === '/api/config-doctor' && req.method === 'GET') {
+            res.setHeader('Content-Type', 'application/json')
+            try {
+                const result = performConfigDiagnostics()
+                res.write(JSON.stringify(result))
+            } catch (error) {
+                res.statusCode = 500
+                res.write(JSON.stringify({ error: error.message }))
+            }
+            res.end()
             return
         }
 

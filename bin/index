@@ -1,3 +1,29 @@
 #!/usr/bin/env node
 
-require("../index.js")
+const args = process.argv.slice(2)
+const command = args[0]
+
+if (command === 'doctor') {
+  require('./doctor.js')
+} else if (command === '--help' || command === '-h') {
+  console.log(`
+Easy Proxy - 开发代理工具
+
+用法:
+  ep              启动代理服务器
+  ep doctor       检查配置文件健康状况
+  ep --help       显示帮助信息
+
+选项:
+  --open          启动后自动打开浏览器并设置代理
+
+示例:
+  ep              # 启动代理服务器
+  ep --open       # 启动并打开浏览器
+  ep doctor       # 检查配置文件
+
+更多信息请访问: https://github.com/JonathanLee-LX/easy-proxy
+  `)
+} else {
+  require("../index.js")
+}

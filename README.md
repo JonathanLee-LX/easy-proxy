@@ -7,7 +7,21 @@
 
 全局安装easy-dev-proxy `npm install easy-dev-proxy -g`,会创建一个`ep`命令。
 
-通过`ep`命令即可启动本地的代理服务器
+### 命令
+
+```bash
+# 启动代理服务器
+ep
+
+# 启动并自动打开浏览器
+ep --open
+
+# 检查配置文件健康状况
+ep doctor
+
+# 显示帮助信息
+ep --help
+```
 
 ### 配置文件
 
