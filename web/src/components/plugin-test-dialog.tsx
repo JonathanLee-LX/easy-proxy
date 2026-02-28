@@ -17,8 +17,10 @@ import {
   XCircle, 
   Loader2,
   Terminal,
-  AlertCircle
+  AlertCircle,
+  Wrench
 } from 'lucide-react'
+import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
 
 interface PluginTestDialogProps {
   open: boolean
@@ -26,6 +28,7 @@ interface PluginTestDialogProps {
   pluginId: string
   pluginName: string
   hooks: string[]
+  onPluginFixed?: () => void
 }
 
 export function PluginTestDialog({ 
@@ -33,12 +36,18 @@ export function PluginTestDialog({
   onOpenChange, 
   pluginId, 
   pluginName,
-  hooks 
+  hooks,
+  onPluginFixed
 }: PluginTestDialogProps) {
   const [testing, setTesting] = useState(false)
   const [testUrl, setTestUrl] = useState('http://example.com/api/test')
   const [testMethod, setTestMethod] = useState('GET')
   const [testResults, setTestResults] = useState<any>(null)
+  const [fixing, setFixing] = useState(false)
+  const [hasErrors, setHasErrors] = useState(false)
+  
+  const aiConfig = getAIConfig()
+  const isAIReady = isAIConfigValid(aiConfig)
 
   const handleTest = async () => {
     setTesting(true)
@@ -69,12 +78,114 @@ export function PluginTestDialog({
 
       const data = await response.json()
       setTestResults(data.results)
+      
+      // 检查是否有hook执行失败
+      const results = data.results?.hookResults || {}
+      const hasError = Object.values(results).some((r: any) => r.status === 'error')
+      setHasErrors(hasError)
     } catch (error) {
       setTestResults({
         error: error instanceof Error ? error.message : '测试失败'
       })
+      setHasErrors(true)
     } finally {
       setTesting(false)
+    }
+  }
+
+  const handleAutoFix = async () => {
+    if (!isAIReady) {
+      alert('AI配置未完成，无法使用自动修复功能')
+      return
+    }
+
+    if (!testResults || !hasErrors) {
+      return
+    }
+
+    setFixing(true)
+
+    try {
+      // 收集所有错误信息
+      const errors = Object.entries(testResults.hookResults || {})
+        .filter(([_, result]: [string, any]) => result.status === 'error')
+        .map(([hook, result]: [string, any]) => `Hook ${hook}: ${result.error}\n${result.stack || ''}`)
+        .join('\n\n')
+
+      // 读取当前插件代码
+      const pluginsResponse = await fetch('/api/plugins/custom')
+      const pluginsData = await pluginsResponse.json()
+      const plugin = pluginsData.plugins.find((p: any) => 
+        p.filename.replace(/\.(js|ts)$/, '') === pluginId.replace('local.', '')
+      )
+
+      if (!plugin) {
+        throw new Error('找不到插件文件')
+      }
+
+      const codeResponse = await fetch(plugin.path)
+      const originalCode = await codeResponse.text()
+
+      // 调用AI修复
+      const fixResponse = await fetch('/api/plugins/fix', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          originalCode,
+          testError: errors,
+          requirement: {
+            name: pluginName,
+            description: '修复测试中发现的错误'
+          },
+          aiConfig: {
+            provider: aiConfig.provider,
+            apiKey: aiConfig.apiKey,
+            baseUrl: aiConfig.baseUrl,
+            model: aiConfig.model,
+          },
+        }),
+      })
+
+      if (!fixResponse.ok) {
+        const error = await fixResponse.json()
+        throw new Error(error.error || 'AI修复失败')
+      }
+
+      const fixData = await fixResponse.json()
+      
+      // 保存修复后的代码
+      const saveResponse = await fetch('/api/plugins/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filename: plugin.filename,
+          code: fixData.fixedCode,
+        }),
+      })
+
+      if (!saveResponse.ok) {
+        throw new Error('保存修复后的代码失败')
+      }
+
+      // 热加载
+      await fetch('/api/plugins/reload', { method: 'POST' })
+
+      // 重新测试
+      await handleTest()
+
+      alert('代码已自动修复并重新测试！请查看测试结果。')
+      
+      if (onPluginFixed) {
+        onPluginFixed()
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'AI修复失败')
+    } finally {
+      setFixing(false)
     }
   }
 
@@ -232,27 +343,50 @@ export function PluginTestDialog({
             variant="outline"
             size="sm"
             onClick={() => onOpenChange(false)}
-            disabled={testing}
+            disabled={testing || fixing}
           >
             关闭
           </Button>
-          <Button
-            size="sm"
-            onClick={handleTest}
-            disabled={testing}
-          >
-            {testing ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                测试中...
-              </>
-            ) : (
-              <>
-                <PlayCircle className="h-4 w-4 mr-1" />
-                运行测试
-              </>
+          <div className="flex gap-2">
+            {hasErrors && isAIReady && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAutoFix}
+                disabled={testing || fixing}
+                className="text-orange-600 border-orange-300"
+              >
+                {fixing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    AI修复中...
+                  </>
+                ) : (
+                  <>
+                    <Wrench className="h-4 w-4 mr-1" />
+                    AI自动修复
+                  </>
+                )}
+              </Button>
             )}
-          </Button>
+            <Button
+              size="sm"
+              onClick={handleTest}
+              disabled={testing || fixing}
+            >
+              {testing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  测试中...
+                </>
+              ) : (
+                <>
+                  <PlayCircle className="h-4 w-4 mr-1" />
+                  运行测试
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </SheetContent>
     </Sheet>

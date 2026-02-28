@@ -13,27 +13,19 @@ export interface CustomPluginLoaderOptions {
 }
 
 /**
- * 加载单个插件文件（优先加载.js文件）
+ * 加载单个插件文件
  */
 async function loadPluginFile(filePath: string, logger?: Logger): Promise<Plugin | null> {
     try {
-        let actualFilePath = filePath;
-        
-        // 如果是.ts文件，检查是否存在对应的.js文件
-        if (filePath.endsWith('.ts')) {
-            const jsFilePath = filePath.replace(/\.ts$/, '.js');
-            if (fs.existsSync(jsFilePath)) {
-                actualFilePath = jsFilePath;
-                if (logger) {
-                    logger.info(`使用编译后的JS文件: ${path.basename(jsFilePath)}`);
-                }
-            } else {
-                if (logger) {
-                    logger.warn(`未找到编译后的JS文件: ${path.basename(jsFilePath)}，将跳过此插件`);
-                }
-                return null;
+        // 只加载.js文件
+        if (!filePath.endsWith('.js')) {
+            if (logger) {
+                logger.warn(`跳过非JS文件: ${path.basename(filePath)}`);
             }
+            return null;
         }
+        
+        let actualFilePath = filePath;
         
         // 使用Node.js的require加载JavaScript模块
         // 清除require缓存，确保加载最新版本
@@ -79,39 +71,9 @@ export async function loadCustomPlugins(options: CustomPluginLoaderOptions): Pro
             return plugins;
         }
 
-        // 读取目录中的所有文件
+        // 读取目录中的所有.js文件
         const files = fs.readdirSync(pluginsDir);
-        
-        // 优先加载.js文件，如果没有.js则尝试加载.ts
-        const pluginFiles: string[] = [];
-        const tsFiles = files.filter(f => f.endsWith('.ts'));
-        const jsFiles = files.filter(f => f.endsWith('.js'));
-        
-        // 对于每个.ts文件，检查是否有对应的.js文件
-        for (const tsFile of tsFiles) {
-            const baseName = tsFile.replace(/\.ts$/, '');
-            const jsFile = baseName + '.js';
-            
-            if (jsFiles.includes(jsFile)) {
-                // 有编译后的.js文件，使用.js
-                if (!pluginFiles.includes(jsFile)) {
-                    pluginFiles.push(jsFile);
-                }
-            } else {
-                // 没有.js文件，尝试使用.ts（但会警告）
-                pluginFiles.push(tsFile);
-            }
-        }
-        
-        // 添加独立的.js文件（没有对应.ts的）
-        for (const jsFile of jsFiles) {
-            const baseName = jsFile.replace(/\.js$/, '');
-            const tsFile = baseName + '.ts';
-            
-            if (!tsFiles.includes(tsFile) && !pluginFiles.includes(jsFile)) {
-                pluginFiles.push(jsFile);
-            }
-        }
+        const pluginFiles = files.filter(f => f.endsWith('.js'));
 
         if (logger) {
             logger.info(`发现 ${pluginFiles.length} 个插件文件`);

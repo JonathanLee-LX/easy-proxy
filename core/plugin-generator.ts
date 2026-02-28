@@ -38,22 +38,35 @@ function getPluginSystemDesignPrompt(): string {
 
 ## 插件接口规范
 
-插件必须实现以下 TypeScript 接口：
+插件必须实现以下接口（JavaScript对象）：
 
-\`\`\`typescript
-export interface Plugin {
-  manifest: PluginManifest;
-  setup(context: PluginContext): void | Promise<void>;
-  start?(): void | Promise<void>;
-  stop?(): void | Promise<void>;
-  dispose?(): void | Promise<void>;
+\`\`\`javascript
+const plugin = {
+  manifest: {
+    id: 'local.plugin-name',      // 唯一标识
+    name: '插件名称',
+    version: '1.0.0',
+    apiVersion: '1.x',
+    permissions: ['proxy:read'],  // 权限列表
+    hooks: ['onRequestStart'],    // Hook列表
+    priority: 100,
+    type: 'local'
+  },
   
-  // Hook 方法（可选）
-  onRequestStart?(context: HookContext): void | Promise<void>;
-  onBeforeProxy?(context: HookContext): void | Promise<void>;
-  onBeforeResponse?(context: ResponseContext): void | Promise<void>;
-  onAfterResponse?(context: ResponseContext): void | Promise<void>;
-  onError?(context: ErrorContext): void | Promise<void>;
+  // 必需：初始化方法
+  setup(context) {
+    context.log.info('插件初始化');
+  },
+  
+  // 可选：启动方法
+  start() {
+    // 插件启动时执行
+  },
+  
+  // 可选：Hook方法
+  async onRequestStart(context) {
+    context.log.info('请求开始');
+  }
 }
 
 export interface PluginManifest {
@@ -111,9 +124,9 @@ export interface ResponseContext {
 
 ## 插件示例
 
-\`\`\`typescript
-// example-plugin.ts
-export const plugin = {
+\`\`\`javascript
+// example-plugin.js
+exports.plugin = {
     manifest: {
         id: 'local.example',
         name: 'Example Plugin',
@@ -126,18 +139,20 @@ export const plugin = {
     },
     
     setup(context) {
-        context.log.info(\`\${this.manifest.name} setup complete\`);
+        context.log.info(this.manifest.name + ' setup complete');
     },
     
     async onRequestStart(context) {
-        context.log.info(\`Request: \${context.request.method} \${context.request.url}\`);
+        context.log.info('Request: ' + context.request.method + ' ' + context.request.url);
     },
     
     async onAfterResponse(context) {
-        context.log.info(\`Response: \${context.response.statusCode}\`);
+        context.log.info('Response: ' + context.response.statusCode);
     }
 };
-\`\`\``;
+\`\`\`
+
+**重要**: 必须使用 CommonJS 格式（exports.plugin），不要使用 ES6 模块（export const）。`;
 }
 
 /**
@@ -148,20 +163,22 @@ async function generateWithOpenAIStream(
     config: AIConfig,
     onChunk: (chunk: string) => void
 ): Promise<string> {
-    const systemPrompt = `你是一个专业的插件开发助手，精通 TypeScript 和 Easy Proxy 插件系统。你的任务是根据用户需求生成高质量的插件代码。
+    const systemPrompt = `你是一个专业的插件开发助手，精通 JavaScript 和 Easy Proxy 插件系统。你的任务是根据用户需求生成高质量的插件代码。
 
 ${getPluginSystemDesignPrompt()}
 
 ## 代码生成要求
 
 1. 必须遵循上述插件接口规范
-2. 代码必须是纯 TypeScript
-3. 使用 ES6 模块导出（export）
+2. 代码必须是**纯 JavaScript**（不要使用TypeScript类型注解）
+3. 使用 CommonJS 格式：exports.plugin = { ... }
 4. 插件 ID 格式：local.{plugin-name}（小写，用连字符分隔）
 5. 只返回代码，不要包含任何解释性文字
 6. 不要使用 markdown 代码块标记
 7. 代码要有适当的注释说明功能
-8. 权限申请要最小化，只申请必需的权限`;
+8. 权限申请要最小化，只申请必需的权限
+9. 代码必须可以直接在Node.js中执行
+10. 使用 async/await 处理异步操作`;
 
     const userPrompt = `请生成一个符合 Easy Proxy 插件系统规范的插件代码。
 
@@ -171,7 +188,8 @@ ${getPluginSystemDesignPrompt()}
 ${requirement.hooks ? `需要的 Hooks：${requirement.hooks.join(', ')}` : ''}
 ${requirement.permissions ? `需要的权限：${requirement.permissions.join(', ')}` : ''}
 
-请直接返回完整的 TypeScript 插件代码，导出一个名为 plugin 的对象。`;
+请直接返回完整的 JavaScript 插件代码，使用 exports.plugin = {...} 格式导出。
+代码必须可以直接在Node.js中执行，不要使用任何TypeScript语法。`;
 
     const response = await fetch(config.baseUrl, {
         method: 'POST',
@@ -249,20 +267,22 @@ async function generateWithAnthropicStream(
     config: AIConfig,
     onChunk: (chunk: string) => void
 ): Promise<string> {
-    const systemPrompt = `你是一个专业的插件开发助手，精通 TypeScript 和 Easy Proxy 插件系统。你的任务是根据用户需求生成高质量的插件代码。
+    const systemPrompt = `你是一个专业的插件开发助手，精通 JavaScript 和 Easy Proxy 插件系统。你的任务是根据用户需求生成高质量的插件代码。
 
 ${getPluginSystemDesignPrompt()}
 
 ## 代码生成要求
 
 1. 必须遵循上述插件接口规范
-2. 代码必须是纯 TypeScript
-3. 使用 ES6 模块导出（export）
+2. 代码必须是**纯 JavaScript**（不要使用TypeScript类型注解）
+3. 使用 CommonJS 格式：exports.plugin = { ... }
 4. 插件 ID 格式：local.{plugin-name}（小写，用连字符分隔）
 5. 只返回代码，不要包含任何解释性文字
 6. 不要使用 markdown 代码块标记
 7. 代码要有适当的注释说明功能
-8. 权限申请要最小化，只申请必需的权限`;
+8. 权限申请要最小化，只申请必需的权限
+9. 代码必须可以直接在Node.js中执行
+10. 使用 async/await 处理异步操作`;
 
     const userPrompt = `请生成一个符合 Easy Proxy 插件系统规范的插件代码。
 
@@ -272,7 +292,8 @@ ${getPluginSystemDesignPrompt()}
 ${requirement.hooks ? `需要的 Hooks：${requirement.hooks.join(', ')}` : ''}
 ${requirement.permissions ? `需要的权限：${requirement.permissions.join(', ')}` : ''}
 
-请直接返回完整的 TypeScript 插件代码，导出一个名为 plugin 的对象。`;
+请直接返回完整的 JavaScript 插件代码，使用 exports.plugin = {...} 格式导出。
+代码必须可以直接在Node.js中执行，不要使用任何TypeScript语法。`;
 
     const response = await fetch(config.baseUrl, {
         method: 'POST',
@@ -426,15 +447,134 @@ export async function generatePluginStream(
     // 提取 manifest 信息
     const manifest = extractManifest(code);
 
-    // 生成文件名
+    // 生成文件名（直接是.js）
     const pluginId = manifest.id.replace('local.', '');
-    const filename = `${pluginId}.ts`;
+    const filename = `${pluginId}.js`;
 
     return {
         code,
         filename,
         manifest
     };
+}
+
+/**
+ * 根据测试错误自动修复插件代码
+ */
+export async function fixPluginWithAI(
+    originalCode: string,
+    testError: string,
+    requirement: PluginRequirement,
+    config: AIConfig
+): Promise<string> {
+    const systemPrompt = `你是一个专业的插件调试助手。用户的插件代码在测试时出现了错误，你需要分析错误并修复代码。
+
+${getPluginSystemDesignPrompt()}
+
+## 修复要求
+
+1. 仔细分析测试错误信息
+2. 找出代码中的问题
+3. 修复bug，确保代码正确
+4. 返回修复后的完整代码
+5. 只返回代码，不要解释
+6. 代码必须是纯JavaScript（CommonJS格式）`;
+
+    const userPrompt = `以下是插件代码和测试错误，请修复代码中的问题。
+
+原始需求：
+${requirement.description}
+
+当前代码：
+\`\`\`javascript
+${originalCode}
+\`\`\`
+
+测试错误：
+${testError}
+
+请分析错误原因并返回修复后的完整JavaScript代码。`;
+
+    if (config.provider === 'anthropic') {
+        return fixWithAnthropicNonStream(userPrompt, systemPrompt, config);
+    } else {
+        return fixWithOpenAINonStream(userPrompt, systemPrompt, config);
+    }
+}
+
+async function fixWithOpenAINonStream(
+    userPrompt: string,
+    systemPrompt: string,
+    config: AIConfig
+): Promise<string> {
+    const response = await fetch(config.baseUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`
+        },
+        body: JSON.stringify({
+            model: config.model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.3,
+            max_tokens: 2000
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenAI API 错误 (${response.status}): ${errorText}`);
+    }
+
+    const data: any = await response.json();
+    const code = data.choices?.[0]?.message?.content?.trim();
+
+    if (!code) {
+        throw new Error('OpenAI 返回了空结果');
+    }
+
+    return cleanAIResponse(code);
+}
+
+async function fixWithAnthropicNonStream(
+    userPrompt: string,
+    systemPrompt: string,
+    config: AIConfig
+): Promise<string> {
+    const response = await fetch(config.baseUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': config.apiKey,
+            'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+            model: config.model,
+            max_tokens: 2000,
+            system: systemPrompt,
+            messages: [
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.3
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Anthropic API 错误 (${response.status}): ${errorText}`);
+    }
+
+    const data: any = await response.json();
+    const code = data.content?.[0]?.text?.trim();
+
+    if (!code) {
+        throw new Error('Anthropic 返回了空结果');
+    }
+
+    return cleanAIResponse(code);
 }
 
 /**

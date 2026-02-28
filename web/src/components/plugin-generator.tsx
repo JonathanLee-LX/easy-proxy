@@ -206,22 +206,11 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
         throw new Error(error.error || '保存失败')
       }
 
-      const data = await response.json()
+      await response.json()
       
-      // 根据编译状态显示不同消息
-      if (data.compiled) {
-        setStatusType('success')
-        setStatusMessage(`插件已保存并编译成功！现在可以热加载测试。`)
-        setSaved(true)
-      } else if (data.compileError) {
-        setStatusType('error')
-        setStatusMessage(`插件已保存但编译失败: ${data.compileError}`)
-        setSaved(false)
-      } else {
-        setStatusType('success')
-        setStatusMessage(`插件已保存，但需要重启服务器才能使用`)
-        setSaved(true)
-      }
+      setStatusType('success')
+      setStatusMessage(`插件已保存！现在可以热加载并测试。`)
+      setSaved(true)
       
       // 通知父组件插件已保存
       if (onPluginSaved) {

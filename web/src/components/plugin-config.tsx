@@ -284,8 +284,8 @@ export function PluginConfig({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>文件名</TableHead>
-                <TableHead>编译状态</TableHead>
+                <TableHead>插件名称</TableHead>
+                <TableHead>状态</TableHead>
                 <TableHead>修改时间</TableHead>
                 <TableHead className="w-32">操作</TableHead>
               </TableRow>
@@ -300,32 +300,20 @@ export function PluginConfig({
               ) : (
                 customPlugins.map((plugin) => {
                   // 从已加载的插件中查找对应的插件信息
-                  const pluginId = plugin.filename.replace(/\.(ts|js)$/, '').replace(/^/, 'local.')
+                  const pluginId = plugin.filename.replace(/\.js$/, '').replace(/^/, 'local.')
                   const loadedPlugin = plugins.find(p => p.id === pluginId)
                   
                   return (
                     <TableRow key={plugin.filename}>
                       <TableCell className="font-medium font-mono text-sm">{plugin.filename}</TableCell>
                       <TableCell>
-                        {plugin.filename.endsWith('.ts') ? (
-                          plugin.compiled ? (
-                            plugin.needsRecompile ? (
-                              <Badge variant="outline" className="text-yellow-600 border-yellow-300">
-                                需要重新编译
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-green-600 border-green-300">
-                                已编译
-                              </Badge>
-                            )
-                          ) : (
-                            <Badge variant="outline" className="text-red-600 border-red-300">
-                              未编译
-                            </Badge>
-                          )
+                        {loadedPlugin ? (
+                          <Badge variant="outline" className="text-green-600 border-green-300">
+                            已加载
+                          </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-blue-600 border-blue-300">
-                            JavaScript
+                          <Badge variant="outline" className="text-gray-600 border-gray-300">
+                            未加载
                           </Badge>
                         )}
                       </TableCell>
