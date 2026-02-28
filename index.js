@@ -336,12 +336,17 @@ function sendMockResponse(req, res, rule, logInfo) {
     const doSend = () => {
         const duration = Date.now() - startTime
         let responseBody = ''
+        // 将 mock 规则的 headers key 转换为大写（HTTP header 不区分大小写）
+        const ruleHeaders = {}
+        for (const [key, value] of Object.entries(rule.headers || {})) {
+            ruleHeaders[key.toLowerCase()] = value
+        }
         let responseHeaders = {
             'X-Mock-Rule': encodeURIComponent(mockRuleName),
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': '*',
             'Access-Control-Allow-Headers': '*',
-            ...rule.headers
+            ...ruleHeaders
         }
         let finalStatusCode = statusCode
         let statusMessage = 'OK (Mock)'
@@ -398,7 +403,7 @@ function sendMockResponse(req, res, rule, logInfo) {
             }
         } else {
             // bodyType === 'inline'（默认）：使用 rule.body 作为响应体
-            responseHeaders['Content-Type'] = responseHeaders['Content-Type'] || 'application/json'
+            responseHeaders['Content-Type'] = responseHeaders['content-type'] || 'application/json'
             responseBody = rule.body || ''
         }
 
