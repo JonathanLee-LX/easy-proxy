@@ -4,14 +4,16 @@
 
 ```
 ~/.ep/
-├── .eprc              # 路由规则配置文件
-├── mocks.json         # Mock 规则配置文件
+├── .eprc              # 路由规则配置文件（默认）
+├── mocks.json         # Mock 规则配置文件（默认）
 ├── settings.json      # 系统设置配置文件
 └── ca/                # SSL 证书目录
     ├── rootCA.crt     # 根证书
     ├── rootCA.key     # 根证书私钥
     └── *.crt/*.key    # 动态生成的域名证书
 ```
+
+**注意**：路由规则和 Mock 规则文件支持自定义路径，可以在 `settings.json` 中配置 `rulesFilePath` 和 `mocksFilePath` 指定其他位置的配置文件。
 
 ## 📝 配置文件说明
 
@@ -67,6 +69,8 @@ example.com 127.0.0.1:3000
 {
   "theme": "dark",
   "fontSize": "large",
+  "rulesFilePath": "/path/to/custom-rules.eprc",
+  "mocksFilePath": "/path/to/custom-mocks.json",
   "aiConfig": {
     "enabled": true,
     "provider": "openai",
@@ -91,6 +95,8 @@ example.com 127.0.0.1:3000
 **包含内容**:
 - `theme`: 主题设置 (light/dark/system)
 - `fontSize`: 字体大小 (small/medium/large)
+- `rulesFilePath`: 自定义路由规则文件路径（可选）
+- `mocksFilePath`: 自定义 Mock 规则文件路径（可选）
 - `aiConfig`: AI 功能配置
   - `enabled`: 是否启用
   - `provider`: 服务商 (openai/anthropic)
@@ -102,6 +108,7 @@ example.com 127.0.0.1:3000
 
 **管理方式**:
 - Web 界面：右上角设置按钮（推荐）
+- 支持通过界面设置自定义配置文件路径
 
 ### 4. SSL 证书 (`~/.ep/ca/`)
 
@@ -118,16 +125,25 @@ example.com 127.0.0.1:3000
 ## 🔄 配置优先级
 
 ### 路由规则配置
-1. **项目目录**（优先级最高）
+1. **自定义路径**（最高优先级）
+   - 在 `settings.json` 中通过 `rulesFilePath` 指定
+   - 示例：`/path/to/my-project/rules.eprc`
+
+2. **项目目录**（次高优先级）
    - `./.eprc`
    - `./ep.config.json`
    - `./ep.config.js`
 
-2. **用户主目录**（默认）
+3. **用户主目录**（默认）
    - `~/.ep/.eprc`
 
 ### Mock 规则配置
-- 固定位置：`~/.ep/mocks.json`
+1. **自定义路径**（高优先级）
+   - 在 `settings.json` 中通过 `mocksFilePath` 指定
+   - 示例：`/path/to/my-mocks.json`
+
+2. **默认位置**
+   - `~/.ep/mocks.json`
 
 ### 系统设置
 - 固定位置：`~/.ep/settings.json`
@@ -159,17 +175,47 @@ example.com 127.0.0.1:3000
 # 查看目录结构
 ls -la ~/.ep/
 
-# 查看路由规则
+# 查看路由规则（默认位置）
 cat ~/.ep/.eprc
 
-# 查看 Mock 规则
+# 查看 Mock 规则（默认位置）
 cat ~/.ep/mocks.json | jq .
 
-# 查看系统设置
+# 查看系统设置（包含自定义路径）
 cat ~/.ep/settings.json | jq .
 
 # 查看证书文件
 ls -la ~/.ep/ca/
+```
+
+### 使用自定义配置文件
+
+```bash
+# 方式一：通过 Web 界面设置
+# 1. 打开设置面板 → 配置文件标签
+# 2. 输入自定义文件路径
+# 3. 点击"应用"按钮
+
+# 方式二：直接编辑 settings.json
+cat > ~/.ep/settings.json << 'EOF'
+{
+  "theme": "system",
+  "fontSize": "medium",
+  "rulesFilePath": "/path/to/my-rules.eprc",
+  "mocksFilePath": "/path/to/my-mocks.json",
+  "aiConfig": {
+    "enabled": false,
+    "provider": "openai",
+    "apiKey": "",
+    "baseUrl": "",
+    "model": "",
+    "models": []
+  }
+}
+EOF
+
+# 重启代理服务以加载新配置
+# 或通过 Web 界面点击"重新加载配置"
 ```
 
 ### 备份配置

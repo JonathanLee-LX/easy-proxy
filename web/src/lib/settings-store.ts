@@ -9,6 +9,8 @@ export interface SystemSettings {
   theme: 'light' | 'dark' | 'system'
   fontSize: string
   aiConfig: AIConfig
+  rulesFilePath?: string
+  mocksFilePath?: string
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -21,7 +23,9 @@ const DEFAULT_SETTINGS: SystemSettings = {
     baseUrl: '',
     model: '',
     models: []
-  }
+  },
+  rulesFilePath: '',
+  mocksFilePath: ''
 }
 
 // 内存缓存

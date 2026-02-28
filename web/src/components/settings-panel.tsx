@@ -57,6 +57,8 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
   // 配置文件状态
   const [configPath, setConfigPath] = useState('')
+  const [rulesFilePath, setRulesFilePath] = useState('')
+  const [mocksFilePath, setMocksFilePath] = useState('')
 
   // 字体大小偏好
   const [fontSize, setFontSize] = useState<string>('medium')
@@ -98,10 +100,12 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
   useEffect(() => {
     if (open) {
-      // 从设置存储中加载 AI 配置
+      // 从设置存储中加载 AI 配置和文件路径
       import('@/lib/settings-store').then(({ loadSettings }) => {
         loadSettings().then(settings => {
           setAiConfig(settings.aiConfig)
+          setRulesFilePath(settings.rulesFilePath || '')
+          setMocksFilePath(settings.mocksFilePath || '')
         }).catch(() => {
           setAiConfig(getAIConfig())
         })
@@ -111,6 +115,7 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       // 获取当前配置文件路径
       fetch('/api/config-path').then(res => res.json()).then(data => {
         if (data.path) setConfigPath(data.path)
+        if (data.mocksPath) setMocksFilePath(data.mocksPath)
       }).catch(() => {})
     }
   }, [open])
@@ -343,11 +348,96 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
           {/* 配置文件 */}
           <TabsContent value="config" className="flex-1 overflow-auto p-6 space-y-6 mt-0">
-            <div>
-              <h3 className="text-sm font-medium mb-3">当前配置文件</h3>
-              <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
-                <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="text-sm font-mono truncate">{configPath || '加载中...'}</span>
+            {/* 路由规则文件 */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">路由规则文件</Label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
+                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-mono truncate flex-1">
+                    {configPath || '加载中...'}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="rulesPath" className="text-xs text-muted-foreground">
+                    自定义路由规则文件路径（留空使用默认）
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="rulesPath"
+                      value={rulesFilePath}
+                      onChange={(e) => setRulesFilePath(e.target.value)}
+                      placeholder="如: /path/to/my-rules.eprc"
+                      className="flex-1 h-8 text-sm font-mono"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const { updateSettings } = await import('@/lib/settings-store')
+                        await updateSettings({ rulesFilePath })
+                        handleRefreshConfig()
+                      }}
+                      className="h-8"
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      应用
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    支持 .eprc、.json、.js 格式的配置文件
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Mock 规则文件 */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Mock 规则文件</Label>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
+                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-mono truncate flex-1">
+                    {mocksFilePath || '默认: ~/.ep/mocks.json'}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="mocksPath" className="text-xs text-muted-foreground">
+                    自定义 Mock 规则文件路径（留空使用默认）
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="mocksPath"
+                      value={mocksFilePath}
+                      onChange={(e) => setMocksFilePath(e.target.value)}
+                      placeholder="如: /path/to/my-mocks.json"
+                      className="flex-1 h-8 text-sm font-mono"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const { updateSettings } = await import('@/lib/settings-store')
+                        await updateSettings({ mocksFilePath })
+                        setAiTestResult('success')
+                        setAiTestMessage('Mock 文件路径已更新，刷新页面后生效')
+                        setTimeout(() => {
+                          setAiTestResult(null)
+                          setAiTestMessage('')
+                        }, 3000)
+                      }}
+                      className="h-8"
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      应用
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    必须是 JSON 格式的 Mock 规则文件
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -358,11 +448,11 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={handleRefreshConfig}>
                   <RefreshCw className="h-4 w-4 mr-1" />
-                  刷新配置
+                  重新加载配置
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                点击刷新配置可重新加载当前配置文件
+                点击重新加载可应用修改后的配置文件
               </p>
             </div>
           </TabsContent>
