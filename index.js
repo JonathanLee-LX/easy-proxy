@@ -1108,7 +1108,54 @@ const proxyServer = http.createServer((req, res) => {
             return
         }
 
-        // API: 生成插件代码
+        // API: 生成插件代码（流式）
+        if (req.url === '/api/plugins/generate-stream' && req.method === 'POST') {
+            let body = ''
+            req.on('data', chunk => { body += chunk })
+            req.on('end', async () => {
+                try {
+                    const data = JSON.parse(body)
+                    const { generatePluginStream } = require('./dist/core/plugin-generator')
+                    
+                    // 设置 SSE 响应头
+                    res.writeHead(200, {
+                        'Content-Type': 'text/event-stream',
+                        'Cache-Control': 'no-cache',
+                        'Connection': 'keep-alive',
+                        'Access-Control-Allow-Origin': '*'
+                    })
+                    
+                    // 发送初始事件
+                    res.write('event: start\n')
+                    res.write('data: {"status":"generating"}\n\n')
+                    
+                    let accumulatedCode = ''
+                    
+                    // 生成插件，实时发送chunk
+                    const result = await generatePluginStream(
+                        data.requirement, 
+                        data.aiConfig,
+                        (chunk) => {
+                            accumulatedCode += chunk
+                            res.write('event: chunk\n')
+                            res.write(`data: ${JSON.stringify({ chunk, accumulated: accumulatedCode })}\n\n`)
+                        }
+                    )
+                    
+                    // 发送完成事件
+                    res.write('event: complete\n')
+                    res.write(`data: ${JSON.stringify({ status: 'success', plugin: result })}\n\n`)
+                    res.end()
+                } catch (error) {
+                    res.write('event: error\n')
+                    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`)
+                    res.end()
+                }
+            })
+            return
+        }
+
+        // API: 生成插件代码（非流式，向后兼容）
         if (req.url === '/api/plugins/generate' && req.method === 'POST') {
             res.setHeader('Content-Type', 'application/json')
             let body = ''

@@ -44,6 +44,8 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
   const [statusType, setStatusType] = useState<'success' | 'error' | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [copied, setCopied] = useState(false)
+  const [codeLength, setCodeLength] = useState(0)
+  const [generationProgress, setGenerationProgress] = useState(0)
 
   const aiConfig = getAIConfig()
   const isAIReady = isAIConfigValid(aiConfig)
@@ -63,7 +65,13 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
 
     setGenerating(true)
     setStatusType(null)
-    setStatusMessage('正在生成插件代码...')
+    setStatusMessage('正在连接 AI 服务...')
+    setGeneratedCode('')
+    setCodeLength(0)
+    setGenerationProgress(0)
+
+    const startTime = Date.now()
+    let chunkCount = 0
 
     try {
       const requirement = {
@@ -73,7 +81,8 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
         permissions: permissions.split(',').map(p => p.trim()).filter(Boolean),
       }
 
-      const response = await fetch('/api/plugins/generate', {
+      // 使用 fetch 手动处理 SSE
+      const response = await fetch('/api/plugins/generate-stream', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -90,19 +99,78 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
       })
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || '生成失败')
+        throw new Error(`请求失败: ${response.status}`)
       }
 
-      const data = await response.json()
-      setGeneratedCode(data.plugin.code)
-      setGeneratedFilename(data.plugin.filename)
-      setGeneratedManifest(data.plugin.manifest)
-      setStatusType('success')
-      setStatusMessage('插件代码生成成功！')
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('无法读取响应流')
+      }
+
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('event:')) {
+            // const eventType = line.slice(6).trim()
+            continue
+          }
+
+          if (line.startsWith('data:')) {
+            const data = line.slice(5).trim()
+            
+            try {
+              const parsed = JSON.parse(data)
+
+              if (parsed.status === 'generating') {
+                setStatusMessage('AI 正在生成代码...')
+                setGenerationProgress(10)
+              } else if (parsed.chunk) {
+                chunkCount++
+                const accumulated = parsed.accumulated || parsed.chunk
+                setGeneratedCode(accumulated)
+                setCodeLength(accumulated.length)
+                
+                // 更新进度 (10-90%)
+                const progress = Math.min(90, 10 + (chunkCount * 2))
+                setGenerationProgress(progress)
+                
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
+                setStatusMessage(`生成中... (${accumulated.length} 字符, ${elapsed}s)`)
+              } else if (parsed.status === 'success') {
+                setGeneratedCode(parsed.plugin.code)
+                setGeneratedFilename(parsed.plugin.filename)
+                setGeneratedManifest(parsed.plugin.manifest)
+                setCodeLength(parsed.plugin.code.length)
+                setGenerationProgress(100)
+                setStatusType('success')
+                
+                const totalTime = ((Date.now() - startTime) / 1000).toFixed(1)
+                setStatusMessage(`插件代码生成成功！(${parsed.plugin.code.length} 字符, ${totalTime}s)`)
+              } else if (parsed.error) {
+                throw new Error(parsed.error)
+              }
+            } catch (e) {
+              if (e instanceof Error && e.message !== 'Unexpected end of JSON input') {
+                throw e
+              }
+            }
+          }
+        }
+      }
     } catch (error) {
       setStatusType('error')
       setStatusMessage(error instanceof Error ? error.message : '生成失败')
+      setGenerationProgress(0)
     } finally {
       setGenerating(false)
     }
@@ -177,6 +245,8 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
     setStatusType(null)
     setStatusMessage('')
     setCopied(false)
+    setCodeLength(0)
+    setGenerationProgress(0)
   }
 
   return (
@@ -270,36 +340,66 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
             </div>
           </div>
 
+          {/* 实时生成进度 */}
+          {generating && generationProgress > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">生成进度</span>
+                <span className="font-medium">{generationProgress}%</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-primary h-full transition-all duration-300 ease-out"
+                  style={{ width: `${generationProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* 生成的代码 */}
-          {generatedCode && (
+          {(generatedCode || generating) && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="flex items-center gap-2">
                   <Code className="h-4 w-4" />
-                  生成的插件代码
+                  {generating ? '正在生成插件代码' : '生成的插件代码'}
                 </Label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCopy}
-                  className="h-8"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="h-4 w-4 mr-1" />
-                      已复制
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="h-4 w-4 mr-1" />
-                      复制
-                    </>
+                <div className="flex items-center gap-2">
+                  {codeLength > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {codeLength} 字符
+                    </span>
                   )}
-                </Button>
+                  {!generating && generatedCode && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCopy}
+                      className="h-8"
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="h-4 w-4 mr-1" />
+                          已复制
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4 mr-1" />
+                          复制
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
-              <div className="bg-muted rounded-md p-4 max-h-[400px] overflow-auto">
+              <div className="bg-muted rounded-md p-4 max-h-[400px] overflow-auto relative">
+                {generating && (
+                  <div className="absolute top-2 right-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
                 <pre className="text-xs font-mono whitespace-pre-wrap break-all">
-                  {generatedCode}
+                  {generatedCode || '等待 AI 响应...'}
                 </pre>
               </div>
               

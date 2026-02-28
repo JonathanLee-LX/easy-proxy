@@ -141,11 +141,12 @@ export const plugin = {
 }
 
 /**
- * 使用 OpenAI 生成插件代码
+ * 使用 OpenAI 生成插件代码（流式）
  */
-async function generateWithOpenAI(
+async function generateWithOpenAIStream(
     requirement: PluginRequirement,
-    config: AIConfig
+    config: AIConfig,
+    onChunk: (chunk: string) => void
 ): Promise<string> {
     const systemPrompt = `你是一个专业的插件开发助手，精通 TypeScript 和 Easy Proxy 插件系统。你的任务是根据用户需求生成高质量的插件代码。
 
@@ -185,7 +186,8 @@ ${requirement.permissions ? `需要的权限：${requirement.permissions.join(',
                 { role: 'user', content: userPrompt }
             ],
             temperature: 0.3,
-            max_tokens: 2000
+            max_tokens: 2000,
+            stream: true
         })
     });
 
@@ -194,22 +196,58 @@ ${requirement.permissions ? `需要的权限：${requirement.permissions.join(',
         throw new Error(`OpenAI API 错误 (${response.status}): ${errorText}`);
     }
 
-    const data: any = await response.json();
-    const code = data.choices?.[0]?.message?.content?.trim();
+    let fullCode = '';
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
 
-    if (!code) {
+    if (!reader) {
+        throw new Error('无法读取响应流');
+    }
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6);
+                    if (data === '[DONE]') continue;
+
+                    try {
+                        const parsed = JSON.parse(data);
+                        const content = parsed.choices?.[0]?.delta?.content;
+                        if (content) {
+                            fullCode += content;
+                            onChunk(content);
+                        }
+                    } catch (e) {
+                        // 忽略解析错误
+                    }
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    if (!fullCode.trim()) {
         throw new Error('OpenAI 返回了空结果');
     }
 
-    return cleanAIResponse(code);
+    return cleanAIResponse(fullCode);
 }
 
 /**
- * 使用 Anthropic 生成插件代码
+ * 使用 Anthropic 生成插件代码（流式）
  */
-async function generateWithAnthropic(
+async function generateWithAnthropicStream(
     requirement: PluginRequirement,
-    config: AIConfig
+    config: AIConfig,
+    onChunk: (chunk: string) => void
 ): Promise<string> {
     const systemPrompt = `你是一个专业的插件开发助手，精通 TypeScript 和 Easy Proxy 插件系统。你的任务是根据用户需求生成高质量的插件代码。
 
@@ -250,7 +288,8 @@ ${requirement.permissions ? `需要的权限：${requirement.permissions.join(',
             messages: [
                 { role: 'user', content: userPrompt }
             ],
-            temperature: 0.3
+            temperature: 0.3,
+            stream: true
         })
     });
 
@@ -259,14 +298,50 @@ ${requirement.permissions ? `需要的权限：${requirement.permissions.join(',
         throw new Error(`Anthropic API 错误 (${response.status}): ${errorText}`);
     }
 
-    const data: any = await response.json();
-    const code = data.content?.[0]?.text?.trim();
+    let fullCode = '';
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
 
-    if (!code) {
+    if (!reader) {
+        throw new Error('无法读取响应流');
+    }
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6);
+
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (parsed.type === 'content_block_delta') {
+                            const content = parsed.delta?.text;
+                            if (content) {
+                                fullCode += content;
+                                onChunk(content);
+                            }
+                        }
+                    } catch (e) {
+                        // 忽略解析错误
+                    }
+                }
+            }
+        }
+    } finally {
+        reader.releaseLock();
+    }
+
+    if (!fullCode.trim()) {
         throw new Error('Anthropic 返回了空结果');
     }
 
-    return cleanAIResponse(code);
+    return cleanAIResponse(fullCode);
 }
 
 /**
@@ -333,18 +408,19 @@ function extractManifest(code: string): any {
 }
 
 /**
- * 生成插件代码
+ * 生成插件代码（流式）
  */
-export async function generatePlugin(
+export async function generatePluginStream(
     requirement: PluginRequirement,
-    config: AIConfig
+    config: AIConfig,
+    onChunk: (chunk: string) => void
 ): Promise<GeneratedPlugin> {
     let code: string;
 
     if (config.provider === 'anthropic') {
-        code = await generateWithAnthropic(requirement, config);
+        code = await generateWithAnthropicStream(requirement, config, onChunk);
     } else {
-        code = await generateWithOpenAI(requirement, config);
+        code = await generateWithOpenAIStream(requirement, config, onChunk);
     }
 
     // 提取 manifest 信息
@@ -359,4 +435,14 @@ export async function generatePlugin(
         filename,
         manifest
     };
+}
+
+/**
+ * 生成插件代码（非流式，向后兼容）
+ */
+export async function generatePlugin(
+    requirement: PluginRequirement,
+    config: AIConfig
+): Promise<GeneratedPlugin> {
+    return generatePluginStream(requirement, config, () => {});
 }
