@@ -18,16 +18,16 @@ async function apiRequest<T>(
   try {
     const response = await fetch(url, options)
     
-    // For non-JSON responses (like raw text)
-    if (options?.headers && 
-        typeof options.headers === 'object' &&
-        !('Content-Type' in options.headers)) {
-      const text = await response.text()
-      return text as T
+    // Check if response is JSON based on Content-Type header
+    const contentType = response.headers.get('content-type')
+    if (contentType && contentType.includes('application/json')) {
+      const data = await response.json()
+      return data as T
     }
     
-    const data = await response.json()
-    return data as T
+    // Default to text for non-JSON responses
+    const text = await response.text()
+    return text as T
   } catch (error) {
     console.error(`API request failed for ${url}:`, error)
     throw error

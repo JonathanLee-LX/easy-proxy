@@ -77,7 +77,7 @@ export function useRules() {
   // Rule sets management
   const fetchRuleSets = useCallback(async () => {
     try {
-      const res = await fetch('/api/rule-sets')
+      const res = await fetch('/api/rulesets')
       const data = await res.json()
       setRuleSets(Array.isArray(data) ? data : [])
     } catch (err) {
@@ -85,12 +85,12 @@ export function useRules() {
     }
   }, [])
 
-  const saveRuleSet = useCallback(async (name: string, items: RuleItem[]) => {
+  const saveRuleSet = useCallback(async (name: string, rules: RuleItem[]) => {
     try {
-      const res = await fetch('/api/rule-sets', {
+      const res = await fetch('/api/rulesets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, rules: items }),
+        body: JSON.stringify({ name, rules }),
       })
       const data = await res.json()
       if (data.status === 'success') {
@@ -106,7 +106,7 @@ export function useRules() {
 
   const switchRuleSet = useCallback(async (id: number) => {
     try {
-      const res = await fetch(`/api/rule-sets/${id}/switch`, {
+      const res = await fetch(`/api/rulesets/${id}/switch`, {
         method: 'POST',
       })
       const data = await res.json()
@@ -123,7 +123,7 @@ export function useRules() {
 
   const deleteRuleSet = useCallback(async (id: number) => {
     try {
-      const res = await fetch(`/api/rule-sets/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/rulesets/${id}`, { method: 'DELETE' })
       const data = await res.json()
       if (data.status === 'success') {
         setRuleSets((prev) => prev.filter((rs) => rs.id !== id))
