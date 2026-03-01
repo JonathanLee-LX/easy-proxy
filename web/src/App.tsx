@@ -12,6 +12,7 @@ import { AIConfigBadge } from '@/components/ai-settings'
 import { useProxyStore } from '@/hooks/use-proxy-store'
 import { useFuzzyFilter } from '@/hooks/use-fuzzy-filter'
 import { useTheme } from '@/components/theme-provider'
+import { createMockFromLog, type CreateMockFromLogData } from '@/utils/mock-factory'
 import { Globe, Moon, Sun, Settings, Monitor } from 'lucide-react'
 import type { MockRule } from '@/types'
 
@@ -64,34 +65,9 @@ function App() {
   // 从日志详情创建 mock 的初始数据
   const [mockInitialData, setMockInitialData] = useState<Partial<MockRule> | null>(null)
 
-  const handleCreateMockFromLog = useCallback((data: { source: string; responseBody: string; statusCode: number; responseHeaders?: Record<string, string> }) => {
-    // 过滤掉不需要保存的默认响应头，只保留自定义头
-    const defaultHeaders = ['content-length', 'content-encoding', 'connection', 'date', 'etag', 'last-modified', 'server']
-    const customHeaders: Record<string, string> = {}
-    if (data.responseHeaders) {
-      Object.entries(data.responseHeaders).forEach(([key, value]) => {
-        if (!defaultHeaders.includes(key.toLowerCase())) {
-          customHeaders[key] = value
-        }
-      })
-    }
-
-    // 移除 truncated 前缀（如果存在）
-    let cleanBody = data.responseBody
-    const truncatedMatch = cleanBody.match(/^\(truncated, \d+ bytes\)\n/)
-    if (truncatedMatch) {
-      cleanBody = cleanBody.substring(truncatedMatch[0].length)
-    }
-
-    setMockInitialData({
-      urlPattern: data.source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), // 转义为正则
-      body: cleanBody,
-      statusCode: data.statusCode,
-      headers: customHeaders,
-      name: '从日志创建',
-      method: '*',
-      enabled: true,
-    })
+  const handleCreateMockFromLog = useCallback((data: CreateMockFromLogData) => {
+    const mockData = createMockFromLog(data)
+    setMockInitialData(mockData)
     store.closeDetail()
     navigate('/mock')
   }, [store.closeDetail, navigate])
