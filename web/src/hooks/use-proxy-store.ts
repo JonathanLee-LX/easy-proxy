@@ -162,6 +162,27 @@ export function useProxyStore() {
     }
   }, [])
 
+  // Load rules from file
+  const loadRulesFromFile = useCallback(async (filePath: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch('/api/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath }),
+      })
+      const json = await res.json()
+      if (json.status === 'success') {
+        // 重新获取规则以更新前端状态
+        await fetchRules()
+        return { success: true }
+      }
+      return { success: false, error: json.error }
+    } catch (err) {
+      console.error('Failed to load rules from file:', err)
+      return { success: false, error: String(err) }
+    }
+  }, [fetchRules])
+
   // Fetch detail
   const fetchDetail = useCallback(async (id: number) => {
     setSelectedRecordId(id)
@@ -404,6 +425,7 @@ export function useProxyStore() {
     setMaxRecords,
     fetchRules,
     saveRules,
+    loadRulesFromFile,
     fetchDetail,
     closeDetail,
     clearRecords,

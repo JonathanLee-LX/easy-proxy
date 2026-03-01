@@ -1475,6 +1475,75 @@ const proxyServer = http.createServer((req, res) => {
 
         if(req.url.startsWith('/api/rules')) {
             const method = req.method.toLocaleLowerCase()
+            // 加载外部规则文件
+            if(method === 'post') {
+                res.setHeader('Content-Type', 'application/json')
+                let body = ''
+                req.on('data', chunk => { body += chunk })
+                req.on('end', async () => {
+                    try {
+                        const { filePath } = JSON.parse(body)
+                        if (!filePath) {
+                            res.statusCode = 400
+                            res.write(JSON.stringify({ error: '缺少文件路径' }))
+                            res.end()
+                            return
+                        }
+
+                        // 检查文件是否存在
+                        if (!fs.existsSync(filePath)) {
+                            res.statusCode = 404
+                            res.write(JSON.stringify({ error: '文件不存在' }))
+                            res.end()
+                            return
+                        }
+
+                        // 读取文件内容
+                        const content = fs.readFileSync(filePath, 'utf8')
+                        const ext = path.extname(filePath).toLowerCase()
+
+                        // 解析规则
+                        let newRuleMap
+                        if (ext === '.json') {
+                            // JSON 格式
+                            const json = JSON.parse(content)
+                            newRuleMap = new Map()
+                            const rulesObj = json.rules || {}
+                            for (const [rule, target] of Object.entries(rulesObj)) {
+                                const cleanRule = rule.replace(/^\/\//, '')
+                                newRuleMap.set(cleanRule, target)
+                            }
+                        } else if (ext === '.eprc' || ext === '') {
+                            // EPRC 格式
+                            const { parseEprc } = require('./dist/helpers')
+                            newRuleMap = parseEprc(content)
+                        } else {
+                            res.statusCode = 400
+                            res.write(JSON.stringify({ error: '不支持的文件格式，请使用 .eprc 或 .json 文件' }))
+                            res.end()
+                            return
+                        }
+
+                        // 更新规则
+                        ruleMap = newRuleMap
+
+                        // 通知所有客户端规则已更新
+                        broadcastToAllClients({ type: 'rulesUpdated', rules: [...ruleMap.entries()].map(([rule, target]) => ({ rule, target, enabled: true })) })
+
+                        res.write(JSON.stringify({ status: 'success', message: '规则已从文件加载' }))
+                    } catch (err) {
+                        console.error('加载规则文件失败:', err)
+                        res.statusCode = 500
+                        res.write(JSON.stringify({ error: err.message }))
+                    }
+                    res.end()
+                })
+                req.on('error', () => {
+                    res.statusCode = 500
+                    res.statusMessage = 'Internal error'
+                })
+                return
+            }
             if(method === 'put') {
                 if (!currentConfig || currentConfig.format === 'js') {
                     res.statusCode = 405

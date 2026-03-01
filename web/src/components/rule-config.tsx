@@ -35,6 +35,7 @@ interface RuleConfigProps {
   setRules: React.Dispatch<React.SetStateAction<RuleItem[]>>
   fetchRules: () => Promise<void>
   saveRules?: (items: RuleItem[]) => Promise<boolean>
+  loadRulesFromFile?: (filePath: string) => Promise<{ success: boolean; error?: string }>
   /** @deprecated 暂未实现 */
   ruleSets?: RuleSet[]
   /** @deprecated 暂未实现 */
@@ -326,7 +327,7 @@ const GroupedRuleRow = memo(function GroupedRuleRow({
 })
 
 export function RuleConfig(props: RuleConfigProps) {
-  const { rules, setRules, fetchRules, saveRules } = props
+  const { rules, setRules, fetchRules, saveRules, loadRulesFromFile } = props
   const [saving, setSaving] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [mergeByTarget, setMergeByTarget] = useState(false)
@@ -580,6 +581,34 @@ export function RuleConfig(props: RuleConfigProps) {
     setTimeout(() => setSaveStatus('idle'), 2000)
   }, [rules, saveRules])
 
+  // 加载规则文件相关状态
+  const [loadingFile, setLoadingFile] = useState(false)
+  const [loadStatus, setLoadStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [showFilePathInput, setShowFilePathInput] = useState(false)
+  const [filePath, setFilePath] = useState('')
+
+  const handleLoadFile = useCallback(async () => {
+    if (!filePath.trim() || !loadRulesFromFile) return
+
+    setLoadingFile(true)
+    setLoadStatus('idle')
+
+    const result = await loadRulesFromFile(filePath.trim())
+    setLoadingFile(false)
+    setLoadStatus(result.success ? 'success' : 'error')
+    if (result.success) {
+      setFilePath('')
+      setShowFilePathInput(false)
+    }
+    setTimeout(() => setLoadStatus('idle'), 2000)
+  }, [filePath, loadRulesFromFile])
+
+  const handleFilePathKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleLoadFile()
+    }
+  }, [handleLoadFile])
+
   // 创建稳定的回调函数供 memo 组件使用
   const createToggleRuleCallback = useCallback((index: number) => () => toggleRule(index), [toggleRule])
   const createUpdateRuleCallback = useCallback((index: number) => (field: 'rule' | 'target', value: string) => updateRule(index, field, value), [updateRule])
@@ -621,6 +650,47 @@ export function RuleConfig(props: RuleConfigProps) {
             <Plus className="h-4 w-4 mr-1" />
             添加规则
           </Button>
+          {loadRulesFromFile && (
+            <>
+              {showFilePathInput ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={filePath}
+                    onChange={(e) => setFilePath(e.target.value)}
+                    onKeyDown={handleFilePathKeyDown}
+                    placeholder="输入规则文件路径，如 /path/to/rules.eprc"
+                    className="h-8 w-64"
+                    autoFocus
+                  />
+                  <Button size="sm" onClick={handleLoadFile} disabled={loadingFile || !filePath.trim()}>
+                    {loadingFile ? '加载中...' : '确定'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowFilePathInput(false)
+                      setFilePath('')
+                      setLoadStatus('idle')
+                    }}
+                  >
+                    取消
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => setShowFilePathInput(true)} disabled={loadingFile}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  加载文件
+                </Button>
+              )}
+              {loadStatus === 'success' && (
+                <span className="text-sm text-green-600 self-center">已加载</span>
+              )}
+              {loadStatus === 'error' && (
+                <span className="text-sm text-red-600 self-center">加载失败</span>
+              )}
+            </>
+          )}
           {saveRules && (
             <>
               <Button size="sm" onClick={handleSave} disabled={saving}>
