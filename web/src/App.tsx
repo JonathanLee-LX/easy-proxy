@@ -1,11 +1,11 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { RuleConfig } from '@/components/rule-config'
 import { LogFilter } from '@/components/log-filter'
 import { LogTable } from '@/components/log-table'
 import { DetailPanel } from '@/components/detail-panel'
-import { MockConfig } from '@/components/mock-config'
 import { PluginConfig } from '@/components/plugin-config'
 import { SettingsPanel } from '@/components/settings-panel'
 import { AIConfigBadge } from '@/components/ai-settings'
@@ -15,14 +15,51 @@ import { useTheme } from '@/components/theme-provider'
 import { Globe, Moon, Sun, Settings, Monitor } from 'lucide-react'
 import type { MockRule } from '@/types'
 
+// 懒加载 MockConfig 组件
+const MockConfig = lazy(() => import('@/components/mock-config').then(module => ({ default: module.MockConfig })))
+
+// 懒加载加载占位符
+function LoadingPlaceholder() {
+  return (
+    <div className="flex items-center justify-center py-12">
+      <div className="text-muted-foreground">加载中...</div>
+    </div>
+  )
+}
+
 function App() {
   const store = useProxyStore()
   const { theme, toggleTheme } = useTheme()
+  const navigate = useNavigate()
+  const location = useLocation()
   const { filterText, setFilterText, resourceTypeFilter, setResourceTypeFilter, filteredRecords } = useFuzzyFilter(store.records)
   const [recording, setRecording] = useState(true)
   const [autoScroll, setAutoScroll] = useState(true)
-  const [activeTab, setActiveTab] = useState('logs')
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // 从 URL 路径获取当前 tab
+  const getTabFromPath = (pathname: string): string => {
+    const tabMap: Record<string, string> = {
+      '/': 'logs',
+      '/logs': 'logs',
+      '/config': 'config',
+      '/mock': 'mock',
+      '/plugins': 'plugins',
+    }
+    return tabMap[pathname] || 'logs'
+  }
+
+  const activeTab = getTabFromPath(location.pathname)
+
+  const handleTabChange = (tab: string) => {
+    const pathMap: Record<string, string> = {
+      logs: '/logs',
+      config: '/config',
+      mock: '/mock',
+      plugins: '/plugins',
+    }
+    navigate(pathMap[tab] || '/')
+  }
 
   // 从日志详情创建 mock 的初始数据
   const [mockInitialData, setMockInitialData] = useState<Partial<MockRule> | null>(null)
@@ -56,8 +93,8 @@ function App() {
       enabled: true,
     })
     store.closeDetail()
-    setActiveTab('mock')
-  }, [store.closeDetail])
+    navigate('/mock')
+  }, [store.closeDetail, navigate])
 
   const handleInitialEditConsumed = useCallback(() => {
     setMockInitialData(null)
@@ -118,7 +155,7 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-4">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-3">
           <TabsList>
             <TabsTrigger value="logs">日志</TabsTrigger>
             <TabsTrigger value="config">路由规则</TabsTrigger>
@@ -185,15 +222,17 @@ function App() {
 
           <TabsContent value="mock" className="mt-0">
             <div className="rounded-lg border bg-card p-4">
-              <MockConfig
-                mockRules={store.mockRules}
-                fetchMocks={store.fetchMocks}
-                createMock={store.createMock}
-                updateMock={store.updateMock}
-                deleteMock={store.deleteMock}
-                initialEditData={mockInitialData}
-                onInitialEditConsumed={handleInitialEditConsumed}
-              />
+              <Suspense fallback={<LoadingPlaceholder />}>
+                <MockConfig
+                  mockRules={store.mockRules}
+                  fetchMocks={store.fetchMocks}
+                  createMock={store.createMock}
+                  updateMock={store.updateMock}
+                  deleteMock={store.deleteMock}
+                  initialEditData={mockInitialData}
+                  onInitialEditConsumed={handleInitialEditConsumed}
+                />
+              </Suspense>
             </div>
           </TabsContent>
 
