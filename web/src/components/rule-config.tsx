@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useMemo, useRef, useState } from 'react'
+import { useEffect, useCallback, useMemo, useRef, useState, memo, useTransition, useDeferredValue } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -58,7 +58,8 @@ interface SortableRuleRowProps {
   onMoveToTop: () => void
 }
 
-function SortableRuleRow({
+// 使用 memo 优化行组件，减少不必要的重渲染
+const SortableRuleRow = memo(function SortableRuleRow({
   id,
   item,
   highlighted,
@@ -83,6 +84,23 @@ function SortableRuleRow({
     opacity: isDragging ? 0.5 : 1,
   }
 
+  // 使用 useCallback 稳定回调
+  const handleToggle = useCallback(() => {
+    onToggle()
+  }, [onToggle])
+
+  const handleUpdateRule = useCallback((field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
+    onUpdateRule(field, e.target.value)
+  }, [onUpdateRule])
+
+  const handleDelete = useCallback(() => {
+    onDelete()
+  }, [onDelete])
+
+  const handleMoveToTop = useCallback(() => {
+    onMoveToTop()
+  }, [onMoveToTop])
+
   return (
     <TableRow
       ref={(node) => {
@@ -98,12 +116,12 @@ function SortableRuleRow({
         <GripVertical className="h-4 w-4 text-muted-foreground" />
       </TableCell>
       <TableCell className="w-12">
-        <Checkbox checked={item.enabled} onCheckedChange={onToggle} />
+        <Checkbox checked={item.enabled} onCheckedChange={handleToggle} />
       </TableCell>
       <TableCell>
         <Input
           value={item.rule}
-          onChange={(e) => onUpdateRule('rule', e.target.value)}
+          onChange={handleUpdateRule('rule')}
           placeholder="example.com"
           className="h-8"
         />
@@ -111,7 +129,7 @@ function SortableRuleRow({
       <TableCell>
         <Input
           value={item.target}
-          onChange={(e) => onUpdateRule('target', e.target.value)}
+          onChange={handleUpdateRule('target')}
           placeholder="127.0.0.1:3000"
           className="h-8"
         />
@@ -121,7 +139,7 @@ function SortableRuleRow({
           <Button
             variant="ghost"
             size="sm"
-            onClick={onMoveToTop}
+            onClick={handleMoveToTop}
             className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
             title="置顶"
           >
@@ -130,7 +148,7 @@ function SortableRuleRow({
           <Button
             variant="ghost"
             size="sm"
-            onClick={onDelete}
+            onClick={handleDelete}
             className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
           >
             <Trash2 className="h-4 w-4" />
@@ -139,7 +157,173 @@ function SortableRuleRow({
       </TableCell>
     </TableRow>
   )
+}, (prevProps, nextProps) => {
+  // 自定义比较函数：只有当这些属性变化时才重渲染
+  return (
+    prevProps.item === nextProps.item &&
+    prevProps.highlighted === nextProps.highlighted &&
+    prevProps.id === nextProps.id
+  )
+})
+
+// 筛选模式下的行组件（不使用拖拽）
+interface FilteredRuleRowProps {
+  item: RuleItem
+  highlighted: boolean
+  highlightRef: React.RefObject<HTMLTableRowElement | null>
+  onToggle: () => void
+  onUpdateRule: (field: 'rule' | 'target', value: string) => void
+  onDelete: () => void
+  onMoveToTop: () => void
 }
+
+const FilteredRuleRow = memo(function FilteredRuleRow({
+  item,
+  highlighted,
+  highlightRef,
+  onToggle,
+  onUpdateRule,
+  onDelete,
+  onMoveToTop,
+}: FilteredRuleRowProps) {
+  const handleToggle = useCallback(() => onToggle(), [onToggle])
+  const handleUpdateRule = useCallback((field: 'rule' | 'target') => (e: React.ChangeEvent<HTMLInputElement>) => {
+    onUpdateRule(field, e.target.value)
+  }, [onUpdateRule])
+  const handleDelete = useCallback(() => onDelete(), [onDelete])
+  const handleMoveToTop = useCallback(() => onMoveToTop(), [onMoveToTop])
+
+  return (
+    <TableRow
+      ref={highlighted ? highlightRef : undefined}
+      className={highlighted ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
+    >
+      <TableCell>
+        <Checkbox checked={item.enabled} onCheckedChange={handleToggle} />
+      </TableCell>
+      <TableCell>
+        <Input
+          value={item.rule}
+          onChange={handleUpdateRule('rule')}
+          placeholder="example.com"
+          className="h-8"
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          value={item.target}
+          onChange={handleUpdateRule('target')}
+          placeholder="127.0.0.1:3000"
+          className="h-8"
+        />
+      </TableCell>
+      <TableCell>
+        <div className="flex gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleMoveToTop}
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+            title="置顶"
+          >
+            <ArrowUpToLine className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDelete}
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.item === nextProps.item &&
+    prevProps.highlighted === nextProps.highlighted
+  )
+})
+
+// 合并模式下的行组件
+interface GroupedRuleRowProps {
+  group: {
+    key: string
+    target: string
+    indices: number[]
+    rules: string[]
+    enabledState: boolean | 'indeterminate'
+  }
+  highlighted: boolean
+  highlightRef: React.RefObject<HTMLTableRowElement | null>
+  onToggleGroup: () => void
+  onUpdateGroupRules: (input: string) => void
+  onUpdateGroupTarget: (target: string) => void
+  onDeleteGroup: () => void
+}
+
+const GroupedRuleRow = memo(function GroupedRuleRow({
+  group,
+  highlighted,
+  highlightRef,
+  onToggleGroup,
+  onUpdateGroupRules,
+  onUpdateGroupTarget,
+  onDeleteGroup,
+}: GroupedRuleRowProps) {
+  const handleToggle = useCallback(() => onToggleGroup(), [onToggleGroup])
+  const handleUpdateRules = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onUpdateGroupRules(e.target.value)
+  }, [onUpdateGroupRules])
+  const handleUpdateTarget = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onUpdateGroupTarget(e.target.value)
+  }, [onUpdateGroupTarget])
+  const handleDelete = useCallback(() => onDeleteGroup(), [onDeleteGroup])
+
+  return (
+    <TableRow
+      ref={highlighted ? highlightRef : undefined}
+      className={highlighted ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
+    >
+      <TableCell>
+        <Checkbox checked={group.enabledState} onCheckedChange={handleToggle} />
+      </TableCell>
+      <TableCell>
+        <Input
+          value={group.rules.filter(Boolean).join(' ')}
+          onChange={handleUpdateRules}
+          placeholder="example.com api.example.com"
+          className="h-8"
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          value={group.target}
+          onChange={handleUpdateTarget}
+          placeholder="127.0.0.1:3000"
+          className="h-8"
+        />
+      </TableCell>
+      <TableCell>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleDelete}
+          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </TableCell>
+    </TableRow>
+  )
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.group === nextProps.group &&
+    prevProps.highlighted === nextProps.highlighted
+  )
+})
 
 export function RuleConfig(props: RuleConfigProps) {
   const { rules, setRules, fetchRules, saveRules } = props
@@ -148,11 +332,18 @@ export function RuleConfig(props: RuleConfigProps) {
   const [mergeByTarget, setMergeByTarget] = useState(false)
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null)
   const highlightRowRef = useRef<HTMLTableRowElement | null>(null)
-  
+
   // 筛选相关状态
   const [showFilters, setShowFilters] = useState(false)
   const [ruleFilter, setRuleFilter] = useState('')
   const [targetFilter, setTargetFilter] = useState('')
+
+  // 使用 useDeferredValue 优化筛选输入的响应性
+  const deferredRuleFilter = useDeferredValue(ruleFilter)
+  const deferredTargetFilter = useDeferredValue(targetFilter)
+
+  // 使用 useTransition 优化大量规则渲染的响应性
+  const [isPending, startTransition] = useTransition()
 
   useEffect(() => {
     fetchRules()
@@ -160,13 +351,16 @@ export function RuleConfig(props: RuleConfigProps) {
 
   const toggleRule = useCallback(
     (index: number) => {
-      setRules((prev) => prev.map((r, i) => (i === index ? { ...r, enabled: !r.enabled } : r)))
+      startTransition(() => {
+        setRules((prev) => prev.map((r, i) => (i === index ? { ...r, enabled: !r.enabled } : r)))
+      })
     },
     [setRules],
   )
 
   const updateRule = useCallback(
     (index: number, field: 'rule' | 'target', value: string) => {
+      // 输入更新使用立即模式，保证输入响应性
       setRules((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)))
     },
     [setRules],
@@ -174,24 +368,30 @@ export function RuleConfig(props: RuleConfigProps) {
 
   const deleteRule = useCallback(
     (index: number) => {
-      setRules((prev) => prev.filter((_, i) => i !== index))
+      startTransition(() => {
+        setRules((prev) => prev.filter((_, i) => i !== index))
+      })
     },
     [setRules],
   )
 
   const addRule = useCallback(() => {
     // 从顶部添加规则
-    setRules((prev) => [{ enabled: true, rule: '', target: '' }, ...prev])
+    startTransition(() => {
+      setRules((prev) => [{ enabled: true, rule: '', target: '' }, ...prev])
+    })
     setHighlightIndex(0)
   }, [setRules])
 
   const moveToTop = useCallback(
     (index: number) => {
-      setRules((prev) => {
-        const newRules = [...prev]
-        const [item] = newRules.splice(index, 1)
-        newRules.unshift(item)
-        return newRules
+      startTransition(() => {
+        setRules((prev) => {
+          const newRules = [...prev]
+          const [item] = newRules.splice(index, 1)
+          newRules.unshift(item)
+          return newRules
+        })
       })
       setHighlightIndex(0)
     },
@@ -247,21 +447,24 @@ export function RuleConfig(props: RuleConfigProps) {
     enabledState: boolean | 'indeterminate'
   }
 
-  // 筛选后的规则列表
+  // 筛选后的规则列表（包含索引，避免重复查找）
+  // 使用 deferred 值避免阻塞输入
   const filteredRules = useMemo(() => {
-    if (!ruleFilter && !targetFilter) {
-      return rules
+    if (!deferredRuleFilter && !deferredTargetFilter) {
+      return rules.map((item, index) => ({ item, index }))
     }
-    
-    const lowerRuleFilter = ruleFilter.toLowerCase()
-    const lowerTargetFilter = targetFilter.toLowerCase()
-    
-    return rules.filter((item) => {
-      const matchesRule = !ruleFilter || item.rule.toLowerCase().includes(lowerRuleFilter)
-      const matchesTarget = !targetFilter || item.target.toLowerCase().includes(lowerTargetFilter)
-      return matchesRule && matchesTarget
-    })
-  }, [rules, ruleFilter, targetFilter])
+
+    const lowerRuleFilter = deferredRuleFilter.toLowerCase()
+    const lowerTargetFilter = deferredTargetFilter.toLowerCase()
+
+    return rules
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => {
+        const matchesRule = !deferredRuleFilter || item.rule.toLowerCase().includes(lowerRuleFilter)
+        const matchesTarget = !deferredTargetFilter || item.target.toLowerCase().includes(lowerTargetFilter)
+        return matchesRule && matchesTarget
+      })
+  }, [rules, deferredRuleFilter, deferredTargetFilter])
 
   // 获取所有唯一的目标列表（用于下拉筛选）
   const uniqueTargets = useMemo(() => {
@@ -276,9 +479,7 @@ export function RuleConfig(props: RuleConfigProps) {
 
   const groupedRules = useMemo<RuleGroup[]>(() => {
     const groups = new Map<string, RuleGroup>()
-    filteredRules.forEach((item) => {
-      // 需要使用原始索引
-      const originalIndex = rules.indexOf(item)
+    filteredRules.forEach(({ item, index: originalIndex }) => {
       const normalizedTarget = item.target.trim()
       const key = normalizedTarget === '' ? `__EMPTY__${originalIndex}` : normalizedTarget
       const existing = groups.get(key)
@@ -308,9 +509,11 @@ export function RuleConfig(props: RuleConfigProps) {
 
   const toggleGroup = useCallback(
     (indices: number[], enabledState: boolean | 'indeterminate') => {
-      const nextEnabled = enabledState === true ? false : true
-      const indexSet = new Set(indices)
-      setRules((prev) => prev.map((item, idx) => (indexSet.has(idx) ? { ...item, enabled: nextEnabled } : item)))
+      startTransition(() => {
+        const nextEnabled = enabledState === true ? false : true
+        const indexSet = new Set(indices)
+        setRules((prev) => prev.map((item, idx) => (indexSet.has(idx) ? { ...item, enabled: nextEnabled } : item)))
+      })
     },
     [setRules],
   )
@@ -326,30 +529,32 @@ export function RuleConfig(props: RuleConfigProps) {
   const updateGroupRules = useCallback(
     (indices: number[], input: string) => {
       const nextRules = parseRuleInput(input)
-      setRules((prev) => {
-        const sorted = [...indices].sort((a, b) => a - b)
-        const firstIndex = sorted[0]
-        const firstItem = prev[firstIndex]
-        if (!firstItem) return prev
+      startTransition(() => {
+        setRules((prev) => {
+          const sorted = [...indices].sort((a, b) => a - b)
+          const firstIndex = sorted[0]
+          const firstItem = prev[firstIndex]
+          if (!firstItem) return prev
 
-        const replacement = (nextRules.length > 0 ? nextRules : ['']).map((rule) => ({
-          enabled: firstItem.enabled,
-          target: firstItem.target,
-          rule,
-        }))
+          const replacement = (nextRules.length > 0 ? nextRules : ['']).map((rule) => ({
+            enabled: firstItem.enabled,
+            target: firstItem.target,
+            rule,
+          }))
 
-        const removeSet = new Set(sorted)
-        const result: RuleItem[] = []
-        prev.forEach((item, idx) => {
-          if (idx === firstIndex) {
-            result.push(...replacement)
-            return
-          }
-          if (!removeSet.has(idx)) {
-            result.push(item)
-          }
+          const removeSet = new Set(sorted)
+          const result: RuleItem[] = []
+          prev.forEach((item, idx) => {
+            if (idx === firstIndex) {
+              result.push(...replacement)
+              return
+            }
+            if (!removeSet.has(idx)) {
+              result.push(item)
+            }
+          })
+          return result
         })
-        return result
       })
     },
     [parseRuleInput, setRules],
@@ -357,8 +562,10 @@ export function RuleConfig(props: RuleConfigProps) {
 
   const deleteGroup = useCallback(
     (indices: number[]) => {
-      const removeSet = new Set(indices)
-      setRules((prev) => prev.filter((_, idx) => !removeSet.has(idx)))
+      startTransition(() => {
+        const removeSet = new Set(indices)
+        setRules((prev) => prev.filter((_, idx) => !removeSet.has(idx)))
+      })
     },
     [setRules],
   )
@@ -373,10 +580,24 @@ export function RuleConfig(props: RuleConfigProps) {
     setTimeout(() => setSaveStatus('idle'), 2000)
   }, [rules, saveRules])
 
+  // 创建稳定的回调函数供 memo 组件使用
+  const createToggleRuleCallback = useCallback((index: number) => () => toggleRule(index), [toggleRule])
+  const createUpdateRuleCallback = useCallback((index: number) => (field: 'rule' | 'target', value: string) => updateRule(index, field, value), [updateRule])
+  const createDeleteRuleCallback = useCallback((index: number) => () => deleteRule(index), [deleteRule])
+  const createMoveToTopCallback = useCallback((index: number) => () => moveToTop(index), [moveToTop])
+
+  const createToggleGroupCallback = useCallback((indices: number[], enabledState: boolean | 'indeterminate') => () => toggleGroup(indices, enabledState), [toggleGroup])
+  const createUpdateGroupRulesCallback = useCallback((indices: number[]) => (input: string) => updateGroupRules(indices, input), [updateGroupRules])
+  const createUpdateGroupTargetCallback = useCallback((indices: number[]) => (target: string) => updateGroupTarget(indices, target), [updateGroupTarget])
+  const createDeleteGroupCallback = useCallback((indices: number[]) => () => deleteGroup(indices), [deleteGroup])
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-muted-foreground">代理规则配置</h3>
+        <h3 className="text-sm font-medium text-muted-foreground">
+          代理规则配置
+          {isPending && <span className="ml-2 text-xs text-muted-foreground">(更新中...)</span>}
+        </h3>
         <div className="flex items-center gap-2">
           <Button
             variant={showFilters ? 'default' : 'outline'}
@@ -416,7 +637,7 @@ export function RuleConfig(props: RuleConfigProps) {
           )}
         </div>
       </div>
-      
+
       {showFilters && (
         <div className="flex items-center gap-2 p-4 bg-muted/50 rounded-md">
           <div className="flex-1 space-y-1">
@@ -514,100 +735,30 @@ export function RuleConfig(props: RuleConfigProps) {
               </TableRow>
             ) : mergeByTarget ? (
               groupedRules.map((group) => (
-                <TableRow
+                <GroupedRuleRow
                   key={group.key}
-                  ref={highlightIndex != null && group.indices.includes(highlightIndex) ? highlightRowRef : undefined}
-                  className={highlightIndex != null && group.indices.includes(highlightIndex) ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
-                >
-                  <TableCell>
-                    <Checkbox
-                      checked={group.enabledState}
-                      onCheckedChange={() => toggleGroup(group.indices, group.enabledState)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      value={group.rules.filter(Boolean).join(' ')}
-                      onChange={(e) => updateGroupRules(group.indices, e.target.value)}
-                      placeholder="example.com api.example.com"
-                      className="h-8"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      value={group.target}
-                      onChange={(e) => updateGroupTarget(group.indices, e.target.value)}
-                      placeholder="127.0.0.1:3000"
-                      className="h-8"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deleteGroup(group.indices)}
-                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
+                  group={group}
+                  highlighted={highlightIndex != null && group.indices.includes(highlightIndex)}
+                  highlightRef={highlightRowRef}
+                  onToggleGroup={createToggleGroupCallback(group.indices, group.enabledState)}
+                  onUpdateGroupRules={createUpdateGroupRulesCallback(group.indices)}
+                  onUpdateGroupTarget={createUpdateGroupTargetCallback(group.indices)}
+                  onDeleteGroup={createDeleteGroupCallback(group.indices)}
+                />
               ))
             ) : ruleFilter || targetFilter ? (
-              filteredRules.map((item) => {
-                const index = rules.indexOf(item)
-                return (
-                  <TableRow
-                    key={index}
-                    ref={highlightIndex === index ? highlightRowRef : undefined}
-                    className={highlightIndex === index ? 'bg-amber-100/60 dark:bg-amber-500/20 transition-colors' : undefined}
-                  >
-                    <TableCell>
-                      <Checkbox
-                        checked={item.enabled}
-                        onCheckedChange={() => toggleRule(index)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={item.rule}
-                        onChange={(e) => updateRule(index, 'rule', e.target.value)}
-                        placeholder="example.com"
-                        className="h-8"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={item.target}
-                        onChange={(e) => updateRule(index, 'target', e.target.value)}
-                        placeholder="127.0.0.1:3000"
-                        className="h-8"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => moveToTop(index)}
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
-                          title="置顶"
-                        >
-                          <ArrowUpToLine className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteRule(index)}
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })
+              filteredRules.map(({ item, index }) => (
+                <FilteredRuleRow
+                  key={index}
+                  item={item}
+                  highlighted={highlightIndex === index}
+                  highlightRef={highlightRowRef}
+                  onToggle={createToggleRuleCallback(index)}
+                  onUpdateRule={createUpdateRuleCallback(index)}
+                  onDelete={createDeleteRuleCallback(index)}
+                  onMoveToTop={createMoveToTopCallback(index)}
+                />
+              ))
             ) : (
               <DndContext
                 sensors={sensors}
@@ -625,10 +776,10 @@ export function RuleConfig(props: RuleConfigProps) {
                       item={item}
                       highlighted={highlightIndex === index}
                       highlightRef={highlightRowRef}
-                      onToggle={() => toggleRule(index)}
-                      onUpdateRule={(field, value) => updateRule(index, field, value)}
-                      onDelete={() => deleteRule(index)}
-                      onMoveToTop={() => moveToTop(index)}
+                      onToggle={createToggleRuleCallback(index)}
+                      onUpdateRule={createUpdateRuleCallback(index)}
+                      onDelete={createDeleteRuleCallback(index)}
+                      onMoveToTop={createMoveToTopCallback(index)}
                     />
                   ))}
                 </SortableContext>
@@ -637,7 +788,7 @@ export function RuleConfig(props: RuleConfigProps) {
           </TableBody>
         </Table>
       </div>
-      
+
       {(ruleFilter || targetFilter) && filteredRules.length > 0 && (
         <div className="text-sm text-muted-foreground">
           显示 {filteredRules.length} / {rules.length} 条规则
