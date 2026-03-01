@@ -6,6 +6,9 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
+// Express for API routes
+const express = require('express')
+
 // 创建 .ep 目录和 ca 证书目录
 const epDir = path.resolve(os.homedir(), '.ep')
 const certDir = path.resolve(epDir, 'ca')
@@ -50,6 +53,10 @@ const REFACTOR_CONFIG = buildRefactorConfig(process.env, {
     normalizeMode,
     parseHostAllowlist,
 })
+
+// Make REFACTOR_CONFIG available globally for Express routes
+global.REFACTOR_CONFIG = REFACTOR_CONFIG
+
 const PLUGIN_MODE = REFACTOR_CONFIG.pluginMode
 const SHADOW_WARN_MIN_SAMPLES = REFACTOR_CONFIG.shadowWarnMinSamples
 const SHADOW_WARN_DIFF_RATE = REFACTOR_CONFIG.shadowWarnDiffRate
@@ -90,6 +97,38 @@ const pipelineGate = createPipelineGate({
     enableBuiltinMockPlugin: ENABLE_BUILTIN_MOCK_PLUGIN,
 })
 
+// ===== Express API Server =====
+const { createApp } = require('./dist/server/index')
+
+// Build server context
+const serverContext = {
+    currentConfig,
+    currentMocksPath,
+    ruleMap,
+    proxyRecordArr,
+    proxyRecordDetailMap,
+    recordIdSeq,
+    mockRules: [],
+    mockIdSeq: 1,
+    requestPipeline,
+    builtinLoggerPlugin,
+    shadowCompareTracker,
+    onModeGate,
+    pluginManager,
+    hookDispatcher,
+    settingsPath,
+    epDir,
+    settings: null,
+    loadMockRules: () => loadMockRules(),
+    saveMockRules: () => saveMockRules(),
+    reloadCustomPlugins: () => reloadCustomPlugins(),
+    logRuleMap: () => logRuleMap(),
+    broadcastToAllClients: (data) => broadcastToAllClients(data),
+}
+
+// Create Express app
+const expressApp = createApp(serverContext)
+
 /**
  * 从 settings.json 加载自定义配置文件路径
  */
@@ -106,6 +145,20 @@ function loadCustomPathsFromSettings() {
         console.error('加载自定义配置路径失败:', error)
     }
     return { rulesFilePath: null, mocksFilePath: null }
+}
+
+/**
+ * Load settings synchronously (for Express context)
+ */
+function loadSettingsSync() {
+    try {
+        if (fs.existsSync(settingsPath)) {
+            return JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+        }
+    } catch (error) {
+        console.error('加载设置失败:', error)
+    }
+    return null
 }
 
 /**
@@ -989,10 +1042,26 @@ const proxyServer = http.createServer((req, res) => {
         const webDistDir = path.resolve(__dirname, './web/dist')
         const hasReactBuild = fs.existsSync(path.resolve(webDistDir, 'index.html'))
 
+        // Handle API routes with Express
+        if (req.url && req.url.startsWith('/api')) {
+            // Update context before handling request
+            serverContext.currentConfig = currentConfig
+            serverContext.currentMocksPath = currentMocksPath
+            serverContext.ruleMap = ruleMap
+            serverContext.mockRules = mockRules
+            serverContext.mockIdSeq = mockIdSeq
+            serverContext.settings = loadSettingsSync()
+
+            // Use express to handle API request
+            expressApp(req, res)
+            return
+        }
+
+        // Original API handling (removed - now handled by Express)
         // API: 获取当前配置文件路径
         if (req.url === '/api/config-path') {
             res.setHeader('Content-Type', 'application/json')
-            res.write(JSON.stringify({ 
+            res.write(JSON.stringify({
                 path: currentConfig?.path || '',
                 mocksPath: getMockFilePath()
             }))
@@ -1482,44 +1551,51 @@ const proxyServer = http.createServer((req, res) => {
                 req.on('data', chunk => { body += chunk })
                 req.on('end', async () => {
                     try {
-                        const { filePath } = JSON.parse(body)
-                        if (!filePath) {
+                        const { filePath, content } = JSON.parse(body)
+
+                        // 解析规则内容
+                        let ruleContent = ''
+                        let ext = ''
+
+                        if (content !== undefined) {
+                            // 前端直接发送文件内容
+                            ruleContent = content
+                            ext = path.extname(filePath || '').toLowerCase()
+                        } else if (filePath) {
+                            // 通过文件路径加载（旧模式）
+                            if (!fs.existsSync(filePath)) {
+                                res.statusCode = 404
+                                res.write(JSON.stringify({ error: '文件不存在' }))
+                                res.end()
+                                return
+                            }
+                            ruleContent = fs.readFileSync(filePath, 'utf8')
+                            ext = path.extname(filePath).toLowerCase()
+                        } else {
                             res.statusCode = 400
-                            res.write(JSON.stringify({ error: '缺少文件路径' }))
+                            res.write(JSON.stringify({ error: '缺少文件路径或文件内容' }))
                             res.end()
                             return
                         }
-
-                        // 检查文件是否存在
-                        if (!fs.existsSync(filePath)) {
-                            res.statusCode = 404
-                            res.write(JSON.stringify({ error: '文件不存在' }))
-                            res.end()
-                            return
-                        }
-
-                        // 读取文件内容
-                        const content = fs.readFileSync(filePath, 'utf8')
-                        const ext = path.extname(filePath).toLowerCase()
 
                         // 解析规则
                         let newRuleMap
                         if (ext === '.json') {
                             // JSON 格式
-                            const json = JSON.parse(content)
+                            const json = JSON.parse(ruleContent)
                             newRuleMap = new Map()
                             const rulesObj = json.rules || {}
                             for (const [rule, target] of Object.entries(rulesObj)) {
                                 const cleanRule = rule.replace(/^\/\//, '')
                                 newRuleMap.set(cleanRule, target)
                             }
-                        } else if (ext === '.eprc' || ext === '') {
-                            // EPRC 格式
+                        } else if (ext === '.eprc' || ext === '.txt' || ext === '.rules' || ext === '') {
+                            // EPRC 格式或其他文本格式
                             const { parseEprc } = require('./dist/helpers')
-                            newRuleMap = parseEprc(content)
+                            newRuleMap = parseEprc(ruleContent)
                         } else {
                             res.statusCode = 400
-                            res.write(JSON.stringify({ error: '不支持的文件格式，请使用 .eprc 或 .json 文件' }))
+                            res.write(JSON.stringify({ error: '不支持的文件格式，请使用 .eprc、.json、.txt 或 .rules 文件' }))
                             res.end()
                             return
                         }

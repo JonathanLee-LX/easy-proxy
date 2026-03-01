@@ -162,9 +162,25 @@ export function useProxyStore() {
     }
   }, [])
 
-  // Load rules from file
-  const loadRulesFromFile = useCallback(async (filePath: string): Promise<{ success: boolean; error?: string }> => {
+  // Load rules from file (支持文件路径或文件内容)
+  const loadRulesFromFile = useCallback(async (filePath: string, fileContent?: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      // 如果提供了文件内容，发送到后端
+      if (fileContent !== undefined) {
+        const res = await fetch('/api/rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath, content: fileContent }),
+        })
+        const json = await res.json()
+        if (json.status === 'success') {
+          await fetchRules()
+          return { success: true }
+        }
+        return { success: false, error: json.error }
+      }
+
+      // 旧模式：通过文件路径加载
       const res = await fetch('/api/rules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -172,7 +188,6 @@ export function useProxyStore() {
       })
       const json = await res.json()
       if (json.status === 'success') {
-        // 重新获取规则以更新前端状态
         await fetchRules()
         return { success: true }
       }

@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Save, Trash2, Layers, Filter, X, GripVertical, ArrowUpToLine } from 'lucide-react'
+import { Plus, Save, Trash2, Layers, Filter, X, GripVertical, ArrowUpToLine, FolderOpen } from 'lucide-react'
 import type { RuleItem, RuleSet } from '@/types'
 import {
   DndContext,
@@ -35,7 +35,7 @@ interface RuleConfigProps {
   setRules: React.Dispatch<React.SetStateAction<RuleItem[]>>
   fetchRules: () => Promise<void>
   saveRules?: (items: RuleItem[]) => Promise<boolean>
-  loadRulesFromFile?: (filePath: string) => Promise<{ success: boolean; error?: string }>
+  loadRulesFromFile?: (filePath: string, fileContent?: string) => Promise<{ success: boolean; error?: string }>
   /** @deprecated 暂未实现 */
   ruleSets?: RuleSet[]
   /** @deprecated 暂未实现 */
@@ -584,30 +584,70 @@ export function RuleConfig(props: RuleConfigProps) {
   // 加载规则文件相关状态
   const [loadingFile, setLoadingFile] = useState(false)
   const [loadStatus, setLoadStatus] = useState<'idle' | 'success' | 'error'>('idle')
-  const [showFilePathInput, setShowFilePathInput] = useState(false)
-  const [filePath, setFilePath] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleLoadFile = useCallback(async () => {
-    if (!filePath.trim() || !loadRulesFromFile) return
+  // 读取文件内容并加载规则
+  const loadFileContent = useCallback(async (file: File) => {
+    if (!loadRulesFromFile) return
 
     setLoadingFile(true)
     setLoadStatus('idle')
 
-    const result = await loadRulesFromFile(filePath.trim())
-    setLoadingFile(false)
-    setLoadStatus(result.success ? 'success' : 'error')
-    if (result.success) {
-      setFilePath('')
-      setShowFilePathInput(false)
+    try {
+      const content = await file.text()
+      const result = await loadRulesFromFile(file.name, content)
+      setLoadingFile(false)
+      setLoadStatus(result.success ? 'success' : 'error')
+      if (!result.success) {
+        console.error('Failed to load rules:', result.error)
+      }
+      setTimeout(() => setLoadStatus('idle'), 2000)
+    } catch (err) {
+      setLoadingFile(false)
+      setLoadStatus('error')
+      console.error('Failed to read file:', err)
+      setTimeout(() => setLoadStatus('idle'), 2000)
     }
-    setTimeout(() => setLoadStatus('idle'), 2000)
-  }, [filePath, loadRulesFromFile])
+  }, [loadRulesFromFile])
 
-  const handleFilePathKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleLoadFile()
+  // 使用系统文件选择器选择文件
+  const handleSelectFile = useCallback(async () => {
+    // 优先尝试使用 File System Access API
+    if ('showOpenFilePicker' in window) {
+      try {
+        const [fileHandle] = await (window as any).showOpenFilePicker({
+          types: [
+            {
+              description: '规则文件',
+              accept: {
+                'application/json': ['.json', '.eprc'],
+                'text/plain': ['.txt', '.rules'],
+              },
+            },
+          ],
+          multiple: false,
+        })
+        const file = await fileHandle.getFile()
+        await loadFileContent(file)
+        return
+      } catch (err) {
+        // 用户取消或不支持，回退到传统方式
+        console.log('File System Access API not available or cancelled:', err)
+      }
     }
-  }, [handleLoadFile])
+    // 回退：使用传统文件选择器
+    fileInputRef.current?.click()
+  }, [loadFileContent])
+
+  // 处理传统文件 input 的选择
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      loadFileContent(file)
+    }
+    // 重置 input 以便可以再次选择相同文件
+    e.target.value = ''
+  }, [loadFileContent])
 
   // 创建稳定的回调函数供 memo 组件使用
   const createToggleRuleCallback = useCallback((index: number) => () => toggleRule(index), [toggleRule])
@@ -652,37 +692,27 @@ export function RuleConfig(props: RuleConfigProps) {
           </Button>
           {loadRulesFromFile && (
             <>
-              {showFilePathInput ? (
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={filePath}
-                    onChange={(e) => setFilePath(e.target.value)}
-                    onKeyDown={handleFilePathKeyDown}
-                    placeholder="输入规则文件路径，如 /path/to/rules.eprc"
-                    className="h-8 w-64"
-                    autoFocus
-                  />
-                  <Button size="sm" onClick={handleLoadFile} disabled={loadingFile || !filePath.trim()}>
-                    {loadingFile ? '加载中...' : '确定'}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setShowFilePathInput(false)
-                      setFilePath('')
-                      setLoadStatus('idle')
-                    }}
-                  >
-                    取消
-                  </Button>
-                </div>
-              ) : (
-                <Button variant="outline" size="sm" onClick={() => setShowFilePathInput(true)} disabled={loadingFile}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  加载文件
-                </Button>
-              )}
+              {/* 隐藏的文件输入元素 */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,.eprc,.txt,.rules"
+                className="hidden"
+                onChange={handleFileInputChange}
+              />
+              <Button variant="outline" size="sm" onClick={handleSelectFile} disabled={loadingFile}>
+                {loadingFile ? (
+                  <span className="flex items-center">
+                    <span className="animate-spin mr-1">⟳</span>
+                    加载中...
+                  </span>
+                ) : (
+                  <>
+                    <FolderOpen className="h-4 w-4 mr-1" />
+                    加载文件
+                  </>
+                )}
+              </Button>
               {loadStatus === 'success' && (
                 <span className="text-sm text-green-600 self-center">已加载</span>
               )}
