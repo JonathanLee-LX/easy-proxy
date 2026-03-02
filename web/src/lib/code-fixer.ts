@@ -207,30 +207,37 @@ function fixCssBrackets(css: string): string {
  * AI辅助修复代码
  * 如果配置了AI API,则使用AI进行修复;否则使用简单规则修复
  */
-export async function fixCode(code: string): Promise<{ fixed: string; method: 'ai' | 'rules' | 'none'; success: boolean }> {
+export async function fixCode(code: string, forceAI: boolean = false): Promise<{ fixed: string; method: 'ai' | 'rules' | 'none'; success: boolean }> {
   if (!code.trim()) {
     return { fixed: code, method: 'none', success: true }
   }
-  
+
   // 首先验证代码
   const validation = validateContent(code)
-  
-  if (validation.valid) {
+
+  // 如果不强制使用AI，且内容已有效，则返回
+  if (!forceAI && validation.valid) {
     return { fixed: code, method: 'none', success: true }
   }
-  
+
   // 检测代码类型
-  const typeStr = validation.type?.toLowerCase()
-  
+  let typeStr = validation.type?.toLowerCase()
+
+  // 如果无法检测类型，尝试推断
   if (!typeStr || typeStr === 'text') {
-    return { fixed: code, method: 'none', success: false }
+    typeStr = detectCodeType(code)
   }
-  
+
+  if (!typeStr || typeStr === 'text') {
+    // 没有有效类型，尝试AI修复
+    typeStr = 'json'
+  }
+
   const type = typeStr as 'json' | 'html' | 'css' | 'javascript'
-  
+
   // 检查是否配置了AI API
   const aiConfig = getAIConfig()
-  
+
   // 只有在启用且配置有效时才使用AI
   if (isAIConfigValid(aiConfig)) {
     try {
@@ -247,30 +254,58 @@ export async function fixCode(code: string): Promise<{ fixed: string; method: 'a
         baseUrl: aiConfig.baseUrl,
         model: aiConfig.model,
       }
-      
+
       const fixed = await fixWithAI(code, type, modelConfig)
-      
+
       // 验证修复后的代码
       const fixedValidation = validateContent(fixed)
       if (fixedValidation.valid) {
         return { fixed, method: 'ai', success: true }
       }
+
+      // 即使验证失败也返回AI修复的结果
+      return { fixed, method: 'ai', success: fixedValidation.valid }
     } catch (error) {
-      console.warn('AI修复失败,尝试使用规则修复:', error)
+      console.warn('AI修复失败:', error)
     }
   }
-  
+
   // 使用简单规则修复
   const fixed = simpleFixCode(code, type)
-  
+
   // 验证修复结果
   const fixedValidation = validateContent(fixed)
-  
+
   return {
     fixed,
     method: 'rules',
     success: fixedValidation.valid
   }
+}
+
+/**
+ * 推断代码类型
+ */
+function detectCodeType(code: string): string {
+  const trimmed = code.trim()
+
+  // 检测 JSON
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    return 'json'
+  }
+
+  // 检测 HTML
+  if (trimmed.startsWith('<') && trimmed.includes('>')) {
+    return 'html'
+  }
+
+  // 检测 CSS
+  if (trimmed.includes('{') && trimmed.includes('}') && trimmed.includes(':')) {
+    return 'css'
+  }
+
+  return 'text'
 }
 
 /**

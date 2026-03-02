@@ -648,8 +648,31 @@ function sendMockResponse(req, res, rule, logInfo) {
             }
         } else {
             // bodyType === 'inline'（默认）：使用 rule.body 作为响应体
+            const bodyContent = rule.body || ''
+
+            // 检查是否为 Base64 图片
+            const base64Match = bodyContent.match(/^data:([^;]+);base64,(.+)$/)
+            if (base64Match) {
+                // 是 Base64 图片，解码并设置正确的 Content-Type
+                const mimeType = base64Match[1]
+                const base64Data = base64Match[2]
+                const buffer = Buffer.from(base64Data, 'base64')
+                responseHeaders['Content-Type'] = mimeType
+                responseHeaders['Content-Length'] = buffer.length
+
+                try {
+                    res.writeHead(finalStatusCode, responseHeaders)
+                    res.end(buffer)
+                } catch (err) {
+                    console.error('Mock Base64 响应发送失败:', err.message)
+                    try { if (!res.headersSent) { res.writeHead(finalStatusCode); res.end(buffer) } } catch (_) {}
+                }
+                logMockRecord()
+                return
+            }
+
             responseHeaders['Content-Type'] = responseHeaders['content-type'] || 'application/json'
-            responseBody = rule.body || ''
+            responseBody = bodyContent
         }
 
         try {

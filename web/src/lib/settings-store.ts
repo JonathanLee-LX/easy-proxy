@@ -3,6 +3,7 @@
  * 使用文件系统保存设置到 ~/.ep/.epconfig/settings.json
  */
 
+import { saveAIConfig } from './ai-config-store'
 import type { AIConfig } from './ai-config-store'
 
 export interface SystemSettings {
@@ -40,6 +41,12 @@ export async function loadSettings(): Promise<SystemSettings> {
     if (response.ok) {
       const settings = await response.json()
       cachedSettings = settings
+
+      // 同步 AI 配置到 localStorage
+      if (settings.aiConfig) {
+        saveAIConfig(settings.aiConfig)
+      }
+
       return settings
     }
   } catch (error) {
@@ -94,7 +101,11 @@ export function getCachedSettings(): SystemSettings {
  * 更新设置的部分字段
  */
 export async function updateSettings(updates: Partial<SystemSettings>): Promise<void> {
-  const currentSettings = getCachedSettings()
+  // 确保先加载最新的设置
+  let currentSettings = getCachedSettings()
+  if (!currentSettings || !currentSettings.aiConfig?.apiKey) {
+    currentSettings = await loadSettings()
+  }
   const newSettings = { ...currentSettings, ...updates }
   await saveSettings(newSettings)
 }

@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
+import { FileUp, Wand2 } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -23,7 +24,13 @@ import { MonacoEditor } from '@/components/monaco-editor'
 import { formatContent } from '@/lib/formatter'
 import { validateContent } from '@/lib/syntax-highlight'
 import { fixCode } from '@/lib/code-fixer'
+import { getAIConfig, isAIConfigValid } from '@/lib/ai-config-store'
 import type { MockRule } from '@/types'
+
+// 判断是否为 Base64 图片
+function isBase64Image(content: string): boolean {
+  return content.trim().startsWith('data:image/')
+}
 
 interface MockConfigProps {
   mockRules: MockRule[]
@@ -64,12 +71,119 @@ export function MockConfig({
   const [headersExpanded, setHeadersExpanded] = useState(false)
   const [editorHeight, setEditorHeight] = useState(300) // 编辑器高度（像素）
   const editorRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [headerKey, setHeaderKey] = useState('')
   const [headerValue, setHeaderValue] = useState('')
   const [formatError, setFormatError] = useState<string | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [fixing, setFixing] = useState(false)
   const [formatting, setFormatting] = useState(false)
+  const [suggestedContentType, setSuggestedContentType] = useState<string | null>(null)
+
+  // 判断是否为图片类型
+  const isImageType = (file: File): boolean => {
+    return file.type.startsWith('image/')
+  }
+
+  // 根据文件扩展名获取 Content-Type
+  const getContentType = (filename: string): string => {
+    const ext = filename.toLowerCase().split('.').pop() || ''
+    const contentTypes: Record<string, string> = {
+      'json': 'application/json',
+      'js': 'application/javascript',
+      'css': 'text/css',
+      'html': 'text/html',
+      'htm': 'text/html',
+      'xml': 'application/xml',
+      'txt': 'text/plain',
+      'csv': 'text/csv',
+      'png': 'image/png',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'svg': 'image/svg+xml',
+      'ico': 'image/x-icon',
+      'bmp': 'image/bmp',
+    }
+    return contentTypes[ext] || 'text/plain'
+  }
+
+  // 检测建议的 Content-Type
+  const getSuggestedContentType = (filename: string): string | null => {
+    const contentType = getContentType(filename)
+    const currentHeaders = editForm.headers || {}
+    // 如果当前没有 Content-Type，返回建议值
+    if (!currentHeaders['Content-Type']) {
+      return contentType
+    }
+    return null
+  }
+
+  // 读取文件内容（图片转Base64，文本直接读取）
+  const readFileContent = async (file: File): Promise<string> => {
+    if (isImageType(file)) {
+      // 图片转Base64
+      return new Promise((resolve) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          resolve(e.target?.result as string)
+        }
+        reader.readAsDataURL(file)
+      })
+    } else {
+      // 文本直接读取
+      return await file.text()
+    }
+  }
+
+  // 使用系统文件选择器选择文件
+  const handleSelectFile = useCallback(async () => {
+    // 优先尝试使用 File System Access API
+    if ('showOpenFilePicker' in window) {
+      try {
+        const [fileHandle] = await (window as any).showOpenFilePicker({
+          types: [
+            {
+              description: '响应文件',
+              accept: {
+                'application/json': ['.json'],
+                'text/html': ['.html', '.htm'],
+                'text/plain': ['.txt', '.js', '.css', '.xml', '.csv', '.png', '.jpg', '.jpeg', '.gif', '.webp'],
+                'image/png': ['.png'],
+                'image/jpeg': ['.jpg', '.jpeg'],
+                'image/gif': ['.gif'],
+                'image/webp': ['.webp'],
+              },
+            },
+          ],
+          multiple: false,
+        })
+        const file = await fileHandle.getFile()
+        const content = await readFileContent(file)
+        updateField('body', content)
+        setSuggestedContentType(getSuggestedContentType(file.name))
+        return
+      } catch (err) {
+        console.log('File System Access API not available or cancelled:', err)
+      }
+    }
+    // 回退：使用传统文件选择器
+    fileInputRef.current?.click()
+  }, [])
+
+  // 处理传统文件 input 的选择
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      readFileContent(file).then(content => {
+        updateField('body', content)
+        setSuggestedContentType(getSuggestedContentType(file.name))
+      })
+    }
+    // 重置 input 以便可以再次选择相同文件
+    e.target.value = ''
+  }, [])
 
   useEffect(() => {
     fetchMocks()
@@ -229,7 +343,7 @@ export function MockConfig({
   const fixBodyErrors = useCallback(async () => {
     setFixing(true)
     try {
-      const result = await fixCode(editForm.body)
+      const result = await fixCode(editForm.body, true)
       if (result.success) {
         updateField('body', result.fixed)
         setValidationError(null)
@@ -437,91 +551,130 @@ export function MockConfig({
                 />
               </div>
             </div>
-            {/* 响应来源切换 */}
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">响应来源</label>
-              <div className="flex gap-1 p-0.5 bg-muted rounded-md w-fit">
-                <button
-                  type="button"
-                  className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors ${
-                    editForm.bodyType !== 'file'
-                      ? 'bg-background shadow-sm text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onClick={() => updateField('bodyType', 'inline')}
-                >
-                  <Code className="h-3 w-3" />
-                  自定义内容
-                </button>
-                <button
-                  type="button"
-                  className={`flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-colors ${
-                    editForm.bodyType === 'file'
-                      ? 'bg-background shadow-sm text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  onClick={() => updateField('bodyType', 'file')}
-                >
-                  <FileText className="h-3 w-3" />
-                  本地文件
-                </button>
-              </div>
-            </div>
             {/* 响应 Body */}
-            {editForm.bodyType === 'file' ? (
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">
-                  本地文件路径
-                  <span className="ml-1 font-normal text-muted-foreground/70">
-                    （支持绝对路径，自动推断 MIME 类型）
-                  </span>
-                </label>
-                <Input
-                  value={editForm.body}
-                  onChange={(e) => updateField('body', e.target.value)}
-                  placeholder="如：/Users/me/project/dist/app.js"
-                  className="h-8 font-mono text-sm"
-                />
-                <p className="text-xs text-muted-foreground">
-                  匹配请求时返回该文件内容，适合替换线上 JS/CSS/JSON 等资源
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-medium text-muted-foreground">响应内容 (Body)</label>
-                  <div className="flex items-center gap-2">
-                    {formatError && (
-                      <span className="text-xs text-red-500">{formatError}</span>
-                    )}
-                    {validationError && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="h-6 text-xs text-orange-600 border-orange-300 hover:bg-orange-50" 
-                        onClick={fixBodyErrors}
-                        disabled={fixing}
-                      >
-                        {fixing ? '修复中...' : 'AI修复'}
-                      </Button>
-                    )}
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-6 text-xs" 
-                      onClick={formatBody}
-                      disabled={formatting}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">响应内容 (Body)</label>
+                <div className="flex items-center gap-2">
+                  {/* 从文件加载按钮 */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={handleSelectFile}
+                  >
+                    <FileUp className="h-3 w-3 mr-1" />
+                    从文件加载
+                  </Button>
+                  {/* 从URL导入按钮 */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={async () => {
+                      const url = window.prompt('请输入文件 URL:')
+                      if (url) {
+                        try {
+                          const response = await fetch(url)
+                          const contentType = response.headers.get('content-type') || ''
+
+                          // 检测是否为图片
+                          if (contentType.startsWith('image/') || url.match(/\.(png|jpg|jpeg|gif|webp|svg|ico|bmp)$/i)) {
+                            // 图片转Base64
+                            const blob = await response.blob()
+                            const reader = new FileReader()
+                            reader.onload = () => {
+                              updateField('body', reader.result as string)
+                            }
+                            reader.readAsDataURL(blob)
+                          } else {
+                            // 文本内容
+                            const content = await response.text()
+                            updateField('body', content)
+                          }
+                        } catch (error) {
+                          alert('无法加载文件: ' + (error as Error).message)
+                        }
+                      }
+                    }}
+                  >
+                    <FileUp className="h-3 w-3 mr-1" />
+                    从URL导入
+                  </Button>
+                  {formatError && (
+                    <span className="text-xs text-red-500">{formatError}</span>
+                  )}
+                  {/* AI修复按钮 - 当有内容时显示 */}
+                  {editForm.body.trim() && isAIConfigValid(getAIConfig()) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={fixBodyErrors}
+                      disabled={fixing}
                     >
-                      <Code className="h-3 w-3 mr-1" />
-                      {formatting ? '格式化中...' : '智能格式化'}
+                      <Wand2 className="h-3 w-3 mr-1" />
+                      {fixing ? '修复中...' : 'AI修复'}
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={formatBody}
+                    disabled={formatting}
+                  >
+                    <Code className="h-3 w-3 mr-1" />
+                    {formatting ? '格式化中...' : '智能格式化'}
+                  </Button>
+                </div>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileInputChange}
+                accept="image/*,.json,.html,.htm,.txt,.js,.css,.xml,.csv"
+              />
+              {/* 图片内容显示预览 */}
+              {editForm.body.trim() && isBase64Image(editForm.body) ? (
+                <div className="space-y-2">
+                  <div className="border rounded-md p-2 bg-muted/30">
+                    <img
+                      src={editForm.body}
+                      alt="Preview"
+                      className="max-w-full max-h-96 object-contain"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => updateField('body', '')}
+                    >
+                      删除图片
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => {
+                        // 复制Base64内容到剪贴板
+                        navigator.clipboard.writeText(editForm.body)
+                        alert('图片内容已复制到剪贴板')
+                      }}
+                    >
+                      复制内容
                     </Button>
                   </div>
                 </div>
+              ) : (
                 <div ref={editorRef} className="relative group">
                   <MonacoEditor
                     value={editForm.body}
                     onChange={(v) => updateField('body', v)}
-                    placeholder='支持 JSON, HTML, JS, CSS 等格式'
+                    placeholder='支持 JSON, HTML, JS, CSS 等格式，或从文件/URL导入'
                     height={`${editorHeight}px`}
                   />
                   {/* 拖拽调整高度手柄 */}
@@ -532,33 +685,63 @@ export function MockConfig({
                     <GripVertical className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </div>
-                {validationError && (
-                  <div className="flex items-start gap-2 p-2 rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
-                    <span className="text-xs text-red-600 dark:text-red-400 font-medium">语法错误：</span>
-                    <span className="text-xs text-red-600 dark:text-red-400 flex-1">{validationError}</span>
+              )}
+              {validationError && (
+                <div className="flex items-start gap-2 p-2 rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900">
+                  <span className="text-xs text-red-600 dark:text-red-400 font-medium">语法错误：</span>
+                  <span className="text-xs text-red-600 dark:text-red-400 flex-1">{validationError}</span>
+                </div>
+              )}
+            </div>
+            {/* Response Headers */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  onClick={() => setHeadersExpanded(!headersExpanded)}
+                >
+                  {headersExpanded ? (
+                    <ChevronDown className="h-3 w-3" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3" />
+                  )}
+                  响应头 (Headers)
+                  {Object.keys(editForm.headers || {}).length > 0 && (
+                    <Badge variant="secondary" className="ml-1 text-xs">
+                      {Object.keys(editForm.headers || {}).length}
+                    </Badge>
+                  )}
+                </button>
+                {/* Content-Type 建议更新提示 */}
+                {suggestedContentType && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-amber-600 dark:text-amber-400">
+                      检测到内容类型变更，建议更新为 {suggestedContentType}?
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => {
+                        const currentHeaders = editForm.headers || {}
+                        updateField('headers', { ...currentHeaders, 'Content-Type': suggestedContentType })
+                        setSuggestedContentType(null)
+                      }}
+                    >
+                      更新
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs"
+                      onClick={() => setSuggestedContentType(null)}
+                    >
+                      忽略
+                    </Button>
                   </div>
                 )}
               </div>
-            )}
-            {/* Response Headers */}
-            <div className="space-y-2">
-              <button
-                type="button"
-                className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-                onClick={() => setHeadersExpanded(!headersExpanded)}
-              >
-                {headersExpanded ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronRight className="h-3 w-3" />
-                )}
-                响应头 (Headers)
-                {Object.keys(editForm.headers || {}).length > 0 && (
-                  <Badge variant="secondary" className="ml-1 text-xs">
-                    {Object.keys(editForm.headers || {}).length}
-                  </Badge>
-                )}
-              </button>
               {headersExpanded && (
                 <div className="space-y-2 pl-4 border-l-2 border-muted">
                   {/* 已添加的 headers 列表 */}
