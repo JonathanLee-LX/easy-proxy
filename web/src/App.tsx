@@ -1,18 +1,16 @@
 import { useState, useCallback, useEffect, lazy, Suspense } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Button } from '@/components/ui/button'
 import { RuleConfig } from '@/components/rule-config'
 import { LogFilter } from '@/components/log-filter'
 import { LogTable } from '@/components/log-table'
 import { DetailPanel } from '@/components/detail-panel'
 import { PluginConfig } from '@/components/plugin-config'
 import { SettingsPanel } from '@/components/settings-panel'
-import { AIConfigBadge } from '@/components/ai-settings'
+import { AppHeader } from '@/components/app-header'
 import { useProxyStore } from '@/hooks/use-proxy-store'
 import { useFuzzyFilter } from '@/hooks/use-fuzzy-filter'
-import { useTheme } from '@/components/theme-provider'
-import { Globe, Moon, Sun, Settings, Monitor } from 'lucide-react'
+import { createMockFromLog, type CreateMockFromLogData } from '@/utils/mock-factory'
 import type { MockRule } from '@/types'
 
 // 懒加载 MockConfig 组件
@@ -29,7 +27,6 @@ function LoadingPlaceholder() {
 
 function App() {
   const store = useProxyStore()
-  const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
   const { filterText, setFilterText, resourceTypeFilter, setResourceTypeFilter, filteredRecords } = useFuzzyFilter(store.records)
@@ -64,34 +61,9 @@ function App() {
   // 从日志详情创建 mock 的初始数据
   const [mockInitialData, setMockInitialData] = useState<Partial<MockRule> | null>(null)
 
-  const handleCreateMockFromLog = useCallback((data: { source: string; responseBody: string; statusCode: number; responseHeaders?: Record<string, string> }) => {
-    // 过滤掉不需要保存的默认响应头，只保留自定义头
-    const defaultHeaders = ['content-length', 'content-encoding', 'connection', 'date', 'etag', 'last-modified', 'server']
-    const customHeaders: Record<string, string> = {}
-    if (data.responseHeaders) {
-      Object.entries(data.responseHeaders).forEach(([key, value]) => {
-        if (!defaultHeaders.includes(key.toLowerCase())) {
-          customHeaders[key] = value
-        }
-      })
-    }
-
-    // 移除 truncated 前缀（如果存在）
-    let cleanBody = data.responseBody
-    const truncatedMatch = cleanBody.match(/^\(truncated, \d+ bytes\)\n/)
-    if (truncatedMatch) {
-      cleanBody = cleanBody.substring(truncatedMatch[0].length)
-    }
-
-    setMockInitialData({
-      urlPattern: data.source.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), // 转义为正则
-      body: cleanBody,
-      statusCode: data.statusCode,
-      headers: customHeaders,
-      name: '从日志创建',
-      method: '*',
-      enabled: true,
-    })
+  const handleCreateMockFromLog = useCallback((data: CreateMockFromLogData) => {
+    const mockData = createMockFromLog(data)
+    setMockInitialData(mockData)
     store.closeDetail()
     navigate('/mock')
   }, [store.closeDetail, navigate])
@@ -117,41 +89,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 h-12 flex items-center gap-3">
-          <Globe className="h-5 w-5 text-primary" />
-          <h1 className="text-sm font-semibold">Easy Proxy</h1>
-          <span className="text-xs text-muted-foreground">开发代理工具</span>
-          <div className="flex-1" />
-          <AIConfigBadge />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setSettingsOpen(true)}
-            className="h-8 w-8"
-            aria-label="设置"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            className="h-8 w-8"
-            aria-label={`当前主题: ${theme}，点击切换`}
-            title={`主题: ${theme === 'system' ? '跟随系统' : theme === 'light' ? '浅色' : '深色'}`}
-          >
-            {theme === 'light' ? (
-              <Moon className="h-4 w-4" />
-            ) : theme === 'dark' ? (
-              <Sun className="h-4 w-4" />
-            ) : (
-              <Monitor className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      </header>
+      <AppHeader onSettingsClick={() => setSettingsOpen(true)} />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-4">
