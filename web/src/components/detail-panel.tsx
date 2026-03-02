@@ -11,8 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Loader2, Wand2, RotateCw } from 'lucide-react'
-import { detectLanguage } from '@/lib/syntax-highlight'
-import { MonacoEditor } from '@/components/monaco-editor'
+import { highlightCode } from '@/lib/syntax-highlight'
 import type { RecordDetail, ProxyRecord } from '@/types'
 
 interface DetailPanelProps {
@@ -50,29 +49,11 @@ function HeadersView({ headers }: { headers: Record<string, string> }) {
   )
 }
 
-function BodyView({ body, flex }: { body: string; flex?: boolean }) {
-  const [detectedLanguage, setDetectedLanguage] = useState('text')
-
-  // 使用 useMemo 缓存格式化和高亮结果
-  const formattedBody = useMemo(() => {
-    if (!body) return ''
-
-    // 检测语言类型
-    const language = detectLanguage(body)
-    let formatted = body
-
-    // 如果是 JSON，尝试格式化
-    if (language === 'json') {
-      try {
-        const obj = JSON.parse(body)
-        formatted = JSON.stringify(obj, null, 2)
-      } catch {
-        // 格式化失败，使用原始内容
-      }
-    }
-
-    setDetectedLanguage(language)
-    return formatted
+function BodyView({ body }: { body: string }) {
+  // 使用轻量级语法高亮（类似 Chrome DevTools）
+  const highlightedBody = useMemo(() => {
+    if (!body) return null
+    return highlightCode(body)
   }, [body])
 
   if (!body) {
@@ -80,14 +61,8 @@ function BodyView({ body, flex }: { body: string; flex?: boolean }) {
   }
 
   return (
-    <div className={flex ? 'flex-1 min-h-0' : ''} style={flex ? { height: 'calc(100vh - 350px)' } : undefined}>
-      <MonacoEditor
-        value={formattedBody}
-        onChange={() => {}}
-        language={detectedLanguage}
-        height={flex ? 'calc(100vh - 350px)' : '300px'}
-        readOnly={true}
-      />
+    <div className="font-mono text-xs bg-muted/30 rounded p-2">
+      <pre className="whitespace-pre-wrap break-all">{highlightedBody}</pre>
     </div>
   )
 }
@@ -195,20 +170,20 @@ export function DetailPanel({ open, onClose, detail, loading, selectedRecord, on
                 </div>
               </ScrollArea>
             </TabsContent>
-            <TabsContent value="response" className="flex-1 min-h-0 mt-0 flex flex-col">
-              <div className="px-4 pt-3">
-                <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Response Headers</h4>
-                <ScrollArea className="h-[120px]">
-                  <HeadersView headers={detail.responseHeaders} />
-                </ScrollArea>
-              </div>
-              <Separator className="my-2" />
-              <div className="flex-1 min-h-0 px-4 pb-4 flex flex-col">
-                <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider shrink-0">Response Body</h4>
-                <div className="flex-1 min-h-0">
-                  <BodyView body={detail.responseBody} flex={true} />
+            <TabsContent value="response" className="flex-1 min-h-0 mt-0">
+              <ScrollArea className="h-full px-4 pb-4">
+                <div className="space-y-3 pt-3">
+                  <div>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Response Headers</h4>
+                    <HeadersView headers={detail.responseHeaders} />
+                  </div>
+                  <Separator />
+                  <div>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wider">Response Body</h4>
+                    <BodyView body={detail.responseBody} />
+                  </div>
                 </div>
-              </div>
+              </ScrollArea>
             </TabsContent>
           </Tabs>
         ) : (
