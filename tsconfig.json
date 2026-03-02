@@ -29,7 +29,8 @@
     "core/**/*.ts",
     "plugins/**/*.ts",
     "helpers.ts",
-    "cert.ts"
+    "cert.ts",
+    "server/**/*.ts"
   ],
   "exclude": [
     "node_modules",

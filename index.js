@@ -123,7 +123,19 @@ const serverContext = {
     saveMockRules: () => saveMockRules(),
     reloadCustomPlugins: () => reloadCustomPlugins(),
     logRuleMap: () => logRuleMap(),
-    broadcastToAllClients: (data) => broadcastToAllClients(data),
+    broadcastToAllClients: (data) => {
+        if (typeof localWSServer !== 'undefined') {
+            localWSServer.clients.forEach(client => {
+                if (client.readyState === 1) { // WebSocket.OPEN
+                    client.send(JSON.stringify(data))
+                }
+            })
+        }
+    },
+    loadCustomPathsFromSettings: () => loadCustomPathsFromSettings(),
+    getMockFilePath: () => getMockFilePath(),
+    performConfigDiagnostics: () => performConfigDiagnostics(),
+    loadSettingsSync: () => loadSettingsSync(),
 }
 
 // Create Express app
