@@ -46,6 +46,12 @@ export class PluginManager {
         return this.pluginStates.get(pluginId) || 'unknown';
     }
 
+    setState(pluginId: string, state: PluginState): void {
+        if (this.plugins.has(pluginId)) {
+            this.pluginStates.set(pluginId, state);
+        }
+    }
+
     async setup(contextFactory: (manifest: PluginManifest) => PluginContext): Promise<void> {
         for (const plugin of this.getAll()) {
             const pluginContext = contextFactory(plugin.manifest);

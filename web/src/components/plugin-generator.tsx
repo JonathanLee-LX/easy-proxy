@@ -290,7 +290,7 @@ export function PluginGenerator({ open, onOpenChange, onPluginSaved }: PluginGen
         resetForm()
       }
     }}>
-      <SheetContent className="p-0 flex flex-col w-[800px] max-w-[90vw]">
+      <SheetContent className="p-0 flex flex-col" resizable defaultWidth={900} storageKey="plugin-generator">
         <SheetHeader className="px-6 pt-6 pb-4">
           <SheetTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />

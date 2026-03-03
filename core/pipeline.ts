@@ -18,10 +18,11 @@ export function createPipeline(options: PipelineOptions): Pipeline {
     const pluginManager = options.pluginManager;
     const dispatcher = options.dispatcher;
     const logger = options.logger || console;
-    const mode = normalizeMode(options.mode);
+    let mode = normalizeMode(options.mode);
 
     return {
-        mode,
+        get mode() { return mode; },
+        setMode(newMode: PluginMode) { mode = normalizeMode(newMode); },
         async evaluateRequest(request: Request, initialTarget: string): Promise<PipelineDecision> {
             const hookContext = createHookContext(request || {}, initialTarget);
             if (mode === 'off') {

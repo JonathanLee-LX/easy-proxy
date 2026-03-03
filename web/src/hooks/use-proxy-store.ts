@@ -50,11 +50,13 @@ export function useProxyStore() {
     // Plugins
     plugins: plugins.plugins,
     pluginMode: plugins.pluginMode,
+    switchPluginMode: plugins.switchPluginMode,
     thirdPartyPlugins: plugins.thirdPartyPlugins,
     thirdPartySecurity: plugins.thirdPartySecurity,
     fetchPlugins: plugins.fetchPlugins,
     startPlugin: plugins.startPlugin,
     stopPlugin: plugins.stopPlugin,
+    togglePlugin: plugins.togglePlugin,
     fetchThirdPartyPlugins: plugins.fetchThirdPartyPlugins,
     loadThirdPartyPlugin: plugins.loadThirdPartyPlugin,
     unloadThirdPartyPlugin: plugins.unloadThirdPartyPlugin,

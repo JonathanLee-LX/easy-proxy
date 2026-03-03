@@ -4,6 +4,60 @@ import { ServerContext } from './index'
 const { evaluateShadowReadiness, buildReadinessAdvice } = require('../core/shadow-readiness')
 
 export function registerPipelineRoutes(app: Application, ctx: ServerContext): void {
+    // API: /api/pipeline/mode - Get/set plugin pipeline mode
+    app.route('/api/pipeline/mode')
+        .get((_req: Request, res: Response) => {
+            res.json({ mode: ctx.requestPipeline.mode })
+        })
+        .put((req: Request, res: Response) => {
+            const { mode } = req.body || {}
+            if (!mode || !['off', 'shadow', 'on'].includes(mode)) {
+                res.status(400).json({ error: '无效的模式，可选值: off, shadow, on' })
+                return
+            }
+            const oldMode = ctx.requestPipeline.mode
+            ctx.requestPipeline.setMode(mode)
+            ctx.onModeGate.setMode(mode)
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const fs = require('fs')
+            try {
+                let settings: Record<string, unknown> = {}
+                if (fs.existsSync(ctx.settingsPath)) {
+                    settings = JSON.parse(fs.readFileSync(ctx.settingsPath, 'utf8'))
+                }
+                settings.pluginMode = mode
+                fs.writeFileSync(ctx.settingsPath, JSON.stringify(settings, null, 2), 'utf8')
+            } catch (e: unknown) {
+                console.warn('持久化 pluginMode 失败:', e instanceof Error ? e.message : e)
+            }
+            console.log(`插件模式已切换: ${oldMode} → ${mode}`)
+            res.json({ status: 'success', oldMode, mode: ctx.requestPipeline.mode })
+        })
+        .post((req: Request, res: Response) => {
+            const { mode } = req.body || {}
+            if (!mode || !['off', 'shadow', 'on'].includes(mode)) {
+                res.status(400).json({ error: '无效的模式，可选值: off, shadow, on' })
+                return
+            }
+            const oldMode = ctx.requestPipeline.mode
+            ctx.requestPipeline.setMode(mode)
+            ctx.onModeGate.setMode(mode)
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const fs = require('fs')
+            try {
+                let settings: Record<string, unknown> = {}
+                if (fs.existsSync(ctx.settingsPath)) {
+                    settings = JSON.parse(fs.readFileSync(ctx.settingsPath, 'utf8'))
+                }
+                settings.pluginMode = mode
+                fs.writeFileSync(ctx.settingsPath, JSON.stringify(settings, null, 2), 'utf8')
+            } catch (e: unknown) {
+                console.warn('持久化 pluginMode 失败:', e instanceof Error ? e.message : e)
+            }
+            console.log(`插件模式已切换: ${oldMode} → ${mode}`)
+            res.json({ status: 'success', oldMode, mode: ctx.requestPipeline.mode })
+        })
+
     // API: /api/pipeline/shadow-stats - Get/reset shadow comparison stats
     app.route('/api/pipeline/shadow-stats')
         .get((_req: Request, res: Response) => {

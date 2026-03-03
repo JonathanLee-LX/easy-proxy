@@ -11,6 +11,7 @@ export interface SystemSettings {
   fontSize: string
   aiConfig: AIConfig
   mocksFilePath?: string
+  pluginMode?: 'off' | 'shadow' | 'on'
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -24,7 +25,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
     model: '',
     models: []
   },
-  mocksFilePath: ''
+  mocksFilePath: '',
+  pluginMode: 'off'
 }
 
 // 内存缓存

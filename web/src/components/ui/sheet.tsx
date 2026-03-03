@@ -4,10 +4,7 @@ import { Dialog as SheetPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
-const SHEET_WIDTH_STORAGE_KEY = 'sheet-width'
-const DEFAULT_SHEET_WIDTH = 600
 const MIN_SHEET_WIDTH = 400
-const MAX_SHEET_WIDTH = 1200
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -47,37 +44,54 @@ function SheetOverlay({
   )
 }
 
+interface SheetContentProps
+  extends React.ComponentPropsWithRef<typeof SheetPrimitive.Content> {
+  side?: "top" | "right" | "bottom" | "left"
+  showCloseButton?: boolean
+  resizable?: boolean
+  defaultWidth?: number
+  minWidth?: number
+  maxWidth?: number
+  storageKey?: string
+}
+
 function SheetContent({
   className,
   children,
   side = "right",
   showCloseButton = true,
   resizable = false,
+  defaultWidth = 700,
+  minWidth = MIN_SHEET_WIDTH,
+  maxWidth = 1600,
+  storageKey = 'sheet-width',
   ...props
-}: React.ComponentProps<typeof SheetPrimitive.Content> & {
-  side?: "top" | "right" | "bottom" | "left"
-  showCloseButton?: boolean
-  resizable?: boolean
-}) {
+}: SheetContentProps) {
+  const resolvedStorageKey = `sheet-w-${storageKey}`
+
   const [width, setWidth] = React.useState<number>(() => {
-    if (typeof window === 'undefined' || !resizable) return DEFAULT_SHEET_WIDTH
-    const saved = localStorage.getItem(SHEET_WIDTH_STORAGE_KEY)
-    return saved ? parseInt(saved, 10) : DEFAULT_SHEET_WIDTH
+    if (typeof window === 'undefined' || !resizable) return defaultWidth
+    const saved = localStorage.getItem(resolvedStorageKey)
+    if (saved) {
+      const parsed = parseInt(saved, 10)
+      if (!isNaN(parsed)) return Math.max(minWidth, Math.min(maxWidth, parsed))
+    }
+    return defaultWidth
   })
-  
+
   const [isResizing, setIsResizing] = React.useState(false)
   const contentRef = React.useRef<HTMLDivElement>(null)
 
   React.useEffect(() => {
-    if (!resizable) return
+    if (!resizable || !isResizing) return
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return
-
-      const newWidth = window.innerWidth - e.clientX
-      const clampedWidth = Math.max(MIN_SHEET_WIDTH, Math.min(MAX_SHEET_WIDTH, newWidth))
+      const vw = window.innerWidth
+      const newWidth = vw - e.clientX
+      const effectiveMax = Math.min(maxWidth, vw * 0.92)
+      const clampedWidth = Math.max(minWidth, Math.min(effectiveMax, newWidth))
       setWidth(clampedWidth)
-      localStorage.setItem(SHEET_WIDTH_STORAGE_KEY, clampedWidth.toString())
+      localStorage.setItem(resolvedStorageKey, clampedWidth.toString())
     }
 
     const handleMouseUp = () => {
@@ -86,18 +100,18 @@ function SheetContent({
       document.body.style.userSelect = ''
     }
 
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = 'ew-resize'
-      document.body.style.userSelect = 'none'
-    }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    document.body.style.cursor = 'ew-resize'
+    document.body.style.userSelect = 'none'
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
     }
-  }, [isResizing, resizable])
+  }, [isResizing, resizable, minWidth, maxWidth, resolvedStorageKey])
 
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -110,7 +124,7 @@ function SheetContent({
       <SheetPrimitive.Content
         ref={contentRef}
         data-slot="sheet-content"
-        style={resizable && side === 'right' ? { width: `${width}px` } : undefined}
+        style={resizable && side === 'right' ? { width: `${width}px`, maxWidth: '92vw' } : undefined}
         className={cn(
           "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
           side === "right" && !resizable &&
@@ -129,10 +143,13 @@ function SheetContent({
       >
         {resizable && side === 'right' && (
           <div
-            className="absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500 hover:w-1.5 transition-all group"
+            className={cn(
+              "absolute left-0 top-0 bottom-0 w-1 cursor-ew-resize transition-colors z-10",
+              isResizing ? "bg-blue-500 w-1" : "hover:bg-blue-400/60"
+            )}
             onMouseDown={handleResizeStart}
           >
-            <div className="absolute left-0 top-0 bottom-0 w-4 -translate-x-1.5" />
+            <div className="absolute left-0 top-0 bottom-0 w-5 -translate-x-2" />
           </div>
         )}
         {children}

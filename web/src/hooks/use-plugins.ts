@@ -27,6 +27,21 @@ export function usePlugins() {
     }
   }, [])
 
+  const switchPluginMode = useCallback(async (mode: 'on' | 'off' | 'shadow') => {
+    try {
+      const res = await fetch('/api/pipeline/mode', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      })
+      if (res.ok) {
+        setPluginMode(mode)
+      }
+    } catch (err) {
+      console.error('Failed to switch plugin mode:', err)
+    }
+  }, [])
+
   const startPlugin = useCallback(async (id: string) => {
     try {
       await fetch(`/api/plugins/${id}/start`, { method: 'POST' })
@@ -40,6 +55,23 @@ export function usePlugins() {
       await fetch(`/api/plugins/${id}/stop`, { method: 'POST' })
     } catch (err) {
       console.error('Failed to stop plugin:', err)
+    }
+  }, [])
+
+  const togglePlugin = useCallback(async (id: string, enabled: boolean) => {
+    try {
+      const res = await fetch(`/api/plugins/${encodeURIComponent(id)}/toggle`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      })
+      if (res.ok) {
+        setPlugins(prev => prev.map(p =>
+          p.id === id ? { ...p, state: enabled ? 'running' : 'disabled' } : p
+        ))
+      }
+    } catch (err) {
+      console.error('Failed to toggle plugin:', err)
     }
   }, [])
 
@@ -77,11 +109,13 @@ export function usePlugins() {
   return {
     plugins,
     pluginMode,
+    switchPluginMode,
     thirdPartyPlugins,
     thirdPartySecurity,
     fetchPlugins,
     startPlugin,
     stopPlugin,
+    togglePlugin,
     fetchThirdPartyPlugins,
     loadThirdPartyPlugin,
     unloadThirdPartyPlugin,

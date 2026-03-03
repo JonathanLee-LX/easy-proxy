@@ -51,6 +51,7 @@ export interface ServerContext {
     mockIdSeq: number
     requestPipeline: {
         mode: string
+        setMode: (mode: string) => void
     }
     builtinLoggerPlugin: {
         getSummary?: () => unknown
@@ -69,6 +70,7 @@ export interface ServerContext {
         reset: () => void
         getStats: () => unknown
         shouldAllow: (host: string) => boolean
+        setMode: (mode: string) => void
     }
     pluginManager: {
         getAll: () => Array<{
@@ -83,6 +85,7 @@ export interface ServerContext {
             [key: string]: unknown
         }>
         getState: (id: string) => string
+        setState: (id: string, state: string) => void
     }
     hookDispatcher: {
         getPluginStats?: () => Record<string, unknown>

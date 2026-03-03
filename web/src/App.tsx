@@ -181,9 +181,11 @@ function App() {
                 // 插件列表相关
                 plugins={store.plugins}
                 pluginMode={store.pluginMode}
+                switchPluginMode={store.switchPluginMode}
                 fetchPlugins={store.fetchPlugins}
                 startPlugin={store.startPlugin}
                 stopPlugin={store.stopPlugin}
+                togglePlugin={store.togglePlugin}
                 // 第三方插件相关
                 thirdPartyPlugins={store.thirdPartyPlugins}
                 thirdPartySecurity={store.thirdPartySecurity}

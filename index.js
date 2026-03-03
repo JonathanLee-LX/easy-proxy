@@ -1,6 +1,7 @@
 const http = require('http')
 const https = require('https')
 const http2 = require('http2')
+const zlib = require('zlib')
 const { connect } = require('net')
 const fs = require('fs')
 const os = require('os')
@@ -57,7 +58,19 @@ const REFACTOR_CONFIG = buildRefactorConfig(process.env, {
 // Make REFACTOR_CONFIG available globally for Express routes
 global.REFACTOR_CONFIG = REFACTOR_CONFIG
 
-const PLUGIN_MODE = REFACTOR_CONFIG.pluginMode
+// 确定 pluginMode：环境变量优先，否则从 settings.json 读取
+function resolveInitialPluginMode() {
+    if (process.env.EP_PLUGIN_MODE) return REFACTOR_CONFIG.pluginMode
+    try {
+        if (fs.existsSync(settingsPath)) {
+            const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+            if (s.pluginMode && ['off', 'shadow', 'on'].includes(s.pluginMode)) return s.pluginMode
+        }
+    } catch (_) { /* ignore */ }
+    return REFACTOR_CONFIG.pluginMode
+}
+
+const INITIAL_PLUGIN_MODE = resolveInitialPluginMode()
 const SHADOW_WARN_MIN_SAMPLES = REFACTOR_CONFIG.shadowWarnMinSamples
 const SHADOW_WARN_DIFF_RATE = REFACTOR_CONFIG.shadowWarnDiffRate
 const PLUGIN_ON_HOSTS = REFACTOR_CONFIG.pluginOnHosts
@@ -65,11 +78,11 @@ const ENABLE_BUILTIN_ROUTER_PLUGIN = REFACTOR_CONFIG.enableBuiltinRouter
 const ENABLE_BUILTIN_LOGGER_PLUGIN = REFACTOR_CONFIG.enableBuiltinLogger
 const ENABLE_BUILTIN_MOCK_PLUGIN = REFACTOR_CONFIG.enableBuiltinMock
 
-// Phase 1 骨架：先挂载运行时与 pipeline，默认 off 不改变现有行为
+// Phase 1 骨架：先挂载运行时与 pipeline
 const pluginManager = new PluginManager({ logger: console })
 const hookDispatcher = new HookDispatcher(pluginManager, { logger: console })
 const requestPipeline = createPipeline({
-    mode: PLUGIN_MODE,
+    mode: INITIAL_PLUGIN_MODE,
     pluginManager,
     dispatcher: hookDispatcher,
     logger: console,
@@ -87,7 +100,7 @@ const proxyRecordDetailMap = new Map()
 const builtinLoggerPlugin = createBuiltinLoggerPlugin({ maxEntries: MAX_RECORD_SIZE })
 const shadowCompareTracker = createShadowCompareTracker({ maxSamples: 30 })
 const onModeGate = createOnModeGate({
-    mode: PLUGIN_MODE,
+    mode: INITIAL_PLUGIN_MODE,
     allowlist: PLUGIN_ON_HOSTS,
 })
 const pipelineGate = createPipelineGate({
@@ -2135,19 +2148,43 @@ const proxyServer = http.createServer((req, res) => {
             }
             const url = new URL(target.startsWith('http') ? target : req.url, 'http://' + req.headers.host)
             const startTime = Date.now()
+            const pluginIntercepting = shouldInterceptResponse()
             const proxyReq = http.request(url, {
                 method: req.method,
                 headers: req.headers
             }, (proxyRes) => {
                 const resChunks = []
-                res.writeHead(proxyRes.statusCode, proxyRes.headers)
+                if (!pluginIntercepting) {
+                    res.writeHead(proxyRes.statusCode, proxyRes.headers)
+                }
                 proxyRes.on('data', chunk => {
                     resChunks.push(chunk)
-                    res.write(chunk)
+                    if (!pluginIntercepting) res.write(chunk)
                 })
-                proxyRes.on('end', () => {
-                    res.end()
+                proxyRes.on('end', async () => {
                     const resBody = Buffer.concat(resChunks)
+
+                    let intercepted = false
+                    if (pluginIntercepting) {
+                        try {
+                            intercepted = await interceptResponseWithPlugins({
+                                req, res, source, target: url.href, startTime,
+                                statusCode: proxyRes.statusCode,
+                                headers: proxyRes.headers,
+                                bodyBuffer: resBody,
+                                reqBody,
+                            })
+                        } catch (e) {
+                            console.error('[plugin] intercept error:', e)
+                        }
+                        if (!intercepted) {
+                            res.writeHead(proxyRes.statusCode, proxyRes.headers)
+                            res.end(resBody)
+                        }
+                    } else {
+                        res.end()
+                    }
+
                     const recordId = recordIdSeq++
                     const logData = {
                         id: recordId,
@@ -2158,14 +2195,13 @@ const proxyServer = http.createServer((req, res) => {
                         statusCode: proxyRes.statusCode,
                         duration: Date.now() - startTime
                     }
-                    emitLegacyResponseToPlugins(logData)
+                    if (!pluginIntercepting) emitLegacyResponseToPlugins(logData)
                     localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
                     proxyRecordArr.push(logData)
                     if (proxyRecordArr.length > MAX_RECORD_SIZE) {
                         const removed = proxyRecordArr.shift()
                         if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
                     }
-                    // 获取响应编码，用于解压
                     const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                     const detail = {
                         requestHeaders: req.headers,
@@ -2376,19 +2412,43 @@ proxyServer.on('connect', async (req, socket, header) => {
                             return
                         }
                         const startTime = Date.now()
+                        const pluginIntercepting = shouldInterceptResponse()
                         try {
                             const proxyRes = await makeProxyRequest(target, req.method, req.headers, reqBody)
                             const resChunks = []
-                            // HTTP/2 不允许逐跳头（如 transfer-encoding），需过滤后再写入
-                            res.writeHead(proxyRes.statusCode, cleanHeadersForH2(proxyRes.headers))
+                            if (!pluginIntercepting) {
+                                res.writeHead(proxyRes.statusCode, cleanHeadersForH2(proxyRes.headers))
+                            }
 
                             proxyRes.stream.on('data', chunk => {
                                 resChunks.push(chunk)
-                                res.write(chunk)
+                                if (!pluginIntercepting) res.write(chunk)
                             })
-                            proxyRes.stream.on('end', () => {
-                                res.end()
+                            proxyRes.stream.on('end', async () => {
                                 const resBody = Buffer.concat(resChunks)
+
+                                let intercepted = false
+                                if (pluginIntercepting) {
+                                    try {
+                                        intercepted = await interceptResponseWithPlugins({
+                                            req, res, source, target, startTime,
+                                            statusCode: proxyRes.statusCode,
+                                            headers: proxyRes.headers,
+                                            bodyBuffer: resBody,
+                                            reqBody,
+                                            cleanHeaders: cleanHeadersForH2,
+                                        })
+                                    } catch (e) {
+                                        console.error('[plugin] intercept error (HTTPS):', e)
+                                    }
+                                    if (!intercepted) {
+                                        res.writeHead(proxyRes.statusCode, cleanHeadersForH2(proxyRes.headers))
+                                        res.end(resBody)
+                                    }
+                                } else {
+                                    res.end()
+                                }
+
                                 const recordId = recordIdSeq++
                                 const logData = {
                                     id: recordId,
@@ -2400,14 +2460,13 @@ proxyServer.on('connect', async (req, socket, header) => {
                                     statusCode: proxyRes.statusCode,
                                     duration: Date.now() - startTime
                                 }
-                                emitLegacyResponseToPlugins(logData)
+                                if (!pluginIntercepting) emitLegacyResponseToPlugins(logData)
                                 localWSServer.clients.forEach(client => client.send(JSON.stringify(logData)))
                                 proxyRecordArr.push(logData)
                                 if (proxyRecordArr.length > MAX_RECORD_SIZE) {
                                     const removed = proxyRecordArr.shift()
                                     if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
                                 }
-                                // 获取响应编码，用于解压
                                 const responseEncoding = proxyRes.headers && proxyRes.headers['content-encoding']
                                 const detail = {
                                     requestHeaders: req.headers,
@@ -2569,6 +2628,111 @@ function observeShadowDecision(method, source, baseTarget, observedTarget) {
     }
 }
 
+// --- 插件响应拦截 ---
+function isTextContentType(ct) {
+    if (!ct) return false
+    const lower = ct.toLowerCase()
+    return lower.includes('text/') ||
+        lower.includes('application/json') ||
+        lower.includes('application/javascript') ||
+        lower.includes('application/xml') ||
+        lower.includes('application/xhtml') ||
+        lower.includes('+json') ||
+        lower.includes('+xml')
+}
+
+function decompressBuffer(buf, encoding) {
+    if (!encoding) return buf
+    try {
+        if (encoding === 'gzip') return zlib.gunzipSync(buf)
+        if (encoding === 'deflate') return zlib.inflateSync(buf)
+        if (encoding === 'br') return zlib.brotliDecompressSync(buf)
+    } catch (_) { /* 解压失败则返回原始数据 */ }
+    return buf
+}
+
+function shouldInterceptResponse() {
+    return requestPipeline.mode === 'on'
+}
+
+/**
+ * 缓冲响应 → 解压 → 运行 onBeforeResponse/onAfterResponse hook → 发送（可能被修改的）响应
+ * 返回 true 表示已接管响应处理, false 表示应走默认流式传输
+ */
+async function interceptResponseWithPlugins({
+    req, res, source, target, startTime,
+    statusCode, headers, bodyBuffer, reqBody,
+    cleanHeaders,
+}) {
+    const contentType = headers['content-type'] || ''
+    const contentEncoding = headers['content-encoding'] || ''
+
+    // 仅拦截文本类型的响应，二进制响应（图片/视频等）直接跳过
+    if (!isTextContentType(contentType)) {
+        return false
+    }
+
+    // 解压
+    let bodyStr
+    try {
+        const decompressed = decompressBuffer(bodyBuffer, contentEncoding)
+        bodyStr = decompressed.toString('utf-8')
+    } catch (_) {
+        return false
+    }
+
+    const pluginLogger = {
+        log: (...a) => console.log('[plugin]', ...a),
+        info: (...a) => console.log('[plugin]', ...a),
+        warn: (...a) => console.warn('[plugin]', ...a),
+        error: (...a) => console.error('[plugin]', ...a),
+    }
+
+    // 构建与插件测试时一致的 context
+    const hdrs = { ...headers }
+    const responseCtx = {
+        log: pluginLogger,
+        request: {
+            method: req.method,
+            url: source,
+            headers: req.headers || {},
+            body: reqBody ? reqBody.toString('utf-8') : '',
+        },
+        target: target,
+        meta: { _pluginRequestStartAt: startTime },
+        response: {
+            statusCode,
+            headers: hdrs,
+            body: bodyStr,
+        },
+    }
+
+    try {
+        await hookDispatcher.dispatch('onBeforeResponse', responseCtx)
+    } catch (e) {
+        console.error('[plugin] onBeforeResponse hook error:', e)
+    }
+
+    // 发送（可能被修改的）响应
+    const finalBody = Buffer.from(responseCtx.response.body, 'utf-8')
+    const finalHeaders = { ...responseCtx.response.headers }
+
+    // 因为已经解压过，移除 content-encoding
+    delete finalHeaders['content-encoding']
+    // 更新 content-length
+    finalHeaders['content-length'] = String(finalBody.length)
+
+    const finalWriteHeaders = cleanHeaders ? cleanHeaders(finalHeaders) : finalHeaders
+    res.writeHead(responseCtx.response.statusCode, finalWriteHeaders)
+    res.end(finalBody)
+
+    try {
+        await hookDispatcher.dispatch('onAfterResponse', responseCtx)
+    } catch (_) {}
+
+    return true
+}
+
 function emitLegacyResponseToPlugins(logData) {
     const startContext = {
         request: {
@@ -2653,6 +2817,21 @@ async function bootstrapBuiltinPlugins() {
             log: console,
         }),
     })
+
+    // 从 settings.json 恢复禁用插件状态
+    try {
+        if (fs.existsSync(settingsPath)) {
+            const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+            if (Array.isArray(s.disabledPlugins)) {
+                for (const id of s.disabledPlugins) {
+                    if (pluginManager.getState(id) !== 'unknown') {
+                        pluginManager.setState(id, 'disabled')
+                        console.log(chalk.yellow(`插件 ${id} 已禁用（来自设置）`))
+                    }
+                }
+            }
+        }
+    } catch (_) {}
 }
 
 async function loadCustomPluginsInternal(customPluginsDir) {
@@ -2701,6 +2880,21 @@ async function reloadCustomPlugins() {
     }
     
     loadedCustomPlugins = newCustomPlugins
+
+    // 恢复禁用状态
+    try {
+        if (fs.existsSync(settingsPath)) {
+            const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+            if (Array.isArray(s.disabledPlugins)) {
+                for (const id of s.disabledPlugins) {
+                    if (pluginManager.getState(id) !== 'unknown') {
+                        pluginManager.setState(id, 'disabled')
+                    }
+                }
+            }
+        }
+    } catch (_) {}
+
     return newCustomPlugins
 }
 

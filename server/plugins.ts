@@ -131,6 +131,61 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
         res.end()
     })
 
+    // API: 读取插件源码
+    app.get('/api/plugins/custom/:filename/code', (req: Request, res: Response) => {
+        try {
+            const filename = decodeURIComponent(req.params.filename as string)
+            const pluginsDir = path.resolve(epDir, 'plugins')
+            const filePath = path.resolve(pluginsDir, filename)
+
+            if (!filePath.startsWith(pluginsDir)) {
+                res.status(403).json({ error: '非法的文件路径' })
+                return
+            }
+
+            if (!fs.existsSync(filePath)) {
+                res.status(404).json({ error: '插件文件不存在' })
+                return
+            }
+
+            const code = fs.readFileSync(filePath, 'utf8')
+            res.json({ filename, code })
+        } catch (error) {
+            res.status(500).json({ error: (error as Error).message })
+        }
+    })
+
+    // API: 更新插件源码
+    app.put('/api/plugins/custom/:filename/code', (req: Request, res: Response) => {
+        try {
+            const filename = decodeURIComponent(req.params.filename as string)
+            const pluginsDir = path.resolve(epDir, 'plugins')
+            const filePath = path.resolve(pluginsDir, filename)
+
+            if (!filePath.startsWith(pluginsDir)) {
+                res.status(403).json({ error: '非法的文件路径' })
+                return
+            }
+
+            if (!fs.existsSync(filePath)) {
+                res.status(404).json({ error: '插件文件不存在' })
+                return
+            }
+
+            const { code } = req.body
+            if (typeof code !== 'string') {
+                res.status(400).json({ error: '缺少 code 字段' })
+                return
+            }
+
+            fs.writeFileSync(filePath, code, 'utf8')
+            console.log(`已更新插件代码: ${filename}`)
+            res.json({ status: 'success', message: '插件代码已保存' })
+        } catch (error) {
+            res.status(500).json({ error: (error as Error).message })
+        }
+    })
+
     // API: 删除自定义插件
     app.delete('/api/plugins/custom/:filename', (req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
@@ -219,125 +274,239 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
         res.end()
     })
 
-    // API: 测试插件功能
+    // API: 测试插件功能（真实请求模式）
     app.post('/api/plugins/test', async (req: Request, res: Response) => {
         res.setHeader('Content-Type', 'application/json')
         try {
             const data = req.body
             const pluginId = data.pluginId
-            const testType = data.testType || 'request'
+            const url = data.url || 'http://example.com/test'
+            const method = (data.method || 'GET').toUpperCase()
 
             const allPlugins = ctx.pluginManager.getAll()
             const targetPlugin = allPlugins.find(p => p.manifest.id === pluginId)
 
             if (!targetPlugin) {
-                res.statusCode = 404
-                res.write(JSON.stringify({ error: '插件不存在' }))
-                res.end()
+                res.status(404).json({ error: '插件不存在' })
                 return
             }
 
-            const testLogs: Array<{ level: string; message: string }> = []
+            const testLogs: Array<{ level: string; message: string; timestamp: number }> = []
             const testLogger = {
-                log: (...args: unknown[]) => testLogs.push({ level: 'log', message: args.join(' ') }),
-                info: (...args: unknown[]) => testLogs.push({ level: 'info', message: args.join(' ') }),
-                warn: (...args: unknown[]) => testLogs.push({ level: 'warn', message: args.join(' ') }),
-                error: (...args: unknown[]) => testLogs.push({ level: 'error', message: args.join(' ') }),
+                log: (...args: unknown[]) => testLogs.push({ level: 'log', message: args.join(' '), timestamp: Date.now() }),
+                info: (...args: unknown[]) => testLogs.push({ level: 'info', message: args.join(' '), timestamp: Date.now() }),
+                warn: (...args: unknown[]) => testLogs.push({ level: 'warn', message: args.join(' '), timestamp: Date.now() }),
+                error: (...args: unknown[]) => testLogs.push({ level: 'error', message: args.join(' '), timestamp: Date.now() }),
             }
 
-            const testResults = {
-                pluginId,
-                pluginName: targetPlugin.manifest.name,
-                testType,
-                hooks: targetPlugin.manifest.hooks,
-                logs: testLogs,
-                hookResults: {} as Record<string, unknown>
-            }
-
-            // 测试各个hook
             const hooks = targetPlugin.manifest.hooks || []
+            const hookResults: Record<string, unknown> = {}
 
-            for (const hookName of hooks) {
+            // --- Phase 1: onRequestStart / onBeforeProxy ---
+            const requestObj = {
+                method,
+                url,
+                headers: { 'user-agent': 'easy-proxy-test/1.0', ...(data.headers || {}) },
+                body: data.body || '',
+            }
+            let currentTarget = url
+            let shortCircuited = false
+            let shortCircuitResponse: Record<string, unknown> | null = null
+
+            for (const hookName of ['onRequestStart', 'onBeforeProxy']) {
+                if (!hooks.includes(hookName)) continue
                 const hookFn = (targetPlugin as Record<string, unknown>)[hookName]
                 if (typeof hookFn !== 'function') continue
 
-                try {
-                    let testContext: Record<string, unknown>
-
-                    if (hookName === 'onRequestStart' || hookName === 'onBeforeProxy') {
-                        testContext = {
-                            log: testLogger,
-                            request: {
-                                method: data.method || 'GET',
-                                url: data.url || 'http://example.com/test',
-                                headers: data.headers || { 'user-agent': 'test' },
-                                body: data.body || ''
-                            },
-                            target: data.url || 'http://example.com/test',
-                            meta: { _test: true, _pluginRequestStartAt: Date.now() },
-                            shortCircuited: false,
-                            shortCircuitResponse: null,
-                            setTarget: (newTarget: string) => { testContext.target = newTarget },
-                            respond: (response: unknown) => {
-                                testContext.shortCircuited = true
-                                testContext.shortCircuitResponse = response
-                            }
-                        }
-                    } else if (hookName === 'onBeforeResponse' || hookName === 'onAfterResponse') {
-                        testContext = {
-                            log: testLogger,
-                            request: {
-                                method: data.method || 'GET',
-                                url: data.url || 'http://example.com/test',
-                                headers: data.headers || {},
-                                body: data.body || ''
-                            },
-                            target: data.url || 'http://example.com/test',
-                            meta: { _test: true, _pluginRequestStartAt: Date.now() },
-                            response: {
-                                statusCode: data.statusCode || 200,
-                                headers: data.responseHeaders || { 'content-type': 'text/plain' },
-                                body: data.responseBody || 'test response'
-                            }
-                        }
-                    } else if (hookName === 'onError') {
-                        testContext = {
-                            log: testLogger,
-                            phase: 'test',
-                            error: new Error(data.errorMessage || 'Test error'),
-                            meta: { _test: true }
-                        }
-                    } else {
-                        continue
-                    }
-
-                    const startTime = Date.now()
-                    await (hookFn as (ctx: unknown) => Promise<void>).call(targetPlugin, testContext)
-                    const duration = Date.now() - startTime
-
-                    testResults.hookResults[hookName] = {
-                        status: 'success',
-                        duration,
-                        context: testContext
-                    }
-                } catch (error) {
-                    testResults.hookResults[hookName] = {
-                        status: 'error',
-                        error: (error as Error).message,
-                        stack: (error as Error).stack
-                    }
+                const hookCtx: Record<string, unknown> = {
+                    log: testLogger,
+                    request: { ...requestObj },
+                    target: currentTarget,
+                    meta: { _test: true, _pluginRequestStartAt: Date.now() },
+                    shortCircuited: false,
+                    shortCircuitResponse: null,
+                    setTarget: (t: string) => { hookCtx.target = t; currentTarget = t },
+                    respond: (r: unknown) => { hookCtx.shortCircuited = true; hookCtx.shortCircuitResponse = r; shortCircuited = true; shortCircuitResponse = r as Record<string, unknown> },
                 }
+                const t0 = Date.now()
+                try {
+                    await (hookFn as (c: unknown) => Promise<void>).call(targetPlugin, hookCtx)
+                    hookResults[hookName] = { status: 'success', duration: Date.now() - t0, targetChanged: currentTarget !== url ? currentTarget : null, shortCircuited }
+                } catch (e) {
+                    hookResults[hookName] = { status: 'error', duration: Date.now() - t0, error: (e as Error).message, stack: (e as Error).stack }
+                }
+                if (shortCircuited) break
             }
 
-            res.write(JSON.stringify({
+            // --- Phase 2: 发起真实 HTTP 请求 ---
+            let realResponse: { statusCode: number; headers: Record<string, string>; body: string } | null = null
+            let fetchError: string | null = null
+            let fetchDuration = 0
+
+            if (!shortCircuited) {
+                const http = require('http') as typeof import('http')
+                const https = require('https') as typeof import('https')
+                const parsed = new URL(currentTarget)
+                const transport = parsed.protocol === 'https:' ? https : http
+
+                const fetchStart = Date.now()
+                try {
+                    realResponse = await new Promise<{ statusCode: number; headers: Record<string, string>; body: string }>((resolve, reject) => {
+                        const reqOpts = {
+                            hostname: parsed.hostname,
+                            port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+                            path: parsed.pathname + parsed.search,
+                            method,
+                            headers: requestObj.headers,
+                            timeout: 15000,
+                            rejectUnauthorized: false,
+                        }
+                        const outReq = (transport as typeof https).request(reqOpts, (inRes) => {
+                            const chunks: Buffer[] = []
+                            inRes.on('data', (c: Buffer) => chunks.push(c))
+                            inRes.on('end', () => {
+                                const bodyBuf = Buffer.concat(chunks)
+                                const hdrs: Record<string, string> = {}
+                                for (const [k, v] of Object.entries(inRes.headers)) {
+                                    if (v) hdrs[k] = Array.isArray(v) ? v.join(', ') : v
+                                }
+                                resolve({
+                                    statusCode: inRes.statusCode || 0,
+                                    headers: hdrs,
+                                    body: bodyBuf.toString('utf-8'),
+                                })
+                            })
+                        })
+                        outReq.on('error', reject)
+                        outReq.on('timeout', () => { outReq.destroy(); reject(new Error('请求超时 (15s)')) })
+                        if (requestObj.body) outReq.write(requestObj.body)
+                        outReq.end()
+                    })
+                } catch (e) {
+                    fetchError = (e as Error).message
+                }
+                fetchDuration = Date.now() - fetchStart
+            }
+
+            // --- Phase 3: onBeforeResponse / onAfterResponse（用真实响应） ---
+            let modifiedResponse: Record<string, unknown> | null = null
+            const originalBody = realResponse?.body || ''
+
+            if (realResponse && !shortCircuited) {
+                const responseCopy = {
+                    statusCode: realResponse.statusCode,
+                    headers: { ...realResponse.headers },
+                    body: realResponse.body,
+                }
+
+                for (const hookName of ['onBeforeResponse', 'onAfterResponse']) {
+                    if (!hooks.includes(hookName)) continue
+                    const hookFn = (targetPlugin as Record<string, unknown>)[hookName]
+                    if (typeof hookFn !== 'function') continue
+
+                    const hookCtx = {
+                        log: testLogger,
+                        request: { ...requestObj },
+                        target: currentTarget,
+                        meta: { _test: true, _pluginRequestStartAt: Date.now() },
+                        response: responseCopy,
+                    }
+                    const t0 = Date.now()
+                    try {
+                        await (hookFn as (c: unknown) => Promise<void>).call(targetPlugin, hookCtx)
+                        hookResults[hookName] = { status: 'success', duration: Date.now() - t0 }
+                    } catch (e) {
+                        hookResults[hookName] = { status: 'error', duration: Date.now() - t0, error: (e as Error).message, stack: (e as Error).stack }
+                    }
+                }
+                modifiedResponse = responseCopy
+            }
+
+            // --- Phase 4: 构造返回结果 ---
+            const bodyChanged = modifiedResponse && (modifiedResponse.body !== originalBody)
+            const truncate = (s: string, max: number) => s.length > max ? s.slice(0, max) + `\n...(已截断，共 ${s.length} 字符)` : s
+
+            res.json({
                 status: 'success',
-                results: testResults
-            }))
+                results: {
+                    pluginId,
+                    pluginName: targetPlugin.manifest.name,
+                    hooks,
+                    logs: testLogs,
+                    hookResults,
+                    realRequest: {
+                        method,
+                        url: currentTarget,
+                        fetchDuration,
+                        fetchError,
+                    },
+                    originalResponse: realResponse ? {
+                        statusCode: realResponse.statusCode,
+                        headers: realResponse.headers,
+                        bodyPreview: truncate(originalBody, 3000),
+                        bodyLength: originalBody.length,
+                    } : null,
+                    modifiedResponse: modifiedResponse ? {
+                        statusCode: modifiedResponse.statusCode,
+                        headers: modifiedResponse.headers,
+                        bodyPreview: truncate(String(modifiedResponse.body || ''), 3000),
+                        bodyLength: String(modifiedResponse.body || '').length,
+                        bodyChanged,
+                    } : null,
+                    shortCircuited,
+                    shortCircuitResponse: shortCircuitResponse ? {
+                        statusCode: (shortCircuitResponse as Record<string, unknown>).statusCode,
+                        body: truncate(String((shortCircuitResponse as Record<string, unknown>).body || ''), 2000),
+                    } : null,
+                },
+            })
         } catch (error) {
-            res.statusCode = 500
-            res.write(JSON.stringify({ error: (error as Error).message }))
+            res.status(500).json({ error: (error as Error).message })
         }
-        res.end()
+    })
+
+    // API: 启用/禁用单个插件
+    app.put('/api/plugins/:id/toggle', (req: Request, res: Response) => {
+        const pluginId = String(req.params.id)
+        const { enabled } = req.body
+
+        const allPlugins = ctx.pluginManager.getAll()
+        const target = allPlugins.find(p => p.manifest.id === pluginId)
+        if (!target) {
+            res.status(404).json({ error: '插件不存在' })
+            return
+        }
+
+        const newState = enabled ? 'running' : 'disabled'
+        ctx.pluginManager.setState(pluginId, newState)
+
+        // 持久化到 settings.json
+        try {
+            let settings: Record<string, unknown> = {}
+            if (fs.existsSync(ctx.settingsPath)) {
+                settings = JSON.parse(fs.readFileSync(ctx.settingsPath, 'utf8'))
+            }
+            const disabledPlugins: string[] = Array.isArray(settings.disabledPlugins)
+                ? settings.disabledPlugins as string[]
+                : []
+            if (enabled) {
+                settings.disabledPlugins = disabledPlugins.filter(id => id !== pluginId)
+            } else {
+                if (!disabledPlugins.includes(pluginId)) {
+                    disabledPlugins.push(pluginId)
+                }
+                settings.disabledPlugins = disabledPlugins
+            }
+            fs.writeFileSync(ctx.settingsPath, JSON.stringify(settings, null, 2), 'utf8')
+        } catch (e) {
+            console.error('保存插件状态失败:', e)
+        }
+
+        res.json({
+            status: 'success',
+            pluginId,
+            state: newState,
+        })
     })
 
     // API: 获取所有插件列表

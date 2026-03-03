@@ -59,7 +59,7 @@ export interface Plugin {
   hooks: string[]
   permissions: string[]
   priority: number
-  state: 'running' | 'stopped' | 'error'
+  state: 'running' | 'stopped' | 'error' | 'disabled' | 'ready' | 'registered'
   stats: Record<string, unknown> | null
 }
 

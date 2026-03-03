@@ -1,4 +1,4 @@
-import { OnModeGate, OnModeGateOptions, OnModeGateStats } from './types';
+import { OnModeGate, OnModeGateOptions, OnModeGateStats, PluginMode } from './types';
 
 export function parseHostAllowlist(text: string): Set<string> {
     const set = new Set<string>();
@@ -11,7 +11,7 @@ export function parseHostAllowlist(text: string): Set<string> {
 }
 
 export function createOnModeGate(options: OnModeGateOptions = {}): OnModeGate {
-    const mode = options.mode || 'off';
+    let mode: PluginMode = (options.mode as PluginMode) || 'off';
     const allowlist = options.allowlist || new Set<string>();
     const stats: OnModeGateStats = {
         checked: 0,
@@ -54,6 +54,9 @@ export function createOnModeGate(options: OnModeGateOptions = {}): OnModeGate {
             stats.skippedByAllowlist = 0;
             stats.skippedByMode = 0;
             stats.invalidSource = 0;
+        },
+        setMode(newMode: PluginMode): void {
+            mode = newMode;
         },
     };
 }

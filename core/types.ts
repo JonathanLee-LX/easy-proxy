@@ -94,6 +94,7 @@ export interface PipelineOptions {
 
 export interface Pipeline {
     mode: PluginMode;
+    setMode(mode: PluginMode): void;
     evaluateRequest(request: Request, initialTarget: string): Promise<PipelineDecision>;
     execute(input: PipelineExecuteInput): Promise<PipelineResult>;
     pluginManager: any;
@@ -220,6 +221,7 @@ export interface OnModeGate {
     shouldApply(source: string): boolean;
     getStats(): OnModeGateStats;
     reset(): void;
+    setMode(mode: PluginMode): void;
 }
 
 export interface MockGateOptions {
