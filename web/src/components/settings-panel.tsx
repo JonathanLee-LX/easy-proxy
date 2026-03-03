@@ -65,43 +65,52 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [diagnostics, setDiagnostics] = useState<any>(null)
   const [diagnosing, setDiagnosing] = useState(false)
 
-  // 字体大小偏好
-  const [fontSize, setFontSize] = useState<string>('medium')
+  // 缩放比例偏好
+  const [zoomScale, setZoomScale] = useState<string>('100')
 
-  const fontSizeOptions = [
-    { value: 'small', label: '小', size: '12px' },
-    { value: 'medium', label: '中', size: '14px' },
-    { value: 'large', label: '大', size: '16px' },
+  const zoomScaleOptions = [
+    { value: '75', label: '75%', scale: 0.75 },
+    { value: '90', label: '90%', scale: 0.9 },
+    { value: '100', label: '100%', scale: 1 },
+    { value: '110', label: '110%', scale: 1.1 },
+    { value: '125', label: '125%', scale: 1.25 },
+    { value: '150', label: '150%', scale: 1.5 },
   ]
 
-  // 初始化字体大小
+  // 初始化缩放比例
   useEffect(() => {
     import('@/lib/settings-store').then(({ loadSettings }) => {
       loadSettings().then(settings => {
-        const saved = settings.fontSize || 'medium'
-        setFontSize(saved)
-        const size = fontSizeOptions.find(o => o.value === saved)?.size || '14px'
-        document.documentElement.style.setProperty('--font-size-base', size)
+        const saved = settings.fontSize || '100'
+        setZoomScale(saved)
+        applyZoom(saved)
       }).catch(() => {
-        const saved = 'medium'
-        setFontSize(saved)
-        document.documentElement.style.setProperty('--font-size-base', '14px')
+        setZoomScale('100')
+        applyZoom('100')
       })
     })
   }, [])
 
-  // 应用字体大小
-  useEffect(() => {
+  // 应用缩放比例
+  const applyZoom = (scale: string) => {
     if (typeof window !== 'undefined') {
-      const size = fontSizeOptions.find(o => o.value === fontSize)?.size || '14px'
-      document.documentElement.style.setProperty('--font-size-base', size)
-      
-      // 保存到服务器
-      import('@/lib/settings-store').then(({ updateSettings }) => {
-        updateSettings({ fontSize }).catch(console.error)
-      })
+      const scaleValue = parseInt(scale) / 100
+      // 应用到 #root 元素（React 挂载点），这样 Sheet 等 Portal 组件也能被缩放
+      const rootEl = document.getElementById('root')
+      if (rootEl) {
+        rootEl.style.zoom = String(scaleValue)
+      }
     }
-  }, [fontSize])
+  }
+
+  useEffect(() => {
+    applyZoom(zoomScale)
+
+    // 保存到服务器
+    import('@/lib/settings-store').then(({ updateSettings }) => {
+      updateSettings({ fontSize: zoomScale }).catch(console.error)
+    })
+  }, [zoomScale])
 
   useEffect(() => {
     if (open) {
@@ -350,17 +359,17 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
               </Select>
             </div>
 
-            {/* 字体大小 */}
+            {/* 缩放比例 */}
             <div className="space-y-2">
-              <Label className="text-sm">字体大小</Label>
-              <Select value={fontSize} onValueChange={setFontSize}>
+              <Label className="text-sm">缩放比例</Label>
+              <Select value={zoomScale} onValueChange={setZoomScale}>
                 <SelectTrigger>
-                  <SelectValue placeholder="选择字体大小" />
+                  <SelectValue placeholder="选择缩放比例" />
                 </SelectTrigger>
                 <SelectContent>
-                  {fontSizeOptions.map((option) => (
+                  {zoomScaleOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
-                      {option.label} ({option.size})
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

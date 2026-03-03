@@ -14,6 +14,7 @@ type ThemeProviderState = {
   resolvedTheme: "light" | "dark"
   setTheme: (theme: Theme) => void
   toggleTheme: () => void
+  setZoom: (zoom: number) => void
 }
 
 const ThemeProviderContext = React.createContext<ThemeProviderState | undefined>(undefined)
@@ -90,14 +91,22 @@ export function ThemeProvider({
     })
   }, [])
 
+  // 用于外部调用的缩放函数
+  const setZoom = React.useCallback((zoom: number) => {
+    // 使用 transform 替代 zoom，避免影响 Radix UI 下拉定位
+    const root = window.document.documentElement
+    root.style.setProperty('--app-scale', String(zoom))
+  }, [])
+
   const value = React.useMemo(
     () => ({
       theme,
       resolvedTheme,
       setTheme,
       toggleTheme,
+      setZoom,
     }),
-    [theme, resolvedTheme, setTheme, toggleTheme]
+    [theme, resolvedTheme, setTheme, toggleTheme, setZoom]
   )
 
   return (

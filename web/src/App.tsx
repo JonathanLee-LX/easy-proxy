@@ -85,7 +85,7 @@ function App() {
   // 页面加载时获取插件列表（仅用于显示第三方插件）
   useEffect(() => {
     store.fetchPlugins()
-  }, [])
+  }, [store.fetchPlugins])
 
   return (
     <div className="min-h-screen bg-background">
