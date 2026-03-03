@@ -57,9 +57,8 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
   const [newModelForm, setNewModelForm] = useState<Partial<AIModel> | null>(null)
 
   // 配置文件状态
-  const [configPath, setConfigPath] = useState('')
-  const [rulesFilePath, setRulesFilePath] = useState('')
   const [mocksFilePath, setMocksFilePath] = useState('')
+  const [ruleFiles, setRuleFiles] = useState<Array<{name: string; enabled: boolean; ruleCount: number}>>([])
   
   // 配置诊断状态
   const [diagnostics, setDiagnostics] = useState<any>(null)
@@ -114,11 +113,9 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
 
   useEffect(() => {
     if (open) {
-      // 从设置存储中加载 AI 配置和文件路径
       import('@/lib/settings-store').then(({ loadSettings }) => {
         loadSettings().then(settings => {
           setAiConfig(settings.aiConfig)
-          setRulesFilePath(settings.rulesFilePath || '')
           setMocksFilePath(settings.mocksFilePath || '')
         }).catch(() => {
           setAiConfig(getAIConfig())
@@ -126,10 +123,8 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
       })
       setAiTestResult(null)
       setAiTestMessage('')
-      // 获取当前配置文件路径
-      fetch('/api/config-path').then(res => res.json()).then(data => {
-        if (data.path) setConfigPath(data.path)
-        if (data.mocksPath) setMocksFilePath(data.mocksPath)
+      fetch('/api/rule-files').then(res => res.json()).then(data => {
+        if (Array.isArray(data)) setRuleFiles(data)
       }).catch(() => {})
     }
   }, [open])
@@ -398,39 +393,27 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                 <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
                   <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                   <span className="text-xs font-mono truncate flex-1">
-                    {configPath || '加载中...'}
+                    ~/.ep/route-rules/
                   </span>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="rulesPath" className="text-xs text-muted-foreground">
-                    自定义路由规则文件路径（留空使用默认）
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="rulesPath"
-                      value={rulesFilePath}
-                      onChange={(e) => setRulesFilePath(e.target.value)}
-                      placeholder="如: /path/to/my-rules.eprc"
-                      className="flex-1 h-8 text-sm font-mono"
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        const { updateSettings } = await import('@/lib/settings-store')
-                        await updateSettings({ rulesFilePath })
-                        handleRefreshConfig()
-                      }}
-                      className="h-8"
-                    >
-                      <Save className="h-3 w-3 mr-1" />
-                      应用
-                    </Button>
+                {ruleFiles.length > 0 ? (
+                  <div className="space-y-1">
+                    {ruleFiles.map((rf) => (
+                      <div key={rf.name} className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border">
+                        <Badge variant={rf.enabled ? 'default' : 'secondary'} className="text-[10px]">
+                          {rf.enabled ? '已启用' : '未启用'}
+                        </Badge>
+                        <span className="flex-1 truncate text-xs">{rf.name}.txt</span>
+                        <span className="text-xs text-muted-foreground">{rf.ruleCount} 条规则</span>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    支持 .eprc、.json、.js 格式的配置文件
-                  </p>
-                </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">暂无规则文件</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  规则文件存放于 ~/.ep/route-rules/ 目录，纯文本格式。在"路由规则"页面管理。
+                </p>
               </div>
             </div>
 
@@ -565,6 +548,8 @@ export function SettingsPanel({ open, onOpenChange }: SettingsPanelProps) {
                             </div>
                             {check.details && (
                               <div className="text-xs text-muted-foreground mt-1">
+                                {check.details.totalFiles !== undefined && `${check.details.enabledFiles}/${check.details.totalFiles} 个文件已启用`}
+                                {check.details.totalRules !== undefined && ` · ${check.details.totalRules} 条规则`}
                                 {check.details.rules !== undefined && `${check.details.rules} 条规则`}
                                 {check.details.total !== undefined && `${check.details.total} 条规则 (${check.details.enabled} 已启用)`}
                                 {check.details.size !== undefined && ` · ${check.details.size} bytes`}

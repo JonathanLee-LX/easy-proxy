@@ -63,8 +63,8 @@ export interface Plugin {
   stats: Record<string, unknown> | null
 }
 
-export interface RuleSet {
-  id: number
+export interface RuleFile {
   name: string
-  rules: RuleItem[]
+  enabled: boolean
+  ruleCount: number
 }

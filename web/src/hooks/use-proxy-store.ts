@@ -6,19 +6,15 @@ import { usePlugins } from './use-plugins'
 
 /**
  * Composed store hook that combines all domain-specific hooks
- * This provides a single interface for components to access all proxy functionality
  */
 export function useProxyStore() {
-  // Max records configuration
   const [maxRecords, setMaxRecords] = useState(1000)
 
-  // Compose domain-specific hooks
   const logs = useLogs(maxRecords)
   const rules = useRules()
   const mocks = useMocks()
   const plugins = usePlugins()
 
-  // Return combined interface
   return {
     // Logs
     records: logs.records,
@@ -35,14 +31,14 @@ export function useProxyStore() {
     // Rules
     rules: rules.rules,
     setRules: rules.setRules,
-    fetchRules: rules.fetchRules,
-    saveRules: rules.saveRules,
-    loadRulesFromFile: rules.loadRulesFromFile,
-    ruleSets: rules.ruleSets,
-    fetchRuleSets: rules.fetchRuleSets,
-    saveRuleSet: rules.saveRuleSet,
-    switchRuleSet: rules.switchRuleSet,
-    deleteRuleSet: rules.deleteRuleSet,
+    ruleFiles: rules.ruleFiles,
+    activeFileName: rules.activeFileName,
+    fetchRuleFiles: rules.fetchRuleFiles,
+    fetchFileContent: rules.fetchFileContent,
+    saveFileContent: rules.saveFileContent,
+    createRuleFile: rules.createRuleFile,
+    toggleRuleFile: rules.toggleRuleFile,
+    deleteRuleFile: rules.deleteRuleFile,
 
     // Mocks
     mockRules: mocks.mockRules,
@@ -64,4 +60,3 @@ export function useProxyStore() {
     unloadThirdPartyPlugin: plugins.unloadThirdPartyPlugin,
   }
 }
-

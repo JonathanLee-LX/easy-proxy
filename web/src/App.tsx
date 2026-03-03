@@ -147,14 +147,14 @@ function App() {
               <RuleConfig
                 rules={store.rules}
                 setRules={store.setRules}
-                fetchRules={store.fetchRules}
-                saveRules={store.saveRules}
-                loadRulesFromFile={store.loadRulesFromFile}
-                ruleSets={store.ruleSets}
-                fetchRuleSets={store.fetchRuleSets}
-                saveRuleSet={store.saveRuleSet}
-                switchRuleSet={store.switchRuleSet}
-                deleteRuleSet={store.deleteRuleSet}
+                ruleFiles={store.ruleFiles}
+                activeFileName={store.activeFileName}
+                fetchRuleFiles={store.fetchRuleFiles}
+                fetchFileContent={store.fetchFileContent}
+                saveFileContent={store.saveFileContent}
+                createRuleFile={store.createRuleFile}
+                toggleRuleFile={store.toggleRuleFile}
+                deleteRuleFile={store.deleteRuleFile}
               />
             </div>
           </TabsContent>

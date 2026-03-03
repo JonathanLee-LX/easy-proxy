@@ -10,7 +10,6 @@ export interface SystemSettings {
   theme: 'light' | 'dark' | 'system'
   fontSize: string
   aiConfig: AIConfig
-  rulesFilePath?: string
   mocksFilePath?: string
 }
 
@@ -25,7 +24,6 @@ const DEFAULT_SETTINGS: SystemSettings = {
     model: '',
     models: []
   },
-  rulesFilePath: '',
   mocksFilePath: ''
 }
 

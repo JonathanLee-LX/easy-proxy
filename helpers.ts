@@ -1,18 +1,8 @@
 import { getPortPromise, setBasePort, setHighestPort } from 'portfinder';
 import * as os from 'os';
 import * as path from 'path';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync } from 'fs';
 import * as http from 'http';
-
-export interface ConfigCandidate {
-    path: string;
-    format: 'json' | 'js' | 'eprc';
-}
-
-export interface ConfigResult {
-    path: string;
-    format: 'json' | 'js' | 'eprc';
-}
 
 export type RuleMap = Record<string, string>;
 
@@ -77,17 +67,7 @@ export async function getFreePort(): Promise<number> {
     return getPortPromise();
 }
 
-export const CONFIG_DIR = '.epconfig';
-export const DEFAULT_CONFIG_PATH = path.resolve(os.homedir(), '.ep', '.eprc');
-
-function getConfigCandidates(configDir: string, env: string): ConfigCandidate[] {
-    const prefix = path.join(configDir, `.${env}`);
-    return [
-        { path: prefix + '.json', format: 'json' },
-        { path: prefix + '.js', format: 'js' },
-        { path: prefix, format: 'eprc' }
-    ];
-}
+export const ROUTE_RULES_DIR = path.resolve(os.homedir(), '.ep', 'route-rules');
 
 const IP_PATTERN = /^\d+\.\d+\.\d+\.\d+(:\d+)?$/;
 const URL_PATTERN = /^https?:\/\//;
@@ -150,64 +130,12 @@ export function ruleMapToEprcText(ruleMap: RuleMap): string {
         .join('\n');
 }
 
-export function resolveConfigPath(): ConfigResult | null {
-    const cwd = process.cwd();
-    const configDir = path.join(cwd, CONFIG_DIR);
-    if (!existsSync(configDir)) return null;
-
-    const env = process.env.EP_ENV || 'eprc';
-    const candidates = getConfigCandidates(configDir, env);
-    for (const { path: filePath, format } of candidates) {
-        if (existsSync(filePath)) {
-            return { path: filePath, format };
-        }
-    }
-    return null;
-}
-
-export function loadConfigFromFile(configPath: string, format: 'eprc' | 'json' | 'js'): RuleMap {
+export function loadRulesFromTextFile(filePath: string): RuleMap {
     try {
-        if (format === 'eprc') {
-            const content = readFileSync(configPath, 'utf8');
-            return parseEprc(content);
-        }
-        if (format === 'json') {
-            const content = readFileSync(configPath, 'utf8');
-            const data = JSON.parse(content);
-            const rules = data.rules || data;
-            const result: RuleMap = {};
-            for (const [key, value] of Object.entries(rules)) {
-                if (Array.isArray(value)) {
-                    for (const domain of value) {
-                        result[domain as string] = key;
-                    }
-                } else if (typeof value === 'string') {
-                    const trimmedValue = value.trim();
-                    if (IP_PATTERN.test(trimmedValue) || URL_PATTERN.test(trimmedValue) || FILE_PATTERN.test(trimmedValue)) {
-                        result[key] = value;
-                    } else {
-                        const domains = trimmedValue.split(/\s+/).filter(Boolean);
-                        for (const domain of domains) {
-                            result[domain] = key;
-                        }
-                    }
-                }
-            }
-            return result;
-        }
-        if (format === 'js') {
-            const mod = require(configPath);
-            const rules = mod.rules ?? mod.default?.rules ?? mod;
-            return typeof rules === 'object' && rules !== null ? rules : {};
-        }
+        const content = readFileSync(filePath, 'utf8');
+        return parseEprc(content);
     } catch (err: any) {
-        console.error('加载配置失败:', configPath, err.message);
+        console.error('加载规则文件失败:', filePath, err.message);
     }
     return {};
-}
-
-/** @deprecated 使用 loadConfigFromFile */
-export function loadConfig(filePath: string): RuleMap {
-    const content = readFileSync(filePath, 'utf8');
-    return parseEprc(content);
 }

@@ -1,151 +1,117 @@
 import { useState, useCallback } from 'react'
-import type { RuleItem, RuleSet } from '@/types'
+import type { RuleItem, RuleFile } from '@/types'
 import { parseEprcRules, rulesToEprc } from '@/utils/eprc-parser'
 
-/**
- * Hook for managing proxy rules and rule sets
- */
 export function useRules() {
   const [rules, setRules] = useState<RuleItem[]>([])
-  const [ruleSets, setRuleSets] = useState<RuleSet[]>([])
+  const [ruleFiles, setRuleFiles] = useState<RuleFile[]>([])
+  const [activeFileName, setActiveFileName] = useState<string | null>(null)
 
-  // Load rules
-  const fetchRules = useCallback(async () => {
+  const fetchRuleFiles = useCallback(async () => {
     try {
-      const res = await fetch('/api/rules')
+      const res = await fetch('/api/rule-files')
+      const data = await res.json()
+      const files: RuleFile[] = Array.isArray(data) ? data : []
+      setRuleFiles(files)
+      return files
+    } catch (err) {
+      console.error('Failed to fetch rule files:', err)
+      return []
+    }
+  }, [])
+
+  const fetchFileContent = useCallback(async (name: string) => {
+    try {
+      const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}/content`)
       const text = await res.text()
       setRules(parseEprcRules(text))
+      setActiveFileName(name)
     } catch (err) {
-      console.error('Failed to fetch rules:', err)
+      console.error('Failed to fetch file content:', err)
     }
   }, [])
 
-  // Save rules
-  const saveRules = useCallback(async (items: RuleItem[]) => {
+  const saveFileContent = useCallback(async (name: string, items: RuleItem[]): Promise<boolean> => {
     try {
-      const res = await fetch('/api/rules', {
+      const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}/content`, {
         method: 'PUT',
-        body: rulesToEprc(items),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: rulesToEprc(items) }),
       })
-      const json = await res.json()
-      if (json.status === 'success') {
-        return true
-      }
-      return false
+      const data = await res.json()
+      return data.status === 'success'
     } catch (err) {
-      console.error('Failed to save rules:', err)
+      console.error('Failed to save file content:', err)
       return false
     }
   }, [])
 
-  // Load rules from file (支持文件路径或文件内容)
-  const loadRulesFromFile = useCallback(async (filePath: string, fileContent?: string): Promise<{ success: boolean; error?: string }> => {
+  const createRuleFile = useCallback(async (name: string, content = ''): Promise<{ success: boolean; error?: string }> => {
     try {
-      // 如果提供了文件内容，发送到后端
-      if (fileContent !== undefined) {
-        const res = await fetch('/api/rules', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath, content: fileContent }),
-        })
-        const json = await res.json()
-        if (json.status === 'success') {
-          await fetchRules()
-          return { success: true }
-        }
-        return { success: false, error: json.error }
-      }
-
-      // 旧模式：通过文件路径加载
-      const res = await fetch('/api/rules', {
+      const res = await fetch('/api/rule-files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath }),
+        body: JSON.stringify({ name, content, enabled: true }),
       })
-      const json = await res.json()
-      if (json.status === 'success') {
-        await fetchRules()
+      const data = await res.json()
+      if (data.status === 'success') {
+        await fetchRuleFiles()
         return { success: true }
       }
-      return { success: false, error: json.error }
+      return { success: false, error: data.error }
     } catch (err) {
-      console.error('Failed to load rules from file:', err)
       return { success: false, error: String(err) }
     }
-  }, [fetchRules])
+  }, [fetchRuleFiles])
 
-  // Rule sets management
-  const fetchRuleSets = useCallback(async () => {
+  const toggleRuleFile = useCallback(async (name: string, enabled: boolean): Promise<boolean> => {
     try {
-      const res = await fetch('/api/rulesets')
-      const data = await res.json()
-      setRuleSets(Array.isArray(data) ? data : [])
-    } catch (err) {
-      console.error('Failed to fetch rule sets:', err)
-    }
-  }, [])
-
-  const saveRuleSet = useCallback(async (name: string, rules: RuleItem[]) => {
-    try {
-      const res = await fetch('/api/rulesets', {
-        method: 'POST',
+      const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, rules }),
+        body: JSON.stringify({ enabled }),
       })
       const data = await res.json()
       if (data.status === 'success') {
-        setRuleSets((prev) => [...prev, data.ruleSet])
-        return data.ruleSet as RuleSet
-      }
-      return null
-    } catch (err) {
-      console.error('Failed to save rule set:', err)
-      return null
-    }
-  }, [])
-
-  const switchRuleSet = useCallback(async (id: number) => {
-    try {
-      const res = await fetch(`/api/rulesets/${id}/switch`, {
-        method: 'POST',
-      })
-      const data = await res.json()
-      if (data.status === 'success') {
-        await fetchRules()
+        await fetchRuleFiles()
         return true
       }
       return false
     } catch (err) {
-      console.error('Failed to switch rule set:', err)
+      console.error('Failed to toggle rule file:', err)
       return false
     }
-  }, [fetchRules])
+  }, [fetchRuleFiles])
 
-  const deleteRuleSet = useCallback(async (id: number) => {
+  const deleteRuleFile = useCallback(async (name: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/rulesets/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/rule-files/${encodeURIComponent(name)}`, { method: 'DELETE' })
       const data = await res.json()
       if (data.status === 'success') {
-        setRuleSets((prev) => prev.filter((rs) => rs.id !== id))
+        if (activeFileName === name) {
+          setActiveFileName(null)
+          setRules([])
+        }
+        await fetchRuleFiles()
         return true
       }
       return false
     } catch (err) {
-      console.error('Failed to delete rule set:', err)
+      console.error('Failed to delete rule file:', err)
       return false
     }
-  }, [])
+  }, [fetchRuleFiles, activeFileName])
 
   return {
     rules,
     setRules,
-    fetchRules,
-    saveRules,
-    loadRulesFromFile,
-    ruleSets,
-    fetchRuleSets,
-    saveRuleSet,
-    switchRuleSet,
-    deleteRuleSet,
+    ruleFiles,
+    activeFileName,
+    fetchRuleFiles,
+    fetchFileContent,
+    saveFileContent,
+    createRuleFile,
+    toggleRuleFile,
+    deleteRuleFile,
   }
 }

@@ -7,13 +7,13 @@ import { registerLogsRoutes } from './logs'
 import { registerMocksRoutes } from './mocks'
 import { registerPipelineRoutes } from './pipeline'
 import { registerRefactorRoutes } from './refactor'
+import { registerRuleFilesRoutes } from './rule-files'
 
 // RuleMap type from helpers
 export type RuleMap = Record<string, string>;
 
 // Server context interface
 export interface ServerContext {
-    currentConfig: { path: string; format: string } | null
     currentMocksPath: string | null
     ruleMap: RuleMap
     proxyRecordArr: Array<{
@@ -94,9 +94,8 @@ export interface ServerContext {
     saveMockRules: () => void
     reloadCustomPlugins: () => Promise<unknown[]>
     logRuleMap: () => void
+    reloadAllRuleFiles: () => void
     broadcastToAllClients: (data: unknown) => void
-    // Additional helper functions
-    loadCustomPathsFromSettings: () => { rulesFilePath: string | null; mocksFilePath: string | null }
     getMockFilePath: () => string
     performConfigDiagnostics: () => {
         status: string
@@ -127,6 +126,7 @@ export function createApp(serverContext: ServerContext): Application {
     registerMocksRoutes(app, serverContext)
     registerPipelineRoutes(app, serverContext)
     registerRefactorRoutes(app, serverContext)
+    registerRuleFilesRoutes(app, serverContext)
 
     // Export helper references for backward compatibility
     ;(app as unknown as { serverContext: ServerContext }).serverContext = serverContext

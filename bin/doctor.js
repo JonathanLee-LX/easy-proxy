@@ -11,7 +11,7 @@ const chalk = require('chalk')
 
 const epDir = path.resolve(os.homedir(), '.ep')
 const settingsPath = path.resolve(epDir, 'settings.json')
-const defaultRulesPath = path.resolve(epDir, '.eprc')
+const routeRulesDir = path.resolve(epDir, 'route-rules')
 const defaultMocksPath = path.resolve(epDir, 'mocks.json')
 const certDir = path.resolve(epDir, 'ca')
 const rootCACrt = path.resolve(certDir, 'rootCA.crt')
@@ -130,56 +130,48 @@ function checkSettings() {
 }
 
 /**
- * 检查路由规则文件
+ * 检查路由规则目录
  */
 function checkRulesFile(settings) {
   printSection('3. 路由规则文件检查')
-  
-  let rulesPath = defaultRulesPath
-  
-  // 检查自定义路径
-  if (settings && settings.rulesFilePath) {
-    rulesPath = settings.rulesFilePath
-    printInfo(`使用自定义路径: ${rulesPath}`)
-  } else {
-    printInfo(`使用默认路径: ${rulesPath}`)
-  }
-  
-  if (!fs.existsSync(rulesPath)) {
-    printWarning('路由规则文件不存在')
-    printInfo('可以手动创建或通过 Web 界面编辑')
+
+  printInfo(`规则目录: ${routeRulesDir}`)
+
+  if (!fs.existsSync(routeRulesDir)) {
+    printWarning('路由规则目录不存在')
+    printInfo('首次启动时会自动创建，并生成默认规则文件')
     return
   }
-  
-  try {
-    const content = fs.readFileSync(rulesPath, 'utf8')
-    const lines = content.split('\n').filter(line => {
-      const trimmed = line.trim()
-      return trimmed && !trimmed.startsWith('#')
-    })
-    
-    printSuccess(`路由规则文件: ${rulesPath}`)
-    printInfo(`文件大小: ${content.length} bytes`)
-    printInfo(`规则数量: ${lines.length} 条`)
-    
-    // 简单验证规则格式
-    let validRules = 0
-    lines.forEach((line, index) => {
-      const trimmed = line.replace(/^\/\//, '').trim()
-      const parts = trimmed.split(/\s+/)
-      if (parts.length >= 2) {
-        validRules++
-      } else if (trimmed) {
-        printWarning(`第 ${index + 1} 行格式可能有误: ${line.substring(0, 50)}`)
-      }
-    })
-    
-    if (validRules > 0) {
-      printSuccess(`有效规则: ${validRules} 条`)
+
+  const txtFiles = fs.readdirSync(routeRulesDir).filter(f => f.endsWith('.txt'))
+  printSuccess(`规则目录存在，包含 ${txtFiles.length} 个规则文件`)
+
+  // 检查 settings 中的 activeRuleFiles
+  const activeNames = (settings && Array.isArray(settings.activeRuleFiles)) ? settings.activeRuleFiles : []
+  printInfo(`已启用: ${activeNames.length} 个文件`)
+
+  let totalRules = 0
+  txtFiles.forEach(file => {
+    const filePath = path.join(routeRulesDir, file)
+    const name = file.replace(/\.txt$/, '')
+    const isActive = activeNames.includes(name)
+
+    try {
+      const content = fs.readFileSync(filePath, 'utf8')
+      const lines = content.split('\n').filter(line => {
+        const trimmed = line.trim()
+        return trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('//')
+      })
+      const validRules = lines.filter(line => line.trim().split(/\s+/).length >= 2).length
+      totalRules += validRules
+      printSuccess(`  ${isActive ? '●' : '○'} ${name} (${validRules} 条规则)`)
+    } catch (error) {
+      printError(`  读取 ${file} 失败: ${error.message}`)
     }
-    
-  } catch (error) {
-    printError(`读取路由规则文件失败: ${error.message}`)
+  })
+
+  if (totalRules > 0) {
+    printSuccess(`有效规则总数: ${totalRules} 条`)
   }
 }
 
@@ -298,7 +290,7 @@ function checkPermissions() {
   const checkPaths = [
     { path: epDir, name: '配置目录' },
     { path: settingsPath, name: '系统设置文件' },
-    { path: defaultRulesPath, name: '路由规则文件' },
+    { path: routeRulesDir, name: '路由规则目录' },
     { path: defaultMocksPath, name: 'Mock 规则文件' },
   ]
   

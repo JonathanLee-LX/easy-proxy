@@ -21,7 +21,7 @@ const settingsPath = path.resolve(epDir, 'settings.json')
 
 const { crtMgr, ensureRootCA } = require('./dist/cert')
 const { WebSocket, WebSocketServer } = require('ws')
-const { copyHeaders, resolveTargetUrl, getFreePort, loadConfigFromFile, resolveConfigPath, ruleMapToEprcText, DEFAULT_CONFIG_PATH } = require('./dist/helpers')
+const { copyHeaders, resolveTargetUrl, getFreePort, ruleMapToEprcText, ROUTE_RULES_DIR } = require('./dist/helpers')
 const { PluginManager, HookDispatcher } = require('./dist/core/plugin-runtime')
 const { bootstrapPlugins } = require('./dist/core/plugin-bootstrap')
 const { createPipeline, normalizeMode } = require('./dist/core/pipeline')
@@ -76,7 +76,6 @@ const requestPipeline = createPipeline({
 })
 
 let ruleMap = {}
-let currentConfig = null // { path, format } 当前生效的配置
 let currentMocksPath = null // 当前 Mock 配置文件路径
 
 const MAX_RECORD_SIZE = process.env.MAX_RECORD_SIZE ? parseInt(process.env.MAX_RECORD_SIZE) : 10000
@@ -99,10 +98,10 @@ const pipelineGate = createPipelineGate({
 
 // ===== Express API Server =====
 const { createApp } = require('./dist/server/index')
+const { ensureRouteRules, mergeActiveRules } = require('./dist/server/rule-files')
 
 // Build server context
 const serverContext = {
-    currentConfig,
     currentMocksPath,
     ruleMap,
     proxyRecordArr,
@@ -123,6 +122,7 @@ const serverContext = {
     saveMockRules: () => saveMockRules(),
     reloadCustomPlugins: () => reloadCustomPlugins(),
     logRuleMap: () => logRuleMap(),
+    reloadAllRuleFiles: () => reloadAllRuleFiles(),
     broadcastToAllClients: (data) => {
         if (typeof localWSServer !== 'undefined') {
             localWSServer.clients.forEach(client => {
@@ -132,7 +132,6 @@ const serverContext = {
             })
         }
     },
-    loadCustomPathsFromSettings: () => loadCustomPathsFromSettings(),
     getMockFilePath: () => getMockFilePath(),
     performConfigDiagnostics: () => performConfigDiagnostics(),
     loadSettingsSync: () => loadSettingsSync(),
@@ -142,21 +141,20 @@ const serverContext = {
 const expressApp = createApp(serverContext)
 
 /**
- * 从 settings.json 加载自定义配置文件路径
+ * 从 settings.json 加载自定义配置文件路径 (仅 mocks)
  */
 function loadCustomPathsFromSettings() {
     try {
         if (fs.existsSync(settingsPath)) {
             const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
             return {
-                rulesFilePath: settings.rulesFilePath || null,
-                mocksFilePath: settings.mocksFilePath || null
+                mocksFilePath: settings.mocksFilePath || null,
             }
         }
     } catch (error) {
         console.error('加载自定义配置路径失败:', error)
     }
-    return { rulesFilePath: null, mocksFilePath: null }
+    return { mocksFilePath: null }
 }
 
 /**
@@ -220,35 +218,27 @@ function performConfigDiagnostics() {
         diagnostics.warnings.push('系统设置文件不存在，将使用默认设置')
     }
     
-    // 检查路由规则文件
-    const customPaths = loadCustomPathsFromSettings()
-    const rulesPath = customPaths.rulesFilePath || (currentConfig?.path || defaultRulesPath)
-    
-    if (fs.existsSync(rulesPath)) {
-        try {
-            const content = fs.readFileSync(rulesPath, 'utf8')
-            const lines = content.split('\n').filter(line => {
-                const trimmed = line.trim()
-                return trimmed && !trimmed.startsWith('#')
-            })
-            diagnostics.checks.push({
-                name: '路由规则文件',
-                status: 'ok',
-                path: rulesPath,
-                details: {
-                    rules: lines.length,
-                    size: content.length
-                }
-            })
-        } catch (error) {
-            diagnostics.errors.push('路由规则文件读取失败: ' + error.message)
-            diagnostics.status = 'error'
-        }
+    // 检查路由规则目录
+    const rulesDir = path.join(epDir, 'route-rules')
+    if (fs.existsSync(rulesDir)) {
+        const { listRuleFiles: _listFiles } = require('./dist/server/rule-files')
+        const files = _listFiles(serverContext)
+        diagnostics.checks.push({
+            name: '路由规则目录',
+            status: 'ok',
+            path: rulesDir,
+            details: {
+                totalFiles: files.length,
+                enabledFiles: files.filter(f => f.enabled).length,
+                totalRules: Object.keys(ruleMap).length,
+            }
+        })
     } else {
-        diagnostics.warnings.push('路由规则文件不存在: ' + rulesPath)
+        diagnostics.warnings.push('路由规则目录不存在: ' + rulesDir)
     }
-    
+
     // 检查 Mock 规则文件
+    const customPaths = loadCustomPathsFromSettings()
     const mocksPath = customPaths.mocksFilePath || getMockFilePath()
     
     if (fs.existsSync(mocksPath)) {
@@ -992,67 +982,38 @@ function handleMapLocalRequest(req, res, source, fileUrl) {
 }
 
 /**
- * 加载配置并启动文件监听
+ * 从所有已启用的规则文件重新加载并合并规则
  */
-function loadAndWatchConfig(configPath, format) {
-    ruleMap = loadConfigFromFile(configPath, format)
-    currentConfig = { path: configPath, format }
+function reloadAllRuleFiles() {
+    ruleMap = mergeActiveRules(serverContext)
+    serverContext.ruleMap = ruleMap
     logRuleMap()
-
-    if (format !== 'js') {
-        const watcher = chokidar.watch(configPath)
-        watcher.on('change', (changedPath) => {
-            log(chalk.green('config file changed.'))
-            ruleMap = loadConfigFromFile(changedPath, format)
-            logRuleMap()
-        })
-    }
+    serverContext.broadcastToAllClients({
+        type: 'rulesUpdated',
+        rules: Object.entries(ruleMap).map(([rule, target]) => ({ rule, target, enabled: true }))
+    })
 }
 
 /**
- * 解析并加载配置，优先使用当前工作目录的 .eprc / ep.config.json / ep.config.js
- * 或从 settings.json 读取自定义路径
+ * 初始化路由规则目录并加载规则
  */
-function ensureConfigFile() {
-    // 首先检查 settings.json 中是否有自定义路径
-    const customPaths = loadCustomPathsFromSettings()
-    
-    if (customPaths.rulesFilePath && fs.existsSync(customPaths.rulesFilePath)) {
-        // 使用自定义路由规则文件
-        const ext = path.extname(customPaths.rulesFilePath)
-        let format = 'eprc'
-        if (ext === '.json') format = 'json'
-        else if (ext === '.js') format = 'js'
-        
-        loadAndWatchConfig(customPaths.rulesFilePath, format)
-        proxyDebug('使用自定义路由配置:', customPaths.rulesFilePath)
-        return
-    }
-    
-    // 检查项目目录配置
-    const resolved = resolveConfigPath()
-    if (resolved) {
-        loadAndWatchConfig(resolved.path, resolved.format)
-        proxyDebug('使用项目配置:', resolved.path)
-        return
-    }
+function initRouteRules() {
+    const activeNames = ensureRouteRules(serverContext)
+    ruleMap = mergeActiveRules(serverContext)
+    serverContext.ruleMap = ruleMap
+    logRuleMap()
 
-    // 使用默认配置
-    const configPath = DEFAULT_CONFIG_PATH
-    const configDir = path.dirname(configPath)
-    if (!fs.existsSync(configDir)) {
-        fs.mkdirSync(configDir, { recursive: true })
-        log('create config directory:', configDir)
-    }
-    if (!fs.existsSync(configPath)) {
-        fs.writeFileSync(configPath, '', 'utf8')
-        log('create config file:', configPath)
-    }
-    loadAndWatchConfig(configPath, 'eprc')
-    proxyDebug('使用默认配置:', configPath)
+    // 监听规则文件目录变更
+    const rulesDir = path.join(epDir, 'route-rules')
+    const watcher = chokidar.watch(rulesDir, { ignoreInitial: true })
+    watcher.on('change', (changedPath) => {
+        log(chalk.green(`route-rules file changed: ${path.basename(changedPath)}`))
+        reloadAllRuleFiles()
+    })
+    proxyDebug('已加载规则文件:', activeNames.join(', ') || '(无)')
 }
 
-ensureConfigFile()
+initRouteRules()
 
 const httpsServerMap = new Map()
 
@@ -1080,74 +1041,25 @@ const proxyServer = http.createServer((req, res) => {
         // Handle API routes with Express
         if (req.url && req.url.startsWith('/api')) {
             // Update context before handling request
-            serverContext.currentConfig = currentConfig
             serverContext.currentMocksPath = currentMocksPath
-            serverContext.ruleMap = ruleMap
+            if (!serverContext.ruleMap) {
+                serverContext.ruleMap = ruleMap
+            }
             serverContext.mockRules = mockRules
             serverContext.mockIdSeq = mockIdSeq
             serverContext.settings = loadSettingsSync()
 
             // Use express to handle API request
             expressApp(req, res)
-            return
-        }
 
-        // Original API handling (removed - now handled by Express)
-        // API: 获取当前配置文件路径
-        if (req.url === '/api/config-path') {
-            res.setHeader('Content-Type', 'application/json')
-            res.write(JSON.stringify({
-                path: currentConfig?.path || '',
-                mocksPath: getMockFilePath()
-            }))
-            res.end()
-            return
-        }
-
-        // API: 刷新配置文件
-        if (req.url === '/api/refresh-config' && req.method === 'POST') {
-            res.setHeader('Content-Type', 'application/json')
-            try {
-                // 重新读取自定义路径配置
-                const customPaths = loadCustomPathsFromSettings()
-                
-                // 刷新路由规则
-                if (customPaths.rulesFilePath && fs.existsSync(customPaths.rulesFilePath)) {
-                    const ext = path.extname(customPaths.rulesFilePath)
-                    let format = 'eprc'
-                    if (ext === '.json') format = 'json'
-                    else if (ext === '.js') format = 'js'
-                    
-                    ruleMap = loadConfigFromFile(customPaths.rulesFilePath, format)
-                    currentConfig = { path: customPaths.rulesFilePath, format }
-                    logRuleMap()
-                } else if (currentConfig && currentConfig.path) {
-                    ruleMap = loadConfigFromFile(currentConfig.path, currentConfig.format)
-                    logRuleMap()
-                } else {
-                    res.statusCode = 400
-                    res.write(JSON.stringify({ error: '无当前配置文件' }))
-                    res.end()
-                    return
-                }
-                
-                // 刷新 Mock 规则
-                currentMocksPath = null // 清除缓存，强制重新读取
-                loadMockRules()
-                
-                res.write(JSON.stringify({ 
-                    status: 'success', 
-                    message: '配置已刷新',
-                    rulesPath: currentConfig?.path,
-                    mocksPath: getMockFilePath()
-                }))
-            } catch (error) {
-                res.statusCode = 500
-                res.write(JSON.stringify({ error: error.message }))
+            // Sync updated context back to global variables after API request
+            if (serverContext.ruleMap !== ruleMap) {
+                ruleMap = serverContext.ruleMap
             }
-            res.end()
             return
         }
+
+        // Legacy API endpoints removed - now handled by Express
 
         // API: 获取系统设置
         if (req.url === '/api/settings' && req.method === 'GET') {
@@ -1577,7 +1489,7 @@ const proxyServer = http.createServer((req, res) => {
             return
         }
 
-        if(req.url.startsWith('/api/rules')) {
+        if(false && req.url.startsWith('/api/rules')) {
             const method = req.method.toLocaleLowerCase()
             // 加载外部规则文件
             if(method === 'post') {
@@ -2617,8 +2529,15 @@ process.on('uncaughtException', function (err) {
 
 function logRuleMap() {
     const ruleCount = Object.keys(ruleMap).length
-    const configFile = currentConfig ? currentConfig.path : '未知'
-    console.log(chalk.green(`已加载配置文件: ${configFile} (${ruleCount} 条规则)`))
+    const { listRuleFiles } = require('./dist/server/rule-files')
+    const files = listRuleFiles(serverContext)
+    const enabledFiles = files.filter(f => f.enabled)
+    if (enabledFiles.length > 0) {
+        console.log(chalk.green(`已加载 ${enabledFiles.length} 个规则文件 (共 ${ruleCount} 条规则):`))
+        enabledFiles.forEach(f => console.log(chalk.green(`  - ${f.name} (${f.ruleCount} 条)`)))
+    } else {
+        console.log(chalk.yellow(`无已启用的规则文件 (${files.length} 个可用)`))
+    }
 }
 
 function observeShadowDecision(method, source, baseTarget, observedTarget) {
