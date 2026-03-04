@@ -282,6 +282,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             const pluginId = data.pluginId
             const url = data.url || 'http://example.com/test'
             const method = (data.method || 'GET').toUpperCase()
+            const integrated = data.integrated !== false
 
             const allPlugins = ctx.pluginManager.getAll()
             const targetPlugin = allPlugins.find(p => p.manifest.id === pluginId)
@@ -302,14 +303,21 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             const hooks = targetPlugin.manifest.hooks || []
             const hookResults: Record<string, unknown> = {}
 
-            // --- Phase 1: onRequestStart / onBeforeProxy ---
-            const requestObj = {
+            // integrated=true：与真实代理一致（路由 + Mock）；integrated=false：单独测试，直接请求 URL
+            const source = url
+            const legacyTarget = integrated && typeof ctx.resolveTargetUrlForTest === 'function'
+                ? ctx.resolveTargetUrlForTest(source)
+                : source
+            let currentTarget = legacyTarget
+
+            // --- Phase 1: onRequestStart / onBeforeProxy（可变的 request 便于插件修改并做对比）---
+            const requestMutable = {
                 method,
-                url,
-                headers: { 'user-agent': 'easy-proxy-test/1.0', ...(data.headers || {}) },
+                url: source,
+                headers: { 'user-agent': 'easy-proxy-test/1.0', ...(data.headers || {}) } as Record<string, string>,
                 body: data.body || '',
             }
-            let currentTarget = url
+            const initialRequestSnapshot = { headers: { ...requestMutable.headers }, body: requestMutable.body }
             let shortCircuited = false
             let shortCircuitResponse: Record<string, unknown> | null = null
 
@@ -320,7 +328,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
 
                 const hookCtx: Record<string, unknown> = {
                     log: testLogger,
-                    request: { ...requestObj },
+                    request: requestMutable,
                     target: currentTarget,
                     meta: { _test: true, _pluginRequestStartAt: Date.now() },
                     shortCircuited: false,
@@ -331,22 +339,39 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
                 const t0 = Date.now()
                 try {
                     await (hookFn as (c: unknown) => Promise<void>).call(targetPlugin, hookCtx)
-                    hookResults[hookName] = { status: 'success', duration: Date.now() - t0, targetChanged: currentTarget !== url ? currentTarget : null, shortCircuited }
+                    hookResults[hookName] = { status: 'success', duration: Date.now() - t0, targetChanged: currentTarget !== source ? currentTarget : null, shortCircuited }
                 } catch (e) {
                     hookResults[hookName] = { status: 'error', duration: Date.now() - t0, error: (e as Error).message, stack: (e as Error).stack }
                 }
                 if (shortCircuited) break
             }
 
-            // --- Phase 2: 发起真实 HTTP 请求 ---
+            const modifiedRequestSnapshot = { headers: { ...requestMutable.headers }, body: requestMutable.body }
+            const requestHeadersChanged = JSON.stringify(initialRequestSnapshot.headers) !== JSON.stringify(modifiedRequestSnapshot.headers)
+            const requestBodyChanged = initialRequestSnapshot.body !== modifiedRequestSnapshot.body
+
+            // --- Phase 2: Mock 命中则用 Mock 响应，否则发起真实 HTTP 请求 ---
             let realResponse: { statusCode: number; headers: Record<string, string>; body: string } | null = null
             let fetchError: string | null = null
             let fetchDuration = 0
+            let usedMock = false
 
             if (!shortCircuited) {
-                const http = require('http') as typeof import('http')
-                const https = require('https') as typeof import('https')
-                const parsed = new URL(currentTarget)
+                if (integrated) {
+                    const mockRule = typeof ctx.matchMockRuleForTest === 'function'
+                        ? ctx.matchMockRuleForTest(source, method)
+                        : null
+                    if (mockRule && typeof ctx.shouldUseMockForTest === 'function' && ctx.shouldUseMockForTest(source, mockRule) && typeof ctx.buildMockResponseForTest === 'function') {
+                        const mockRes = ctx.buildMockResponseForTest(mockRule)
+                        realResponse = { statusCode: mockRes.statusCode, headers: mockRes.headers, body: mockRes.body }
+                        fetchDuration = 0
+                        usedMock = true
+                    }
+                }
+                if (!realResponse) {
+                    const http = require('http') as typeof import('http')
+                    const https = require('https') as typeof import('https')
+                    const parsed = new URL(currentTarget)
                 const transport = parsed.protocol === 'https:' ? https : http
 
                 const fetchStart = Date.now()
@@ -356,8 +381,8 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
                             hostname: parsed.hostname,
                             port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
                             path: parsed.pathname + parsed.search,
-                            method,
-                            headers: requestObj.headers,
+                            method: requestMutable.method,
+                            headers: requestMutable.headers,
                             timeout: 15000,
                             rejectUnauthorized: false,
                         }
@@ -379,13 +404,14 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
                         })
                         outReq.on('error', reject)
                         outReq.on('timeout', () => { outReq.destroy(); reject(new Error('请求超时 (15s)')) })
-                        if (requestObj.body) outReq.write(requestObj.body)
+                        if (requestMutable.body) outReq.write(requestMutable.body)
                         outReq.end()
                     })
                 } catch (e) {
                     fetchError = (e as Error).message
                 }
                 fetchDuration = Date.now() - fetchStart
+                }
             }
 
             // --- Phase 3: onBeforeResponse / onAfterResponse（用真实响应） ---
@@ -406,7 +432,7 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
 
                     const hookCtx = {
                         log: testLogger,
-                        request: { ...requestObj },
+                        request: requestMutable,
                         target: currentTarget,
                         meta: { _test: true, _pluginRequestStartAt: Date.now() },
                         response: responseCopy,
@@ -425,6 +451,35 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
             // --- Phase 4: 构造返回结果 ---
             const bodyChanged = modifiedResponse && (modifiedResponse.body !== originalBody)
             const truncate = (s: string, max: number) => s.length > max ? s.slice(0, max) + `\n...(已截断，共 ${s.length} 字符)` : s
+            const headersEqual = (a: Record<string, string>, b: Record<string, string>) =>
+                JSON.stringify(a) === JSON.stringify(b)
+            const responseHeadersChanged = !!(realResponse && modifiedResponse && !headersEqual(realResponse.headers, modifiedResponse.headers as Record<string, string>))
+            const DIFF_PREVIEW_LEN = 2500
+
+            // 写入代理日志，便于在「日志」页查看此次测试请求
+            if (typeof ctx.appendProxyRecordFromPluginTest === 'function' && !fetchError) {
+                const logData = {
+                    method,
+                    source,
+                    target: usedMock ? `[MOCK] ${currentTarget}` : currentTarget,
+                    time: new Date().toLocaleTimeString(),
+                    statusCode: realResponse?.statusCode,
+                    duration: fetchDuration,
+                    _fromPluginTest: true,
+                }
+                const detail = realResponse
+                    ? {
+                        requestHeaders: requestMutable.headers,
+                        requestBody: requestMutable.body || '',
+                        responseHeaders: realResponse.headers,
+                        responseBody: truncate(originalBody, 5000),
+                        statusCode: realResponse.statusCode,
+                        method,
+                        url: source,
+                    }
+                    : undefined
+                ctx.appendProxyRecordFromPluginTest(logData, detail)
+            }
 
             res.json({
                 status: 'success',
@@ -439,20 +494,40 @@ export function registerPluginsRoutes(app: Application, ctx: ServerContext): voi
                         url: currentTarget,
                         fetchDuration,
                         fetchError,
+                        usedMock,
+                        targetResolved: integrated && legacyTarget !== source,
+                        testMode: integrated ? 'integrated' : 'standalone',
                     },
+                    originalRequest: (requestHeadersChanged || requestBodyChanged) ? {
+                        headers: initialRequestSnapshot.headers,
+                        body: initialRequestSnapshot.body,
+                    } : null,
+                    modifiedRequest: (requestHeadersChanged || requestBodyChanged) ? {
+                        headers: modifiedRequestSnapshot.headers,
+                        body: modifiedRequestSnapshot.body,
+                    } : null,
+                    requestHeadersChanged,
+                    requestBodyChanged,
                     originalResponse: realResponse ? {
                         statusCode: realResponse.statusCode,
                         headers: realResponse.headers,
                         bodyPreview: truncate(originalBody, 3000),
                         bodyLength: originalBody.length,
+                        bodyForDiff: truncate(originalBody, DIFF_PREVIEW_LEN),
                     } : null,
-                    modifiedResponse: modifiedResponse ? {
-                        statusCode: modifiedResponse.statusCode,
-                        headers: modifiedResponse.headers,
-                        bodyPreview: truncate(String(modifiedResponse.body || ''), 3000),
-                        bodyLength: String(modifiedResponse.body || '').length,
-                        bodyChanged,
-                    } : null,
+                    modifiedResponse: modifiedResponse ? (() => {
+                        const h = modifiedResponse.headers as Record<string, unknown>
+                        const headersNormalized = h ? Object.fromEntries(Object.entries(h).map(([k, v]) => [k, v != null ? String(v) : ''])) : {}
+                        return {
+                            statusCode: modifiedResponse.statusCode,
+                            headers: headersNormalized,
+                            bodyPreview: truncate(String(modifiedResponse.body || ''), 3000),
+                            bodyLength: String(modifiedResponse.body || '').length,
+                            bodyChanged,
+                            bodyForDiff: truncate(String(modifiedResponse.body || ''), DIFF_PREVIEW_LEN),
+                        }
+                    })() : null,
+                    responseHeadersChanged,
                     shortCircuited,
                     shortCircuitResponse: shortCircuitResponse ? {
                         statusCode: (shortCircuitResponse as Record<string, unknown>).statusCode,

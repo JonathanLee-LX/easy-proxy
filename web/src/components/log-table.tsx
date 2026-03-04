@@ -156,6 +156,11 @@ export function LogTable({ records, selectedRecordId, onSelect, autoScroll }: Lo
                     )}
                   </div>
                   <div className="flex-1 py-1.5 px-2 font-mono truncate min-w-[200px]" title={record.source}>
+                    {record._fromPluginTest && (
+                      <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 mr-1 text-blue-600 border-blue-300">
+                        插件测试
+                      </Badge>
+                    )}
                     {record.source}
                   </div>
                   <div className="flex-1 py-1.5 px-2 font-mono truncate min-w-[200px]" title={record.target}>

@@ -145,9 +145,36 @@ const serverContext = {
             })
         }
     },
+    // 将「插件测试」产生的请求写入代理日志，便于在日志页查看
+    appendProxyRecordFromPluginTest: (logData, detail) => {
+        const recordId = recordIdSeq++
+        const entry = { id: recordId, ...logData }
+        proxyRecordArr.push(entry)
+        if (proxyRecordArr.length > MAX_RECORD_SIZE) {
+            const removed = proxyRecordArr.shift()
+            if (removed.id !== undefined) proxyRecordDetailMap.delete(removed.id)
+        }
+        if (detail) {
+            proxyRecordDetailMap.set(recordId, detail)
+            if (proxyRecordDetailMap.size > MAX_DETAIL_SIZE) {
+                const firstKey = proxyRecordDetailMap.keys().next().value
+                proxyRecordDetailMap.delete(firstKey)
+            }
+        }
+        if (typeof localWSServer !== 'undefined') {
+            localWSServer.clients.forEach(client => {
+                if (client.readyState === 1) client.send(JSON.stringify(entry))
+            })
+        }
+    },
     getMockFilePath: () => getMockFilePath(),
     performConfigDiagnostics: () => performConfigDiagnostics(),
     loadSettingsSync: () => loadSettingsSync(),
+    // 供插件测试使用：与真实代理一致的路由 + Mock 行为
+    resolveTargetUrlForTest: (url) => resolveTargetUrl(url, ruleMap) || url,
+    matchMockRuleForTest: (url, method) => matchMockRule(url, method),
+    shouldUseMockForTest: (source, rule) => !shouldUsePluginMockForRequest(source, rule),
+    buildMockResponseForTest: (rule) => buildMockResponseForTest(rule),
 }
 
 // Create Express app
@@ -561,6 +588,42 @@ function matchMockRule(url, method) {
             return url.includes(rule.urlPattern)
         }
     }) || null
+}
+
+/**
+ * 根据 mock 规则构建响应对象（供插件测试等使用，不写 res）
+ * @param {object} rule - mock 规则
+ * @returns {{ statusCode: number, headers: Record<string, string>, body: string }}
+ */
+function buildMockResponseForTest(rule) {
+    const statusCode = rule.statusCode || 200
+    const ruleHeaders = {}
+    for (const [key, value] of Object.entries(rule.headers || {})) {
+        ruleHeaders[key.toLowerCase()] = value
+    }
+    const headers = {
+        'x-mock-rule': encodeURIComponent(rule.name || rule.id?.toString() || rule.urlPattern || ''),
+        'content-type': ruleHeaders['content-type'] || 'application/json',
+        ...ruleHeaders,
+    }
+    let body = ''
+    if (rule.bodyType === 'file' && rule.body) {
+        let filePath = rule.body.replace(/^file:\/\//, '').replace(/^\/[A-Za-z]:\//, '')
+        filePath = decodeURIComponent(filePath)
+        try {
+            if (fs.existsSync(filePath) && !fs.statSync(filePath).isDirectory()) {
+                body = fs.readFileSync(filePath, 'utf8')
+            }
+        } catch (_) {
+            body = '(mock file read error)'
+        }
+    } else {
+        body = rule.body || ''
+        if (body.match(/^data:([^;]+);base64,/)) {
+            body = '(base64 mock body)'
+        }
+    }
+    return { statusCode, headers, body }
 }
 
 /**

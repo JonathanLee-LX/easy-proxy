@@ -22,6 +22,8 @@ export interface ProxyRecord {
   protocol?: string // 'h2' | 'h1.1'
   statusCode?: number
   duration?: number // milliseconds
+  /** 来自「插件测试」的请求，会在日志页显示「插件测试」标识 */
+  _fromPluginTest?: boolean
 }
 
 export interface RecordDetail {

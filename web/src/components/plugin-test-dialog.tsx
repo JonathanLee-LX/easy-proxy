@@ -20,7 +20,17 @@ import {
   AlertCircle,
   Globe,
   ArrowRight,
+  FileText,
 } from 'lucide-react'
+import { BodyDiffView } from './body-diff-view'
+
+function headersToLines(headers: Record<string, unknown> | undefined): string {
+  if (!headers || typeof headers !== 'object') return ''
+  return Object.entries(headers)
+    .map(([k, v]) => `${k}: ${v != null ? String(v) : ''}`)
+    .sort()
+    .join('\n')
+}
 
 interface PluginTestDialogProps {
   open: boolean
@@ -41,6 +51,7 @@ export function PluginTestDialog({
   const [testing, setTesting] = useState(false)
   const [testUrl, setTestUrl] = useState('https://365.wps.cn/home')
   const [testMethod, setTestMethod] = useState('GET')
+  const [testMode, setTestMode] = useState<'standalone' | 'integrated'>('standalone')
   const [testResults, setTestResults] = useState<any>(null)
 
   const handleTest = async () => {
@@ -55,6 +66,7 @@ export function PluginTestDialog({
           pluginId,
           url: testUrl,
           method: testMethod,
+          integrated: testMode === 'integrated',
         }),
       })
 
@@ -121,6 +133,37 @@ export function PluginTestDialog({
               </div>
             </div>
 
+            <div className="space-y-2">
+              <Label>测试模式</Label>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  type="button"
+                  variant={testMode === 'standalone' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTestMode('standalone')}
+                  disabled={testing}
+                  title="直接请求 URL，不走路由与 Mock，便于排查插件自身逻辑"
+                >
+                  单独测试
+                </Button>
+                <Button
+                  type="button"
+                  variant={testMode === 'integrated' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTestMode('integrated')}
+                  disabled={testing}
+                  title="与真实代理一致：先路由解析、Mock 匹配，再请求，便于排查整体链路"
+                >
+                  集成测试
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {testMode === 'standalone'
+                  ? '直接请求上述 URL，不经过路由规则和 Mock，适合验证插件逻辑。'
+                  : '先按路由规则解析目标、匹配 Mock，再请求，与经代理的真实请求一致，适合排查链路问题。'}
+              </p>
+            </div>
+
             <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md p-3">
               <p className="text-xs text-blue-700 dark:text-blue-300">
                 <strong>测试流程:</strong> 发起真实请求 → 获取服务器响应 → 运行插件 Hook（{hooks.join(', ')}）→ 展示对比结果
@@ -148,6 +191,11 @@ export function PluginTestDialog({
                       <h3 className="text-sm font-medium flex items-center gap-2">
                         <Globe className="h-4 w-4" />
                         真实请求
+                        {testResults.realRequest.testMode && (
+                          <Badge variant="outline" className="text-xs font-normal">
+                            {testResults.realRequest.testMode === 'integrated' ? '集成测试' : '单独测试'}
+                          </Badge>
+                        )}
                       </h3>
                       <div className="bg-muted/50 rounded-md p-3 text-xs space-y-1">
                         <div className="flex gap-2">
@@ -160,10 +208,22 @@ export function PluginTestDialog({
                             请求失败: {testResults.realRequest.fetchError}
                           </div>
                         ) : (
-                          <div className="text-muted-foreground">
-                            耗时: {testResults.realRequest.fetchDuration}ms
-                            {testResults.originalResponse && (
-                              <> · 状态码: <Badge variant="outline" className="text-xs">{testResults.originalResponse.statusCode}</Badge> · 响应大小: {testResults.originalResponse.bodyLength} 字符</>
+                          <div className="text-muted-foreground space-y-0.5">
+                            <div>
+                              耗时: {testResults.realRequest.fetchDuration}ms
+                              {testResults.originalResponse && (
+                                <> · 状态码: <Badge variant="outline" className="text-xs">{testResults.originalResponse.statusCode}</Badge> · 响应大小: {testResults.originalResponse.bodyLength} 字符</>
+                              )}
+                            </div>
+                            {(testResults.realRequest.targetResolved || testResults.realRequest.usedMock) && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {testResults.realRequest.targetResolved && (
+                                  <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">路由已改写</Badge>
+                                )}
+                                {testResults.realRequest.usedMock && (
+                                  <Badge variant="outline" className="text-xs text-orange-600 border-orange-300">已使用 Mock</Badge>
+                                )}
+                              </div>
                             )}
                           </div>
                         )}
@@ -222,7 +282,79 @@ export function PluginTestDialog({
                     )}
                   </div>
 
-                  {/* 响应对比 */}
+                  {/* Request 对比：仅在被修改时显示 */}
+                  {(testResults.requestHeadersChanged || testResults.requestBodyChanged) && testResults.originalRequest && testResults.modifiedRequest && (
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-medium flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        请求对比（已被插件修改）
+                      </h3>
+                      {testResults.requestHeadersChanged && (
+                        <div className="space-y-1">
+                          <div className="text-xs font-medium text-muted-foreground">Request Headers</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <div className="text-[10px] text-muted-foreground mb-0.5">原始</div>
+                              <pre className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[180px] overflow-auto whitespace-pre-wrap break-all">
+                                {headersToLines(testResults.originalRequest.headers)}
+                              </pre>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-muted-foreground mb-0.5">修改后</div>
+                              <pre className="bg-green-500/10 rounded-md p-2 text-xs font-mono max-h-[180px] overflow-auto whitespace-pre-wrap break-all border border-green-500/30">
+                                {headersToLines(testResults.modifiedRequest.headers)}
+                              </pre>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {testResults.requestBodyChanged && (
+                        <div className="space-y-1">
+                          <div className="text-xs font-medium text-muted-foreground">Request Body</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <div className="text-[10px] text-muted-foreground mb-0.5">原始</div>
+                              <pre className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[120px] overflow-auto whitespace-pre-wrap break-all">
+                                {testResults.originalRequest.body || '(空)'}
+                              </pre>
+                            </div>
+                            <div>
+                              <div className="text-[10px] text-muted-foreground mb-0.5">修改后</div>
+                              <pre className="bg-green-500/10 rounded-md p-2 text-xs font-mono max-h-[120px] overflow-auto whitespace-pre-wrap break-all border border-green-500/30">
+                                {testResults.modifiedRequest.body || '(空)'}
+                              </pre>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Response Headers 对比：仅在被修改时显示 */}
+                  {testResults.responseHeadersChanged && testResults.originalResponse?.headers && testResults.modifiedResponse?.headers && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-orange-500" />
+                        Response Headers 对比（已被插件修改）
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <div className="text-[10px] text-muted-foreground mb-0.5">原始</div>
+                          <pre className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[180px] overflow-auto whitespace-pre-wrap break-all">
+                            {headersToLines(testResults.originalResponse.headers)}
+                          </pre>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-muted-foreground mb-0.5">修改后</div>
+                          <pre className="bg-green-500/10 rounded-md p-2 text-xs font-mono max-h-[180px] overflow-auto whitespace-pre-wrap break-all border border-green-500/30">
+                            {headersToLines(testResults.modifiedResponse.headers)}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Response Body 对比：Diff 形式，仅在被修改时展示 Diff */}
                   {testResults.modifiedResponse && testResults.originalResponse && (
                     <div className="space-y-2">
                       <h3 className="text-sm font-medium flex items-center gap-2">
@@ -231,36 +363,35 @@ export function PluginTestDialog({
                         ) : (
                           <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
                         )}
-                        响应对比
-                        {testResults.modifiedResponse.bodyChanged && (
-                          <Badge className="text-xs bg-orange-100 text-orange-700 border-orange-300">响应已被插件修改</Badge>
-                        )}
-                        {!testResults.modifiedResponse.bodyChanged && (
-                          <Badge variant="outline" className="text-xs text-muted-foreground">响应未变化</Badge>
+                        响应 Body
+                        {testResults.modifiedResponse.bodyChanged ? (
+                          <>
+                            <Badge className="text-xs bg-orange-100 text-orange-700 border-orange-300">已修改</Badge>
+                            <span className="text-[10px] text-muted-foreground">
+                              （差异 {testResults.modifiedResponse.bodyLength - testResults.originalResponse.bodyLength > 0 ? '+' : ''}
+                              {testResults.modifiedResponse.bodyLength - testResults.originalResponse.bodyLength} 字符）
+                            </span>
+                          </>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">未变化</Badge>
                         )}
                       </h3>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <div className="text-xs font-medium text-muted-foreground mb-1">原始响应 ({testResults.originalResponse.bodyLength} 字符)</div>
-                          <pre className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[300px] overflow-auto whitespace-pre-wrap break-all">
-                            {testResults.originalResponse.bodyPreview}
-                          </pre>
+                      {testResults.modifiedResponse.bodyChanged ? (
+                        <div className="space-y-1">
+                          <p className="text-[10px] text-muted-foreground">
+                            绿色=新增行，红色=删除行。仅对比前约 2500 字符以保障性能。
+                          </p>
+                          <BodyDiffView
+                            original={testResults.originalResponse.bodyForDiff ?? testResults.originalResponse.bodyPreview ?? ''}
+                            modified={testResults.modifiedResponse.bodyForDiff ?? testResults.modifiedResponse.bodyPreview ?? ''}
+                            maxHeight="320px"
+                          />
                         </div>
-                        <div>
-                          <div className="text-xs font-medium text-muted-foreground mb-1">
-                            插件处理后 ({testResults.modifiedResponse.bodyLength} 字符)
-                            {testResults.modifiedResponse.bodyChanged && (
-                              <span className="text-orange-600 ml-1">
-                                (差异 {testResults.modifiedResponse.bodyLength - testResults.originalResponse.bodyLength > 0 ? '+' : ''}{testResults.modifiedResponse.bodyLength - testResults.originalResponse.bodyLength} 字符)
-                              </span>
-                            )}
-                          </div>
-                          <pre className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[300px] overflow-auto whitespace-pre-wrap break-all">
-                            {testResults.modifiedResponse.bodyPreview}
-                          </pre>
-                        </div>
-                      </div>
+                      ) : (
+                        <pre className="bg-muted/50 rounded-md p-2 text-xs font-mono max-h-[200px] overflow-auto whitespace-pre-wrap break-all">
+                          {testResults.originalResponse.bodyPreview}
+                        </pre>
+                      )}
                     </div>
                   )}
 
