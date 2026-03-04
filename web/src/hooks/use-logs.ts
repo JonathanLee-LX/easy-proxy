@@ -35,9 +35,13 @@ export function useLogs(maxRecords: number = 1000) {
 
       ws.addEventListener('message', (ev) => {
         try {
-          const data: ProxyRecord = JSON.parse(ev.data)
+          const data = JSON.parse(ev.data) as { type?: string; rules?: unknown[] } & ProxyRecord
+          if (data && data.type === 'mocksUpdated') {
+            window.dispatchEvent(new CustomEvent('mocksUpdated', { detail: data.rules ?? [] }))
+            return
+          }
           setRecords((prev) => {
-            const newRecords = [data, ...prev]
+            const newRecords = [data as ProxyRecord, ...prev]
             return newRecords.slice(0, maxRecordsRef.current)
           })
         } catch (e) {

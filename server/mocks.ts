@@ -27,6 +27,7 @@ export function registerMocksRoutes(app: Application, ctx: ServerContext): void 
                 }
                 ctx.mockRules.push(rule)
                 ctx.saveMockRules()
+                ctx.broadcastToAllClients({ type: 'mocksUpdated', rules: ctx.mockRules })
                 res.write(JSON.stringify({ status: 'success', rule }))
             } catch (err) {
                 res.statusCode = 400
@@ -47,6 +48,7 @@ export function registerMocksRoutes(app: Application, ctx: ServerContext): void 
             if (idx !== -1) {
                 ctx.mockRules.splice(idx, 1)
                 ctx.saveMockRules()
+                ctx.broadcastToAllClients({ type: 'mocksUpdated', rules: ctx.mockRules })
                 res.write(JSON.stringify({ status: 'success' }))
             } else {
                 res.statusCode = 404
@@ -68,6 +70,7 @@ export function registerMocksRoutes(app: Application, ctx: ServerContext): void 
                 } else {
                     ctx.mockRules[idx] = { ...ctx.mockRules[idx], ...data, id }
                     ctx.saveMockRules()
+                    ctx.broadcastToAllClients({ type: 'mocksUpdated', rules: ctx.mockRules })
                     res.write(JSON.stringify({ status: 'success', rule: ctx.mockRules[idx] }))
                 }
             } catch (err) {

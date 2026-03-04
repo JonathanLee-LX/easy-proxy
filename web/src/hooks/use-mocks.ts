@@ -1,11 +1,23 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import type { MockRule } from '@/types'
+
+const MOCKS_UPDATED_EVENT = 'mocksUpdated'
 
 /**
  * Hook for managing mock rules
  */
 export function useMocks() {
   const [mockRules, setMockRules] = useState<MockRule[]>([])
+
+  // 监听服务端广播的 Mock 规则变更（如通过 MCP/API 修改后）
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      const e = ev as CustomEvent<MockRule[] | undefined>
+      setMockRules(Array.isArray(e.detail) ? e.detail : [])
+    }
+    window.addEventListener(MOCKS_UPDATED_EVENT, handler)
+    return () => window.removeEventListener(MOCKS_UPDATED_EVENT, handler)
+  }, [])
 
   const fetchMocks = useCallback(async () => {
     try {
