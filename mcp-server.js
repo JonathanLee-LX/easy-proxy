@@ -5,7 +5,8 @@
  */
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js')
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js')
-const z = require('zod')
+// MCP SDK zod-compat 仅支持 zod/v3 或 zod/v4-mini 的内部结构，使用默认 zod 会报 _zod undefined
+const z = require('zod/v3')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
