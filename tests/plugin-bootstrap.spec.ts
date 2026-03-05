@@ -1,5 +1,5 @@
-const assert = require('assert')
-const { bootstrapPlugins } = require('../dist/core/plugin-bootstrap')
+import { describe, it, expect } from 'vitest'
+import { bootstrapPlugins } from '../core/plugin-bootstrap'
 
 describe('plugin-bootstrap bootstrapPlugins', () => {
     it('registers plugins and starts manager lifecycle', async () => {
@@ -20,7 +20,7 @@ describe('plugin-bootstrap bootstrapPlugins', () => {
             plugins: [{ id: 'p1' }, { id: 'p2' }],
             contextFactory: () => ({}),
         })
-        assert.deepStrictEqual(calls, [
+        expect(calls).toEqual([
             ['register', 'p1'],
             ['register', 'p2'],
             ['setup', 'function'],
@@ -28,5 +28,3 @@ describe('plugin-bootstrap bootstrapPlugins', () => {
         ])
     })
 })
-
-export {};

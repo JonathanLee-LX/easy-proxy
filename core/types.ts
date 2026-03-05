@@ -397,3 +397,125 @@ export interface BuiltinPluginsOptions {
     getRuleMap?(): Record<string, string>;
     loggerPlugin?: Plugin;
 }
+
+// ===== ProxyContext: shared mutable state for the proxy server =====
+
+export interface ProxyRecord {
+    id?: number;
+    method: string;
+    source: string;
+    target: string;
+    time: string;
+    statusCode?: number;
+    duration?: number;
+    mock?: boolean;
+    mapLocal?: boolean;
+    protocol?: string;
+    _fromPluginTest?: boolean;
+}
+
+export interface ProxyRecordDetail {
+    requestHeaders: Record<string, string | string[] | undefined>;
+    requestBody?: string;
+    responseHeaders: Record<string, string | string[] | undefined>;
+    responseBody?: string;
+    statusCode: number;
+    statusMessage?: string;
+    method: string;
+    url: string;
+}
+
+export interface ProxyContext {
+    epDir: string;
+    certDir: string;
+    settingsPath: string;
+    AUTO_OPEN: boolean;
+    REFACTOR_CONFIG: RefactorConfig;
+    INITIAL_PLUGIN_MODE: PluginMode;
+    MAX_RECORD_SIZE: number;
+    MAX_DETAIL_SIZE: number;
+    MAX_BODY_SIZE: number;
+    SHADOW_WARN_MIN_SAMPLES: number;
+    SHADOW_WARN_DIFF_RATE: number;
+    PLUGIN_ON_HOSTS: Set<string>;
+    ENABLE_BUILTIN_ROUTER_PLUGIN: boolean;
+    ENABLE_BUILTIN_LOGGER_PLUGIN: boolean;
+    ENABLE_BUILTIN_MOCK_PLUGIN: boolean;
+
+    pluginManager: any;
+    hookDispatcher: any;
+    requestPipeline: Pipeline;
+    builtinLoggerPlugin: Plugin;
+    shadowCompareTracker: any;
+    onModeGate: OnModeGate;
+    pipelineGate: PipelineGate;
+
+    ruleMap: Record<string, string>;
+    currentMocksPath: string | null;
+    mockRules: MockRuleEntry[];
+    mockIdSeq: number;
+    proxyRecordArr: ProxyRecord[];
+    recordIdSeq: number;
+    proxyRecordDetailMap: Map<number, ProxyRecordDetail>;
+    httpsServerMap: Map<string, any>;
+
+    localWSServer: any;
+}
+
+export interface MockRuleEntry {
+    id: number;
+    name: string;
+    urlPattern: string;
+    method: string;
+    statusCode: number;
+    delay: number;
+    bodyType: string;
+    headers: Record<string, string>;
+    body: string;
+    enabled: boolean;
+}
+
+export interface ProxyResponse {
+    statusCode: number;
+    statusMessage: string;
+    headers: Record<string, string | string[] | undefined>;
+    stream: NodeJS.ReadableStream;
+    protocol: string;
+}
+
+export interface InterceptOptions {
+    req: any;
+    res: any;
+    source: string;
+    target: string;
+    startTime: number;
+    statusCode: number;
+    headers: Record<string, any>;
+    bodyBuffer: Buffer;
+    reqBody: Buffer;
+    cleanHeaders?: (h: Record<string, any>) => Record<string, any>;
+}
+
+export interface MockHandler {
+    getMockFilePath(): string;
+    loadMockRules(): void;
+    saveMockRules(): void;
+    matchMockRule(url: string, method: string): MockRuleEntry | null;
+    buildMockResponseForTest(rule: MockRuleEntry): { statusCode: number; headers: Record<string, string>; body: string };
+    sendMockResponse(req: any, res: any, rule: MockRuleEntry, logInfo: { method: string; source: string; target: string }): void;
+    loadCustomPathsFromSettings(): { mocksFilePath: string | null };
+}
+
+export interface DiagnosticCheck {
+    name: string;
+    status: string;
+    path?: string;
+    details?: unknown;
+}
+
+export interface DiagnosticsResult {
+    status: string;
+    checks: DiagnosticCheck[];
+    errors: string[];
+    warnings: string[];
+}

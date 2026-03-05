@@ -1,5 +1,5 @@
-const assert = require('assert')
-const { evaluateShadowReadiness, buildReadinessAdvice } = require('../dist/core/shadow-readiness')
+import { describe, it, expect } from 'vitest'
+import { evaluateShadowReadiness, buildReadinessAdvice } from '../core/shadow-readiness'
 
 describe('shadow-readiness evaluateShadowReadiness', () => {
     it('returns insufficient_samples when total is below threshold', () => {
@@ -7,8 +7,8 @@ describe('shadow-readiness evaluateShadowReadiness', () => {
             { total: 50, diffRate: 0.01 },
             { minSamples: 100, maxDiffRate: 0.05 }
         )
-        assert.strictEqual(result.ready, false)
-        assert.strictEqual(result.reason, 'insufficient_samples')
+        expect(result.ready).toBe(false)
+        expect(result.reason).toBe('insufficient_samples')
     })
 
     it('returns diff_rate_too_high when diff exceeds threshold', () => {
@@ -16,8 +16,8 @@ describe('shadow-readiness evaluateShadowReadiness', () => {
             { total: 200, diffRate: 0.12 },
             { minSamples: 100, maxDiffRate: 0.05 }
         )
-        assert.strictEqual(result.ready, false)
-        assert.strictEqual(result.reason, 'diff_rate_too_high')
+        expect(result.ready).toBe(false)
+        expect(result.reason).toBe('diff_rate_too_high')
     })
 
     it('returns ready when thresholds are satisfied', () => {
@@ -25,15 +25,15 @@ describe('shadow-readiness evaluateShadowReadiness', () => {
             { total: 300, diffRate: 0.01 },
             { minSamples: 100, maxDiffRate: 0.05 }
         )
-        assert.strictEqual(result.ready, true)
-        assert.strictEqual(result.reason, 'ok')
+        expect(result.ready).toBe(true)
+        expect(result.reason).toBe('ok')
     })
 })
 
 describe('shadow-readiness buildReadinessAdvice', () => {
     it('suggests shadow when mode is off', () => {
         const advice = buildReadinessAdvice({ mode: 'off' })
-        assert.strictEqual(advice.suggestedMode, 'shadow')
+        expect(advice.suggestedMode).toBe('shadow')
     })
 
     it('suggests keep shadow when diff rate is too high', () => {
@@ -47,8 +47,8 @@ describe('shadow-readiness buildReadinessAdvice', () => {
                 maxDiffRate: 0.05,
             },
         })
-        assert.strictEqual(advice.suggestedMode, 'shadow')
-        assert.strictEqual(advice.level, 'warn')
+        expect(advice.suggestedMode).toBe('shadow')
+        expect(advice.level).toBe('warn')
     })
 
     it('suggests on when shadow is ready', () => {
@@ -63,9 +63,7 @@ describe('shadow-readiness buildReadinessAdvice', () => {
             },
             allowlist: ['a.com'],
         })
-        assert.strictEqual(advice.suggestedMode, 'on')
-        assert.strictEqual(advice.level, 'success')
+        expect(advice.suggestedMode).toBe('on')
+        expect(advice.level).toBe('success')
     })
 })
-
-export {};

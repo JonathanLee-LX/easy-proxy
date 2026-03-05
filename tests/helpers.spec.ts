@@ -1,25 +1,25 @@
-const assert = require('assert')
-const path = require('path')
-const { execFileSync } = require('child_process')
-const {
+import { describe, it, expect } from 'vitest'
+import path from 'path'
+import { execFileSync } from 'child_process'
+import {
   parseEprc,
   ruleMapToEprcText,
   resolveTargetUrl,
-} = require('../dist/helpers')
+} from '../helpers'
 
 describe('helpers.parseEprc', () => {
   it('parses target-first host format', () => {
     const content = '127.0.0.1 a.com b.com'
     const map = parseEprc(content)
-    assert.strictEqual(map['a.com'], '127.0.0.1')
-    assert.strictEqual(map['b.com'], '127.0.0.1')
+    expect(map['a.com']).toBe('127.0.0.1')
+    expect(map['b.com']).toBe('127.0.0.1')
   })
 
   it('parses rule-first format', () => {
     const content = 'a.com b.com 10.0.0.1:8080'
     const map = parseEprc(content)
-    assert.strictEqual(map['a.com'], '10.0.0.1:8080')
-    assert.strictEqual(map['b.com'], '10.0.0.1:8080')
+    expect(map['a.com']).toBe('10.0.0.1:8080')
+    expect(map['b.com']).toBe('10.0.0.1:8080')
   })
 
   it('ignores blank and commented lines', () => {
@@ -30,8 +30,8 @@ describe('helpers.parseEprc', () => {
 127.0.0.1 valid.com
 `
     const map = parseEprc(content)
-    assert.strictEqual(map['valid.com'], '127.0.0.1')
-    assert.strictEqual(map['disabled'], undefined)
+    expect(map['valid.com']).toBe('127.0.0.1')
+    expect(map['disabled']).toBeUndefined()
   })
 })
 
@@ -43,36 +43,36 @@ describe('helpers.ruleMapToEprcText', () => {
       'c.com': '10.0.0.2',
     })
     const lines = text.split('\n').sort()
-    assert.ok(lines.includes('127.0.0.1 a.com b.com') || lines.includes('127.0.0.1 b.com a.com'))
-    assert.ok(lines.includes('10.0.0.2 c.com'))
+    expect(lines.includes('127.0.0.1 a.com b.com') || lines.includes('127.0.0.1 b.com a.com')).toBeTruthy()
+    expect(lines.includes('10.0.0.2 c.com')).toBeTruthy()
   })
 })
 
 describe('helpers.resolveTargetUrl', () => {
   it('returns null when no rule matches', () => {
     const target = resolveTargetUrl('https://a.com/path', {})
-    assert.strictEqual(target, null)
+    expect(target).toBe(null)
   })
 
   it('keeps path and query when target only has host', () => {
     const target = resolveTargetUrl('https://a.com/foo/bar?q=1', {
       'a\\.com': '127.0.0.1:8080',
     })
-    assert.strictEqual(target, 'https://127.0.0.1:8080/foo/bar?q=1')
+    expect(target).toBe('https://127.0.0.1:8080/foo/bar?q=1')
   })
 
   it('keeps origin port when target has no port', () => {
     const target = resolveTargetUrl('https://a.com:9443/foo', {
       'a\\.com': 'http://127.0.0.1/bar',
     })
-    assert.strictEqual(target, 'http://127.0.0.1:9443/bar')
+    expect(target).toBe('http://127.0.0.1:9443/bar')
   })
 
   it('converts http target scheme to ws for websocket source', () => {
     const target = resolveTargetUrl('wss://a.com/socket?x=1', {
       'a\\.com': 'https://127.0.0.1:8080/socket',
     })
-    assert.strictEqual(target, 'wss://127.0.0.1:8080/socket?x=1')
+    expect(target).toBe('wss://127.0.0.1:8080/socket?x=1')
   })
 })
 
@@ -92,7 +92,7 @@ describe('helpers.getFreePort', () => {
       env: { ...process.env, PORT: '18989' },
       encoding: 'utf8',
     }).trim()
-    assert.ok(Number(output) >= 18989)
+    expect(Number(output) >= 18989).toBeTruthy()
   })
 })
 
@@ -104,9 +104,9 @@ rule1 target1
 rule3 target3
     `.trim()
     const map = parseEprc(content)
-    assert.strictEqual(map['rule1'], 'target1')
-    assert.strictEqual(map['rule2'], undefined)
-    assert.strictEqual(map['rule3'], 'target3')
+    expect(map['rule1']).toBe('target1')
+    expect(map['rule2']).toBeUndefined()
+    expect(map['rule3']).toBe('target3')
   })
 
   it('should handle mixed enabled and disabled rules', () => {
@@ -116,22 +116,22 @@ rule3 target3
 192.168.1.1 active.com
     `.trim()
     const map = parseEprc(content)
-    assert.strictEqual(map['enabled1.com'], '127.0.0.1:3000')
-    assert.strictEqual(map['enabled2.com'], '127.0.0.1:3000')
-    assert.strictEqual(map['disabled.com'], undefined)
-    assert.strictEqual(map['active.com'], '192.168.1.1')
+    expect(map['enabled1.com']).toBe('127.0.0.1:3000')
+    expect(map['enabled2.com']).toBe('127.0.0.1:3000')
+    expect(map['disabled.com']).toBeUndefined()
+    expect(map['active.com']).toBe('192.168.1.1')
   })
 
   it('should handle disabled rules with multiple domains', () => {
     const content = '//127.0.0.1:8000 api.example.com web.example.com'
     const map = parseEprc(content)
-    assert.strictEqual(map['api.example.com'], undefined)
-    assert.strictEqual(map['web.example.com'], undefined)
+    expect(map['api.example.com']).toBeUndefined()
+    expect(map['web.example.com']).toBeUndefined()
   })
 
   it('should handle empty content', () => {
     const map = parseEprc('')
-    assert.strictEqual(Object.keys(map).length, 0)
+    expect(Object.keys(map).length).toBe(0)
   })
 
   it('should handle only disabled rules', () => {
@@ -140,9 +140,9 @@ rule3 target3
 //rule2 target2
     `.trim()
     const map = parseEprc(content)
-    assert.strictEqual(Object.keys(map).length, 0)
-    assert.strictEqual(map['rule1'], undefined)
-    assert.strictEqual(map['rule2'], undefined)
+    expect(Object.keys(map).length).toBe(0)
+    expect(map['rule1']).toBeUndefined()
+    expect(map['rule2']).toBeUndefined()
   })
 })
 
@@ -152,9 +152,9 @@ describe('helpers.ruleMapToEprcText - preserves rule format', () => {
       'example.com': '127.0.0.1:3000',
       'api.example.com': '127.0.0.1:3000',
     })
-    assert.ok(text.includes('127.0.0.1:3000'))
-    assert.ok(text.includes('example.com'))
-    assert.ok(text.includes('api.example.com'))
+    expect(text.includes('127.0.0.1:3000')).toBeTruthy()
+    expect(text.includes('example.com')).toBeTruthy()
+    expect(text.includes('api.example.com')).toBeTruthy()
   })
 
   it('should format rules with target first for URLs', () => {
@@ -162,22 +162,20 @@ describe('helpers.ruleMapToEprcText - preserves rule format', () => {
       'api.com': 'https://localhost:8000',
       'web.com': 'https://localhost:8000',
     })
-    assert.ok(text.includes('https://localhost:8000'))
-    assert.ok(text.includes('api.com'))
-    assert.ok(text.includes('web.com'))
+    expect(text.includes('https://localhost:8000')).toBeTruthy()
+    expect(text.includes('api.com')).toBeTruthy()
+    expect(text.includes('web.com')).toBeTruthy()
   })
 
   it('should handle single rule', () => {
     const text = ruleMapToEprcText({
       'single.com': '192.168.1.1',
     })
-    assert.strictEqual(text.trim(), '192.168.1.1 single.com')
+    expect(text.trim()).toBe('192.168.1.1 single.com')
   })
 
   it('should handle empty rule map', () => {
     const text = ruleMapToEprcText({})
-    assert.strictEqual(text, '')
+    expect(text).toBe('')
   })
 })
-
-export {};

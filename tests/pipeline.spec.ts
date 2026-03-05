@@ -1,10 +1,10 @@
-const assert = require('assert')
-const { createPipeline, normalizeMode } = require('../dist/core/pipeline')
+import { describe, it, expect } from 'vitest'
+import { createPipeline, normalizeMode } from '../core/pipeline'
 
 describe('pipeline normalizeMode', () => {
     it('falls back to off for unsupported modes', () => {
-        assert.strictEqual(normalizeMode('x'), 'off')
-        assert.strictEqual(normalizeMode(undefined), 'off')
+        expect(normalizeMode('x')).toBe('off')
+        expect(normalizeMode(undefined)).toBe('off')
     })
 })
 
@@ -28,8 +28,8 @@ describe('pipeline execute', () => {
             executeUpstream: async (target) => ({ response: { statusCode: 200, headers: {}, body: target } }),
         })
 
-        assert.strictEqual(calls.length, 0)
-        assert.strictEqual(result.response.body, 'https://a.com')
+        expect(calls.length).toBe(0)
+        expect(result.response.body).toBe('https://a.com')
     })
 
     it('shadow mode runs hooks but does not alter upstream target', async () => {
@@ -52,8 +52,8 @@ describe('pipeline execute', () => {
             executeUpstream: async (target) => ({ response: { statusCode: 200, headers: {}, body: target } }),
         })
 
-        assert.ok(hookTargets.length >= 1)
-        assert.strictEqual(result.response.body, 'https://a.com')
+        expect(hookTargets.length >= 1).toBeTruthy()
+        expect(result.response.body).toBe('https://a.com')
     })
 
     it('on mode applies target rewrite before upstream', async () => {
@@ -76,8 +76,8 @@ describe('pipeline execute', () => {
             executeUpstream: async (target) => ({ response: { statusCode: 200, headers: {}, body: target } }),
         })
 
-        assert.strictEqual(result.target, 'https://rewritten.example.com')
-        assert.strictEqual(result.response.body, 'https://rewritten.example.com')
+        expect(result.target).toBe('https://rewritten.example.com')
+        expect(result.response.body).toBe('https://rewritten.example.com')
     })
 
     it('on mode supports short-circuit responses', async () => {
@@ -104,10 +104,10 @@ describe('pipeline execute', () => {
             },
         })
 
-        assert.strictEqual(executed, false)
-        assert.strictEqual(result.shortCircuited, true)
-        assert.strictEqual(result.response.statusCode, 201)
-        assert.strictEqual(result.response.body, 'mocked')
+        expect(executed).toBe(false)
+        expect(result.shortCircuited).toBe(true)
+        expect(result.response.statusCode).toBe(201)
+        expect(result.response.body).toBe('mocked')
     })
 })
 
@@ -129,8 +129,8 @@ describe('pipeline evaluateRequest', () => {
             { method: 'GET', url: 'https://a.com' },
             'https://legacy.example.com'
         )
-        assert.strictEqual(decision.target, 'https://legacy.example.com')
-        assert.strictEqual(decision.observedTarget, 'https://observed.example.com')
+        expect(decision.target).toBe('https://legacy.example.com')
+        expect(decision.observedTarget).toBe('https://observed.example.com')
     })
 
     it('returns short-circuit decision in on mode', async () => {
@@ -150,9 +150,7 @@ describe('pipeline evaluateRequest', () => {
             { method: 'GET', url: 'https://a.com' },
             'https://a.com'
         )
-        assert.strictEqual(decision.shortCircuited, true)
-        assert.strictEqual(decision.response.statusCode, 202)
+        expect(decision.shortCircuited).toBe(true)
+        expect(decision.response!.statusCode).toBe(202)
     })
 })
-
-export {};

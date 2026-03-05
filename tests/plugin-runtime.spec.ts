@@ -1,5 +1,5 @@
-const assert = require('assert')
-const { PluginManager, HookDispatcher } = require('../dist/core/plugin-runtime')
+import { describe, it, expect } from 'vitest'
+import { PluginManager, HookDispatcher } from '../core/plugin-runtime'
 
 function createPlugin(overrides: any = {}) {
     return {
@@ -22,7 +22,7 @@ describe('plugin-runtime PluginManager', () => {
         const manager = new PluginManager({ logger: { error() {} } })
         const plugin = createPlugin()
         manager.register(plugin)
-        assert.strictEqual(manager.getState(plugin.manifest.id), 'registered')
+        expect(manager.getState(plugin.manifest.id)).toBe('registered')
     })
 
     it('disables plugin when lifecycle throws error', async () => {
@@ -34,7 +34,7 @@ describe('plugin-runtime PluginManager', () => {
         })
         manager.register(plugin)
         await manager.setup(() => ({}))
-        assert.strictEqual(manager.getState(plugin.manifest.id), 'disabled')
+        expect(manager.getState(plugin.manifest.id)).toBe('disabled')
     })
 })
 
@@ -76,10 +76,10 @@ describe('plugin-runtime HookDispatcher', () => {
         })
 
         const results = await dispatcher.dispatch('onBeforeProxy', { requestId: 'r1' })
-        assert.deepStrictEqual(calls, ['high', 'low'])
-        assert.strictEqual(results.length, 2)
-        assert.strictEqual(results[0].status, 'ok')
-        assert.strictEqual(results[1].status, 'ok')
+        expect(calls).toEqual(['high', 'low'])
+        expect(results.length).toBe(2)
+        expect(results[0].status).toBe('ok')
+        expect(results[1].status).toBe('ok')
     })
 
     it('marks timeout when hook exceeds time budget', async () => {
@@ -106,8 +106,8 @@ describe('plugin-runtime HookDispatcher', () => {
         })
 
         const results = await dispatcher.dispatch('onAfterResponse', { requestId: 'r2' })
-        assert.strictEqual(results.length, 1)
-        assert.strictEqual(results[0].status, 'timeout')
+        expect(results.length).toBe(1)
+        expect(results[0].status).toBe('timeout')
     })
 
     it('collects plugin hook stats', async () => {
@@ -146,10 +146,8 @@ describe('plugin-runtime HookDispatcher', () => {
         })
         await dispatcher.dispatch('onBeforeProxy', { requestId: 'r3' })
         const stats = dispatcher.getPluginStats()
-        assert.strictEqual(stats['plugin.stats.ok'].ok, 1)
-        assert.strictEqual(stats['plugin.stats.err'].error, 1)
-        assert.strictEqual(stats['plugin.stats.err'].lastError, 'boom')
+        expect(stats['plugin.stats.ok'].ok).toBe(1)
+        expect(stats['plugin.stats.err'].error).toBe(1)
+        expect(stats['plugin.stats.err'].lastError).toBe('boom')
     })
 })
-
-export {};

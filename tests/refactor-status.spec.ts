@@ -1,5 +1,5 @@
-const assert = require('assert')
-const { buildRefactorStatus } = require('../dist/core/refactor-status')
+import { describe, it, expect } from 'vitest'
+import { buildRefactorStatus } from '../core/refactor-status'
 
 describe('refactor-status buildRefactorStatus', () => {
     it('returns normalized status payload', () => {
@@ -14,15 +14,13 @@ describe('refactor-status buildRefactorStatus', () => {
             plugins: [{ id: 'builtin.router' }],
             loggerSummary: { totalResponses: 5 },
         })
-        assert.strictEqual(status.mode, 'shadow')
-        assert.strictEqual(status.runtime.pid, 1)
-        assert.deepStrictEqual(status.allowlist, ['a.com'])
-        assert.strictEqual(status.readiness.ready, false)
-        assert.strictEqual(status.shadow.total, 10)
-        assert.strictEqual(status.plugins.length, 1)
-        assert.strictEqual(status.loggerSummary.totalResponses, 5)
-        assert.ok(typeof status.generatedAt === 'number')
+        expect(status.mode).toBe('shadow')
+        expect(status.runtime.pid).toBe(1)
+        expect(status.allowlist).toEqual(['a.com'])
+        expect(status.readiness.ready).toBe(false)
+        expect(status.shadow.total).toBe(10)
+        expect(status.plugins.length).toBe(1)
+        expect(status.loggerSummary.totalResponses).toBe(5)
+        expect(typeof status.generatedAt === 'number').toBeTruthy()
     })
 })
-
-export {};

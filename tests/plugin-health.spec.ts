@@ -1,5 +1,5 @@
-const assert = require('assert')
-const { buildPluginHealth } = require('../dist/core/plugin-health')
+import { describe, it, expect } from 'vitest'
+import { buildPluginHealth } from '../core/plugin-health'
 
 describe('plugin-health buildPluginHealth', () => {
     it('returns healthy overall when all running without failures', () => {
@@ -17,8 +17,8 @@ describe('plugin-health buildPluginHealth', () => {
                 'builtin.logger': { total: 10, error: 0, timeout: 0 },
             },
         })
-        assert.strictEqual(result.overall, 'healthy')
-        assert.strictEqual(result.counts.healthy, 2)
+        expect(result.overall).toBe('healthy')
+        expect(result.counts.healthy).toBe(2)
     })
 
     it('returns degraded overall when plugin is disabled or failing', () => {
@@ -35,10 +35,8 @@ describe('plugin-health buildPluginHealth', () => {
                 'builtin.router': { total: 4, error: 1, timeout: 0 },
             },
         })
-        assert.strictEqual(result.overall, 'degraded')
-        assert.strictEqual(result.counts.degraded, 1)
-        assert.strictEqual(result.counts.disabled, 1)
+        expect(result.overall).toBe('degraded')
+        expect(result.counts.degraded).toBe(1)
+        expect(result.counts.disabled).toBe(1)
     })
 })
-
-export {};

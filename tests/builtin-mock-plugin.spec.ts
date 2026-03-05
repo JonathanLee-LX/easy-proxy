@@ -1,5 +1,5 @@
-const assert = require('assert')
-const { createBuiltinMockPlugin } = require('../dist/plugins/builtin/mock-plugin')
+import { describe, it, expect } from 'vitest'
+import { createBuiltinMockPlugin } from '../plugins/builtin/mock-plugin'
 
 describe('builtin mock plugin', () => {
     it('short-circuits inline mock response', async () => {
@@ -22,11 +22,11 @@ describe('builtin mock plugin', () => {
             },
         }
         await plugin.onBeforeProxy(ctx)
-        assert.ok(shortRes)
-        assert.strictEqual(shortRes.statusCode, 201)
-        assert.strictEqual(shortRes.headers['x-test'], '1')
-        assert.strictEqual(shortRes.body, '{"ok":true}')
-        assert.strictEqual((ctx.meta as any).mockRuleId, 1)
+        expect(shortRes).toBeTruthy()
+        expect(shortRes.statusCode).toBe(201)
+        expect(shortRes.headers['x-test']).toBe('1')
+        expect(shortRes.body).toBe('{"ok":true}')
+        expect((ctx.meta as any).mockRuleId).toBe(1)
     })
 
     it('skips non-inline file mock rules', async () => {
@@ -46,7 +46,7 @@ describe('builtin mock plugin', () => {
             },
         }
         await plugin.onBeforeProxy(ctx)
-        assert.strictEqual(called, false)
+        expect(called).toBe(false)
     })
 
     it('applies configured delay before short-circuit', async () => {
@@ -67,8 +67,6 @@ describe('builtin mock plugin', () => {
                 calledAt = Date.now()
             },
         })
-        assert.ok(calledAt - start >= 10)
+        expect(calledAt - start >= 10).toBeTruthy()
     })
 })
-
-export {};

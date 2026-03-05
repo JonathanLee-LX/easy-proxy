@@ -1,26 +1,24 @@
-const assert = require('assert')
-const zlib = require('zlib')
-const { safeBodyToString } = require('../dist/core/body-utils')
+import zlib from 'zlib'
+import { describe, it, expect } from 'vitest'
+import { safeBodyToString } from '../core/body-utils'
 
 describe('body-utils safeBodyToString', () => {
     it('returns empty for empty buffer', () => {
-        assert.strictEqual(safeBodyToString(Buffer.from(''), 100), '')
+        expect(safeBodyToString(Buffer.from(''), 100)).toBe('')
     })
 
     it('returns utf8 string for plain buffer', () => {
-        assert.strictEqual(safeBodyToString(Buffer.from('hello'), 100), 'hello')
+        expect(safeBodyToString(Buffer.from('hello'), 100)).toBe('hello')
     })
 
     it('decompresses gzip buffer', () => {
         const gz = zlib.gzipSync(Buffer.from('abc'))
-        assert.strictEqual(safeBodyToString(gz, 100, 'gzip'), 'abc')
+        expect(safeBodyToString(gz, 100, 'gzip')).toBe('abc')
     })
 
     it('returns truncated marker when exceeds max', () => {
         const text = 'x'.repeat(20)
         const result = safeBodyToString(Buffer.from(text), 5)
-        assert.ok(result.startsWith('(truncated, 20 bytes)'))
+        expect(result.startsWith('(truncated, 20 bytes)')).toBeTruthy()
     })
 })
-
-export {};

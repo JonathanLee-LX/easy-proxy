@@ -1,5 +1,5 @@
-const assert = require('assert')
-const { decideRoute } = require('../dist/core/route-decision')
+import { describe, it, expect } from 'vitest'
+import { decideRoute } from '../core/route-decision'
 
 describe('route-decision decideRoute', () => {
     it('uses pipeline path when canUse returns true', async () => {
@@ -26,8 +26,8 @@ describe('route-decision decideRoute', () => {
             observeShadowDecision: () => {},
             fallbackResolve: async () => ({ target: 'https://fallback.com', shortCircuited: false, response: null }),
         })
-        assert.strictEqual(calledEvaluate, 1)
-        assert.strictEqual(result.target, 'https://plugin.com')
+        expect(calledEvaluate).toBe(1)
+        expect(result.target).toBe('https://plugin.com')
     })
 
     it('calls fallback when pipeline path is disabled', async () => {
@@ -42,7 +42,7 @@ describe('route-decision decideRoute', () => {
             observeShadowDecision: () => {},
             fallbackResolve: async () => ({ target: 'https://fallback.com', shortCircuited: false, response: null }),
         })
-        assert.strictEqual(result.target, 'https://fallback.com')
+        expect(result.target).toBe('https://fallback.com')
     })
 
     it('emits shadow observation in shadow mode', async () => {
@@ -68,9 +68,7 @@ describe('route-decision decideRoute', () => {
             },
             fallbackResolve: async () => ({ target: 'https://fallback.com', shortCircuited: false, response: null }),
         })
-        assert.ok(Array.isArray(observed))
-        assert.strictEqual(observed[1], 'https://a.com')
+        expect(Array.isArray(observed)).toBeTruthy()
+        expect(observed[1]).toBe('https://a.com')
     })
 })
-
-export {};

@@ -1,5 +1,5 @@
-const assert = require('assert')
-const { shouldUsePluginMock } = require('../dist/core/mock-gate')
+import { describe, it, expect } from 'vitest'
+import { shouldUsePluginMock } from '../core/mock-gate'
 
 describe('mock-gate shouldUsePluginMock', () => {
     it('returns false when plugin is disabled', () => {
@@ -10,7 +10,7 @@ describe('mock-gate shouldUsePluginMock', () => {
             rule: { bodyType: 'inline' },
             shouldApplyOn: () => true,
         })
-        assert.strictEqual(result, false)
+        expect(result).toBe(false)
     })
 
     it('returns false when mode is not on', () => {
@@ -21,7 +21,7 @@ describe('mock-gate shouldUsePluginMock', () => {
             rule: { bodyType: 'inline' },
             shouldApplyOn: () => true,
         })
-        assert.strictEqual(result, false)
+        expect(result).toBe(false)
     })
 
     it('returns false when on-mode gate rejects source', () => {
@@ -32,7 +32,7 @@ describe('mock-gate shouldUsePluginMock', () => {
             rule: { bodyType: 'inline' },
             shouldApplyOn: () => false,
         })
-        assert.strictEqual(result, false)
+        expect(result).toBe(false)
     })
 
     it('returns false for file bodyType', () => {
@@ -43,7 +43,7 @@ describe('mock-gate shouldUsePluginMock', () => {
             rule: { bodyType: 'file' },
             shouldApplyOn: () => true,
         })
-        assert.strictEqual(result, false)
+        expect(result).toBe(false)
     })
 
     it('returns true for inline rule in on mode', () => {
@@ -54,8 +54,6 @@ describe('mock-gate shouldUsePluginMock', () => {
             rule: { bodyType: 'inline' },
             shouldApplyOn: () => true,
         })
-        assert.strictEqual(result, true)
+        expect(result).toBe(true)
     })
 })
-
-export {};

@@ -1,5 +1,5 @@
-const assert = require('assert')
-const { createPipelineGate } = require('../dist/core/pipeline-gate')
+import { describe, it, expect } from 'vitest'
+import { createPipelineGate } from '../core/pipeline-gate'
 
 describe('pipeline-gate createPipelineGate', () => {
     it('uses onModeGate for on mode and allows shadow mode by default', () => {
@@ -14,8 +14,8 @@ describe('pipeline-gate createPipelineGate', () => {
             },
             enableBuiltinMockPlugin: true,
         })
-        assert.strictEqual(gate.canUsePipelineExecuteForSource('https://a.com'), true)
-        assert.strictEqual(checked, 0)
+        expect(gate.canUsePipelineExecuteForSource('https://a.com')).toBe(true)
+        expect(checked).toBe(0)
     })
 
     it('delegates on-mode host check to onModeGate', () => {
@@ -24,8 +24,8 @@ describe('pipeline-gate createPipelineGate', () => {
             onModeGate: { shouldApply: () => false },
             enableBuiltinMockPlugin: true,
         })
-        assert.strictEqual(gate.shouldApplyPipelineOnForSource('https://a.com'), false)
-        assert.strictEqual(gate.canUsePipelineExecuteForSource('https://a.com'), false)
+        expect(gate.shouldApplyPipelineOnForSource('https://a.com')).toBe(false)
+        expect(gate.canUsePipelineExecuteForSource('https://a.com')).toBe(false)
     })
 
     it('checks mock takeover through unified gate', () => {
@@ -34,15 +34,11 @@ describe('pipeline-gate createPipelineGate', () => {
             onModeGate: { shouldApply: () => true },
             enableBuiltinMockPlugin: true,
         })
-        assert.strictEqual(
-            gate.shouldUsePluginMockForRequest('https://a.com', { bodyType: 'inline' }),
-            true
-        )
-        assert.strictEqual(
-            gate.shouldUsePluginMockForRequest('https://a.com', { bodyType: 'file' }),
-            false
-        )
+        expect(
+            gate.shouldUsePluginMockForRequest('https://a.com', { bodyType: 'inline' })
+        ).toBe(true)
+        expect(
+            gate.shouldUsePluginMockForRequest('https://a.com', { bodyType: 'file' })
+        ).toBe(false)
     })
 })
-
-export {};
