@@ -2210,6 +2210,7 @@ const proxyServer = http.createServer((req, res) => {
                 return
             }
             const url = new URL(target.startsWith('http') ? target : req.url, 'http://' + req.headers.host)
+            const routeChanged = source !== url.href
             const startTime = Date.now()
             const pluginIntercepting = shouldInterceptResponse()
             const proxyReq = http.request(url, {
@@ -2217,6 +2218,7 @@ const proxyServer = http.createServer((req, res) => {
                 headers: req.headers
             }, (proxyRes) => {
                 const resChunks = []
+                if (routeChanged) proxyRes.headers['x-real-url'] = url.href
                 if (!pluginIntercepting) {
                     res.writeHead(proxyRes.statusCode, proxyRes.headers)
                 }
@@ -2474,11 +2476,13 @@ proxyServer.on('connect', async (req, socket, header) => {
                             sendShortResponse(res, routeDecision.response)
                             return
                         }
+                        const routeChanged = source !== target
                         const startTime = Date.now()
                         const pluginIntercepting = shouldInterceptResponse()
                         try {
                             const proxyRes = await makeProxyRequest(target, req.method, req.headers, reqBody)
                             const resChunks = []
+                            if (routeChanged) proxyRes.headers['x-real-url'] = target
                             if (!pluginIntercepting) {
                                 res.writeHead(proxyRes.statusCode, cleanHeadersForH2(proxyRes.headers))
                             }
