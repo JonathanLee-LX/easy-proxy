@@ -25,7 +25,22 @@ export function resolveTargetUrl(url: string, ruleMap: RuleMap): string | null {
     if (!tK) return null;
     
     let urlSegment = ruleMap[tK];
-    
+
+    // [marker] path rewrite: find marker in original URL, take everything after it as tail
+    const bracketMatch = urlSegment.match(/\[([^\]]+)\]/);
+    if (bracketMatch) {
+        const marker = bracketMatch[1];
+        const markerIdx = url.indexOf(marker);
+        const before = urlSegment.substring(0, bracketMatch.index!);
+        const after = urlSegment.substring(bracketMatch.index! + bracketMatch[0].length);
+        if (markerIdx !== -1) {
+            const tail = url.substring(markerIdx + marker.length);
+            urlSegment = (before + tail + after).replace(/([^:])\/\//g, '$1/');
+        } else {
+            urlSegment = before + after;
+        }
+    }
+
     if (!urlSegment.startsWith('http') && !urlSegment.startsWith('ws') && !urlSegment.startsWith('file')) {
         urlSegment = originUrlObj.protocol + urlSegment;
     }
@@ -103,7 +118,14 @@ export function parseEprc(content: string): RuleMap {
             }
         }
         
-        rules.forEach(rule => { acc[rule] = target; });
+        rules.forEach(rule => {
+            const bm = rule.match(/\[([^\]]+)\]/);
+            if (bm) {
+                acc[rule.replace(bm[0], bm[1])] = target + bm[0];
+            } else {
+                acc[rule] = target;
+            }
+        });
         return acc;
     }, Object.create(null) as RuleMap);
 }
@@ -114,8 +136,11 @@ export function ruleMapToEprcText(ruleMap: RuleMap): string {
     
     const byTarget: Record<string, string[]> = {};
     entries.forEach(([rule, target]) => {
-        if (!byTarget[target]) byTarget[target] = [];
-        byTarget[target].push(rule);
+        const bm = target.match(/\[([^\]]+)\]/);
+        const groupKey = bm ? target.replace(bm[0], '') : target;
+        const displayRule = bm ? rule.replace(bm[1], bm[0]) : rule;
+        if (!byTarget[groupKey]) byTarget[groupKey] = [];
+        byTarget[groupKey].push(displayRule);
     });
     
     return Object.entries(byTarget)

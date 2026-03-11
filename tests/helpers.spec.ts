@@ -74,6 +74,30 @@ describe('helpers.resolveTargetUrl', () => {
     })
     expect(target).toBe('wss://127.0.0.1:8080/socket?x=1')
   })
+
+  it('rewrites path with [marker] syntax on target side', () => {
+    const target = resolveTargetUrl(
+      'https://365.kdocs.cn/3rd/sass_open/sass_open/embed/billing-mode',
+      { '^https://365\\.kdocs\\.cn/3rd/sass_open': 'localhost:8001[3rd/sass_open]' },
+    )
+    expect(target).toBe('https://localhost:8001/sass_open/embed/billing-mode')
+  })
+
+  it('rewrites path with [marker] and preserves query string', () => {
+    const target = resolveTargetUrl(
+      'https://example.com/api/v2/users?page=1',
+      { '^https://example\\.com/api/v2': 'localhost:3000[api/v2]' },
+    )
+    expect(target).toBe('https://localhost:3000/users?page=1')
+  })
+
+  it('handles [marker] when marker is not found in URL gracefully', () => {
+    const target = resolveTargetUrl(
+      'https://a.com/foo',
+      { 'a\\.com': 'localhost:8080[not-exist]' },
+    )
+    expect(target).toBeTruthy()
+  })
 })
 
 describe('helpers.getFreePort', () => {
@@ -93,6 +117,35 @@ describe('helpers.getFreePort', () => {
       encoding: 'utf8',
     }).trim()
     expect(Number(output) >= 18989).toBeTruthy()
+  })
+})
+
+describe('helpers.parseEprc + resolveTargetUrl [marker] rewrite', () => {
+  it('parses [marker] on pattern side and rewrites URL correctly', () => {
+    const content = '^https://365.kdocs.cn/[3rd/sass_open] localhost:8001'
+    const map = parseEprc(content)
+    expect(map['^https://365.kdocs.cn/3rd/sass_open']).toBe('localhost:8001[3rd/sass_open]')
+
+    const target = resolveTargetUrl(
+      'https://365.kdocs.cn/3rd/sass_open/sass_open/embed/billing-mode',
+      map,
+    )
+    expect(target).toBe('https://localhost:8001/sass_open/embed/billing-mode')
+  })
+
+  it('preserves query string through [marker] rewrite', () => {
+    const map = parseEprc('^https://example.com/[api/v2] localhost:3000')
+    const target = resolveTargetUrl('https://example.com/api/v2/users?page=1&size=10', map)
+    expect(target).toBe('https://localhost:3000/users?page=1&size=10')
+  })
+
+  it('roundtrips through ruleMapToEprcText with [marker]', () => {
+    const original = '^https://365.kdocs.cn/[3rd/sass_open] localhost:8001'
+    const map = parseEprc(original)
+    const text = ruleMapToEprcText(map)
+    expect(text).toContain('[3rd/sass_open]')
+    expect(text).toContain('localhost:8001')
+    expect(text).not.toContain('localhost:8001[')
   })
 })
 

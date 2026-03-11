@@ -379,20 +379,102 @@ proxyServer.on('connect', async (req, socket, header) => {
                     })
                 })
 
-                // WebSocket 代理
-                const wsServer = new WebSocketServer({ server })
-                wsServer.on('connection', (ws, req) => {
-                    const sourceWsUrl = 'wss://' + req.headers.host + req.url
-                    let targetUrl = resolveTargetUrl(sourceWsUrl, ctx.ruleMap)
-                    if (!targetUrl) targetUrl = sourceWsUrl
+                // WebSocket 代理（MITM HTTPS 服务器）- 使用 noServer 模式，统一在此处理并强制上游→客户端为文本
+                const wss = new WebSocketServer({ noServer: true })
+                server.on('upgrade', (req, socket, head) => {
+                    if (socket._wsUpgradeHandled) return
+                    socket._wsUpgradeHandled = true
+                    wss.handleUpgrade(req, socket, head, (ws) => {
+                        const source = 'wss://' + (req.headers.host || originHost) + req.url
+                        let targetUrl = resolveTargetUrl(source, ctx.ruleMap)
+                        if (!targetUrl) targetUrl = source
 
-                    const proxyWs = new WebSocket(targetUrl, ws.protocol || [], {
-                        rejectUnauthorized: false, headers: req.headers
+                        const outHeaders = { ...req.headers }
+                        try {
+                            const u = new URL(targetUrl)
+                            outHeaders.host = u.host
+                            if (!outHeaders.origin) outHeaders.origin = u.origin
+                        } catch (_) {}
+
+                        const proxyWs = new WebSocket(targetUrl, ws.protocol || [], {
+                            rejectUnauthorized: false,
+                            headers: outHeaders
+                        })
+                        const OPEN = 1
+                        let closed = false
+                        const safeClose = (sock, code, reason) => {
+                            if (closed) return
+                            try {
+                                if (sock.readyState === OPEN || sock.readyState === 0) sock.close(code, reason)
+                            } catch (_) {}
+                        }
+                        const safeSend = (sock, data, label, isBinary) => {
+                            if (sock.readyState !== OPEN) return
+                            try {
+                                const cb = (err) => {
+                                    if (err && err.message !== 'WebSocket is not open') proxyDebug(`[ws] ${label} send error: ${err.message}`)
+                                }
+                                if (typeof isBinary === 'boolean') {
+                                    sock.send(data, { binary: isBinary }, cb)
+                                } else {
+                                    sock.send(data, cb)
+                                }
+                            } catch (e) {
+                                if (e.message !== 'WebSocket is not open') proxyDebug(`[ws] ${label} send: ${e.message}`)
+                            }
+                        }
+                        const clientBuffer = []
+                        const flushClientBuffer = () => {
+                            while (clientBuffer.length) {
+                                const item = clientBuffer.shift()
+                                safeSend(proxyWs, item.data, 'upstream', item.isBinary)
+                            }
+                        }
+                        ws.on('message', (data, isBinary) => {
+                            const type = isBinary ? 'binary' : (typeof data === 'string' ? 'text' : 'unknown')
+                            let preview = ''
+                            if (typeof data === 'string') {
+                                try { preview = JSON.parse(data) ? '(valid json)' : '(text)' } catch { preview = '(text)' }
+                            } else if (Buffer.isBuffer(data)) {
+                                preview = `(buffer ${data.length} bytes)`
+                            }
+                            proxyDebug(`[ws] client -> upstream: ${type} ${preview}`)
+                            if (proxyWs.readyState === OPEN) {
+                                safeSend(proxyWs, data, 'upstream', isBinary)
+                            } else if (proxyWs.readyState === 0) {
+                                clientBuffer.push({ data, isBinary })
+                            }
+                        })
+                        proxyWs.on('open', () => {
+                            flushClientBuffer()
+                            proxyWs.on('message', (data, isBinary) => {
+                                const type = isBinary ? 'binary' : (typeof data === 'string' ? 'text' : 'unknown')
+                                let preview = ''
+                                if (typeof data === 'string') {
+                                    try { preview = JSON.parse(data) ? '(valid json)' : '(text)' } catch { preview = '(text)' }
+                                } else if (Buffer.isBuffer(data)) {
+                                    preview = `(buffer ${data.length} bytes)`
+                                }
+                                proxyDebug(`[ws] upstream -> client: ${type} ${preview}`)
+                                safeSend(ws, data, 'client', isBinary)
+                            })
+                        })
+                        proxyWs.on('error', (e) => {
+                            proxyDebug(`[ws] upstream ${targetUrl} error: ${e.message}`)
+                            closed = true
+                            safeClose(ws, 1011, 'upstream error')
+                        })
+                        proxyWs.on('close', (code, reason) => {
+                            closed = true
+                            safeClose(ws, code, reason)
+                        })
+                        ws.on('error', (e) => { proxyDebug(`[ws] client error: ${e.message}`) })
+                        ws.on('close', (code, reason) => {
+                            _debug('log')('ws close', code, reason)
+                            closed = true
+                            safeClose(proxyWs, code, reason)
+                        })
                     })
-                    proxyWs.on('message', (data) => { ws.send(data, (err) => { if (err) console.error(err) }) })
-                    ws.on('message', (data) => { proxyWs.send(data, (err) => { if (err) console.error(err) }) })
-                    ws.on('error', (e) => { console.error('error in ws:', e) })
-                    ws.on('close', (code, reason) => { _debug('log')('ws close', code, reason) })
                 })
 
                 resolve(server)

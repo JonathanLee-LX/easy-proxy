@@ -283,7 +283,7 @@ mcpServer.registerTool('mock_rule_delete', {
 // ---------- 路由规则（需代理已启动，API 地址来自 start_proxy 或 ~/.ep/mcp-proxy-url.json） ----------
 
 mcpServer.registerTool('route_rule_list', {
-    description: '列出所有路由规则文件；可选指定 ruleFile 获取该文件下的规则列表（pattern -> target）',
+    description: '列出所有路由规则文件；可选指定 ruleFile 获取该文件下的规则列表（pattern -> target）。pattern 支持正则表达式和 [marker] 路径重写语法。',
     inputSchema: {
         ruleFile: z.string().optional().describe('规则文件名（不含 .txt），不传则只返回文件列表')
     }
@@ -296,8 +296,75 @@ mcpServer.registerTool('route_rule_list', {
         const name = encodeURIComponent(ruleFile.trim())
         const content = await proxyApi('GET', `/api/rule-files/${name}/content`)
         const ruleMap = parseEprc(typeof content === 'string' ? content : String(content))
+        const displayRules = {}
+        for (const [pat, tgt] of Object.entries(ruleMap)) {
+            const bm = tgt.match(/\[([^\]]+)\]/)
+            if (bm) {
+                displayRules[pat.replace(bm[1], bm[0])] = tgt.replace(bm[0], '')
+            } else {
+                displayRules[pat] = tgt
+            }
+        }
         return {
-            content: [{ type: 'text', text: JSON.stringify({ ruleFile, rules: ruleMap, count: Object.keys(ruleMap).length }, null, 2) }]
+            content: [{ type: 'text', text: JSON.stringify({ ruleFile, rules: displayRules, count: Object.keys(displayRules).length }, null, 2) }]
+        }
+    } catch (e) {
+        return { content: [{ type: 'text', text: e.message }], isError: true }
+    }
+})
+
+mcpServer.registerTool('route_rule_active_get', {
+    description: '查看当前激活的路由规则文件。返回所有已启用规则文件；若只有一个启用文件，则同时给出 currentRuleFile。',
+    inputSchema: {}
+}, async () => {
+    try {
+        const files = await proxyApi('GET', '/api/rule-files')
+        const activeRuleFiles = Array.isArray(files) ? files.filter((item) => item && item.enabled) : []
+        const currentRuleFile = activeRuleFiles.length === 1 ? activeRuleFiles[0].name : null
+        return {
+            content: [{
+                type: 'text',
+                text: JSON.stringify({
+                    currentRuleFile,
+                    activeRuleFiles: activeRuleFiles.map((item) => item.name),
+                    count: activeRuleFiles.length
+                }, null, 2)
+            }]
+        }
+    } catch (e) {
+        return { content: [{ type: 'text', text: e.message }], isError: true }
+    }
+})
+
+mcpServer.registerTool('route_rule_active_set', {
+    description: '设置当前激活的路由规则文件。该操作会启用指定规则文件，并禁用其他所有规则文件，使其成为唯一激活文件。',
+    inputSchema: {
+        ruleFile: z.string().describe('要设为当前激活的规则文件名（不含 .txt）')
+    }
+}, async ({ ruleFile }) => {
+    try {
+        const targetName = ruleFile.trim()
+        const files = await proxyApi('GET', '/api/rule-files')
+        if (!Array.isArray(files)) {
+            throw new Error('规则文件列表返回格式错误')
+        }
+        const targetFile = files.find((item) => item && item.name === targetName)
+        if (!targetFile) {
+            return { content: [{ type: 'text', text: `未找到规则文件: ${targetName}` }], isError: true }
+        }
+
+        for (const item of files) {
+            const nextEnabled = item.name === targetName
+            if (!!item.enabled === nextEnabled) continue
+            const name = encodeURIComponent(item.name)
+            await proxyApi('PUT', `/api/rule-files/${name}`, { enabled: nextEnabled })
+        }
+
+        return {
+            content: [{
+                type: 'text',
+                text: `已将当前激活路由规则设置为: ${targetName}`
+            }]
         }
     } catch (e) {
         return { content: [{ type: 'text', text: e.message }], isError: true }
@@ -308,7 +375,7 @@ mcpServer.registerTool('route_rule_create_file', {
     description: '创建新的路由规则文件（多套规则中的一套）。文件名不含 .txt，创建后可启用并往该文件中添加规则。',
     inputSchema: {
         name: z.string().describe('规则文件名称（不含 .txt），如 dev、staging；非法字符会被替换为下划线'),
-        content: z.string().optional().describe('初始规则内容，每行一条「pattern target」或「target pattern1 pattern2」，不传则为空文件'),
+        content: z.string().optional().describe('初始规则内容，每行一条规则。格式：「pattern target」或「target pattern1 pattern2」。pattern 作为正则匹配请求 URL，支持 ^ $ 锚点。支持 [marker] 路径重写：在 pattern 中用 [path] 标记截断点，原始 URL 中 path 之后的部分会拼接到 target，例如「^https://cdn.com/[assets] localhost:8080」会将 https://cdn.com/assets/js/app.js 转发到 https://localhost:8080/js/app.js'),
         enabled: z.boolean().optional().describe('是否加入当前启用的规则集，默认 true')
     }
 }, async ({ name, content = '', enabled = true }) => {
@@ -328,10 +395,10 @@ mcpServer.registerTool('route_rule_create_file', {
 })
 
 mcpServer.registerTool('route_rule_add', {
-    description: '在指定规则文件中添加一条路由规则（pattern -> target）。若 pattern 已存在则覆盖。',
+    description: '在指定规则文件中添加一条路由规则（pattern -> target）。若 pattern 已存在则覆盖。支持 [marker] 路径重写语法。',
     inputSchema: {
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
-        pattern: z.string().describe('匹配请求 URL 的正则或主机名，如 example.com 或 .*\\.example\\.com'),
+        pattern: z.string().describe('匹配请求 URL 的正则或主机名，如 example.com、^https://a\\.com/path$。支持 [marker] 路径重写：在 pattern 中用 [path] 标记截断点，URL 中 path 之后的部分会拼接到 target，例如 ^https://cdn.com/[assets]'),
         target: z.string().describe('转发目标，如 http://localhost:3000 或 127.0.0.1:8080')
     }
 }, async ({ ruleFile, pattern, target }) => {
@@ -345,7 +412,14 @@ mcpServer.registerTool('route_rule_add', {
         }
         const text = typeof content === 'string' ? content : String(content)
         const ruleMap = parseEprc(text)
-        ruleMap[pattern.trim()] = target.trim()
+        const pat = pattern.trim()
+        const tgt = target.trim()
+        const bm = pat.match(/\[([^\]]+)\]/)
+        if (bm) {
+            ruleMap[pat.replace(bm[0], bm[1])] = tgt + bm[0]
+        } else {
+            ruleMap[pat] = tgt
+        }
         const newContent = ruleMapToEprcText(ruleMap)
         await proxyApi('PUT', `/api/rule-files/${name}/content`, { content: newContent })
         return { content: [{ type: 'text', text: `已添加规则: ${pattern} -> ${target}` }] }
@@ -355,10 +429,10 @@ mcpServer.registerTool('route_rule_add', {
 })
 
 mcpServer.registerTool('route_rule_update', {
-    description: '修改指定规则文件中某条规则的 target（按 pattern 查找）',
+    description: '修改指定规则文件中某条规则的 target（按 pattern 查找）。pattern 中如包含 [marker] 会自动匹配内部存储格式。',
     inputSchema: {
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
-        pattern: z.string().describe('要修改的 pattern（需与现有规则完全一致）'),
+        pattern: z.string().describe('要修改的 pattern（需与现有规则一致，支持带 [marker] 的写法）'),
         newTarget: z.string().describe('新的转发目标')
     }
 }, async ({ ruleFile, pattern, newTarget }) => {
@@ -373,10 +447,13 @@ mcpServer.registerTool('route_rule_update', {
         }
         const text = typeof content === 'string' ? content : String(content)
         const ruleMap = parseEprc(text)
-        if (!Object.prototype.hasOwnProperty.call(ruleMap, pat)) {
+        const bm = pat.match(/\[([^\]]+)\]/)
+        const internalKey = bm ? pat.replace(bm[0], bm[1]) : pat
+        if (!Object.prototype.hasOwnProperty.call(ruleMap, internalKey)) {
             return { content: [{ type: 'text', text: `未找到 pattern: ${pat}` }], isError: true }
         }
-        ruleMap[pat] = newTarget.trim()
+        const tgt = newTarget.trim()
+        ruleMap[internalKey] = bm ? tgt + bm[0] : tgt
         const newContent = ruleMapToEprcText(ruleMap)
         await proxyApi('PUT', `/api/rule-files/${name}/content`, { content: newContent })
         return { content: [{ type: 'text', text: `已更新规则: ${pat} -> ${newTarget}` }] }
@@ -386,10 +463,10 @@ mcpServer.registerTool('route_rule_update', {
 })
 
 mcpServer.registerTool('route_rule_delete', {
-    description: '从指定规则文件中删除一条路由规则（按 pattern）',
+    description: '从指定规则文件中删除一条路由规则（按 pattern）。pattern 中如包含 [marker] 会自动匹配内部存储格式。',
     inputSchema: {
         ruleFile: z.string().describe('规则文件名（不含 .txt）'),
-        pattern: z.string().describe('要删除的 pattern（需与现有规则完全一致）')
+        pattern: z.string().describe('要删除的 pattern（需与现有规则一致，支持带 [marker] 的写法）')
     }
 }, async ({ ruleFile, pattern }) => {
     try {
@@ -403,10 +480,12 @@ mcpServer.registerTool('route_rule_delete', {
         }
         const text = typeof content === 'string' ? content : String(content)
         const ruleMap = parseEprc(text)
-        if (!Object.prototype.hasOwnProperty.call(ruleMap, pat)) {
+        const bm = pat.match(/\[([^\]]+)\]/)
+        const internalKey = bm ? pat.replace(bm[0], bm[1]) : pat
+        if (!Object.prototype.hasOwnProperty.call(ruleMap, internalKey)) {
             return { content: [{ type: 'text', text: `未找到 pattern: ${pat}` }], isError: true }
         }
-        delete ruleMap[pat]
+        delete ruleMap[internalKey]
         const newContent = ruleMapToEprcText(ruleMap)
         await proxyApi('PUT', `/api/rule-files/${name}/content`, { content: newContent })
         return { content: [{ type: 'text', text: `已删除规则: ${pat}` }] }
